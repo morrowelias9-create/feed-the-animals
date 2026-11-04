@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+	<title>$GODOT_PROJECT_NAME</title>
+	<style>
+		html, body { margin: 0; padding: 0; height: 100%; background: #17171c; overflow: hidden;
+			touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+		canvas { display: block; width: 100%; height: 100%; outline: none; }
+		#loader { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+			justify-content: center; background: #17171c; color: #ddd; font: 16px sans-serif; }
+		#bar { width: 50%; max-width: 320px; height: 8px; margin-top: 14px; background: #333; border-radius: 4px; overflow: hidden; }
+		#fill { width: 0; height: 100%; background: #fc3f1d; }
+	</style>
+	<!-- SDK подставляется самой платформой Яндекс Игр. Вне Яндекса запрос просто не найдёт файл - игра уйдёт в режим заглушки. -->
+	<script src="/sdk.js"></script>
+	$GODOT_HEAD_INCLUDE
+</head>
+<body>
+	<canvas id="canvas" tabindex="0"></canvas>
+	<div id="loader"><div id="msg">Загрузка...</div><div id="bar"><div id="fill"></div></div></div>
+
+	<script>
+	// Мост между Godot и Яндекс SDK. Ответы уходят в GDScript одним колбэком handler(eventName, jsonString).
+	window.YaBridge = (function () {
+		let ysdk = null, player = null, handler = null;
+
+		const err = (e) => String((e && e.message) || e);
+		const emit = (name, data) => {
+			try { if (handler) handler(name, JSON.stringify(data === undefined ? null : data)); }
+			catch (e) { console.error(e); }
+		};
+		const getPlayer = () => player
+			? Promise.resolve(player)
+			: ysdk.getPlayer({ scopes: false }).then((p) => (player = p));
+
+		document.addEventListener('visibilitychange', () => emit('visibility', { hidden: document.hidden }));
+
+		return {
+			setHandler(h) { handler = h; },
+
+			init() {
+				if (typeof YaGames === 'undefined') { emit('init', { ok: false, error: 'YaGames not found' }); return; }
+				YaGames.init().then((sdk) => {
+					ysdk = sdk; window.ysdk = sdk;
+					try {
+						sdk.on('game_api_pause', () => emit('platform_pause'));
+						sdk.on('game_api_resume', () => emit('platform_resume'));
+					} catch (e) { /* старые версии SDK без этих событий */ }
+					emit('init', { ok: true, lang: sdk.environment.i18n.lang });
+				}).catch((e) => emit('init', { ok: false, error: err(e) }));
+			},
+
+			loadingReady() { try { ysdk.features.LoadingAPI.ready(); } catch (e) {} },
+			gameplayStart() { try { ysdk.features.GameplayAPI.start(); } catch (e) {} },
+			gameplayStop() { try { ysdk.features.GameplayAPI.stop(); } catch (e) {} },
+
+			showInterstitial() {
+				ysdk.adv.showFullscreenAdv({ callbacks: {
+					onClose: (wasShown) => emit('ad_close', { kind: 'interstitial', shown: !!wasShown }),
+					onError: (e) => emit('ad_error', { kind: 'interstitial', error: err(e) }),
+				}});
+			},
+
+			showRewarded() {
+				ysdk.adv.showRewardedVideo({ callbacks: {
+					onRewarded: () => emit('ad_rewarded'),
+					onClose: () => emit('ad_close', { kind: 'rewarded', shown: true }),
+					onError: (e) => emit('ad_error', { kind: 'rewarded', error: err(e) }),
+				}});
+			},
+
+			loadData() {
+				getPlayer().then((p) => p.getData())
+					.then((d) => emit('data_loaded', d || {}))
+					.catch((e) => { console.warn('getData failed', e); emit('data_loaded', {}); });
+			},
+
+			saveData(json) {
+				getPlayer().then((p) => p.setData(JSON.parse(json))).catch((e) => console.warn('setData failed', e));
+			},
+
+			setScore(board, score) {
+				ysdk.getLeaderboards().then((lb) => lb.setScore(board, score)).catch((e) => console.warn('setScore failed', e));
+			},
+		};
+	})();
+	</script>
+
+	<script src="$GODOT_URL"></script>
+	<script>
+		const GODOT_CONFIG = $GODOT_CONFIG;
+		const engine = new Engine(GODOT_CONFIG);
+		const loader = document.getElementById('loader');
+		const fill = document.getElementById('fill');
+
+		engine.startGame({
+			onProgress: (current, total) => { if (total > 0) fill.style.width = (current / total * 100) + '%'; },
+		}).then(() => {
+			loader.remove();
+		}, (e) => {
+			document.getElementById('msg').textContent = 'Ошибка загрузки: ' + e;
+		});
+	</script>
+</body>
+</html>

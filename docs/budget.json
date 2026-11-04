@@ -1,0 +1,7 @@
+{
+  "allow_3d": true,
+  "max_image_bytes": 1048576,
+  "max_audio_bytes": 1048576,
+  "max_model_bytes": 614400,
+  "max_assets_total": 41943040
+}
