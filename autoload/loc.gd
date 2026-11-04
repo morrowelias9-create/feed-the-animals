@@ -18,6 +18,7 @@ const T := {
 	"animals": {"ru": "Животные", "en": "Animals"},
 	"hint_throw": {"ru": "Нажмите, чтобы бросить!", "en": "Press to throw!"},
 	"goal_buy_bar": {"ru": "Купить турник для подтягиваний", "en": "Buy a pull-up bar"},
+	"land_toast": {"ru": "Зона, %d м", "en": "Zone, %d m", "tr": "Bölge, %d m"},
 	"coins": {"ru": "Монеты", "en": "Coins", "tr": "Altın"},
 	"score": {"ru": "Счёт", "en": "Score", "tr": "Skor"},
 	"sdk_ok": {"ru": "Яндекс SDK подключён", "en": "Yandex SDK connected", "tr": "Yandex SDK bağlı"},

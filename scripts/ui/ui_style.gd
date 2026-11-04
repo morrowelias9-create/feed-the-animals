@@ -19,10 +19,10 @@ const BUTTON_OUTLINE_SIZE: int = 4
 static func outline_label(text: String, font_size: int, outline_size: int, color: Color) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.font_size = font_size
 	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_outline_color", COLOR_OUTLINE)
 	label.add_theme_constant_override("outline_size", outline_size)
+	label.add_theme_font_size_override("font_size", font_size)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return label
@@ -31,9 +31,9 @@ static func outline_label(text: String, font_size: int, outline_size: int, color
 static func panel_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = COLOR_PANEL
-	style.border_width = 3
+	style.set_border_width_all(3)
 	style.border_color = COLOR_PANEL_BORDER
-	style.corner_radius = 20
+	style.set_corner_radius_all(20)
 	return style
 
 
@@ -61,8 +61,7 @@ static func _load_icon(icon_path: String) -> Texture2D:
 
 
 static func pulse(node: Control, duration: float = 0.5) -> void:
-	var tween := Tween.new()
-	node.add_child(tween)
+	var tween := node.create_tween()
 	var scale_down := tween.tween_property(node, "scale", Vector2(0.85, 0.85), duration)
 	scale_down.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	var scale_up := tween.tween_property(node, "scale", Vector2.ONE, duration)

@@ -6,15 +6,19 @@ var _info: Label
 var _stats: Label
 var _buttons := {}
 var _world_builder: WorldBuilder  # временно, в T13 станет частью чистого main
+var _world: Node3D
 var _player: Player
 var _camera_rig: CameraRig
 var _router: InputRouter
+var _hud: Hud
+var _throw_controller: ThrowController
 
 
 func _ready() -> void:
 	Loc.language_changed.connect(_refresh_texts)
 	_build_world()
 	_build_ui()
+	_build_hud()
 	_refresh_texts()
 	await Ya.initialize()
 	await Save.load_all()
@@ -22,6 +26,7 @@ func _ready() -> void:
 	Ya.loading_ready()
 	Ya.gameplay_start()
 	_refresh_texts()
+	_setup_throw()
 
 
 # ВРЕМЕННО (T06): мир, игрок и камера. Демо-кнопки уберутся в T13.
@@ -29,6 +34,7 @@ func _build_world() -> void:
 	var world: Node3D = Node3D.new()
 	world.name = "World"
 	add_child(world)
+	_world = world
 	_world_builder = WorldBuilder.new()
 	_world_builder.build(world)
 	_player = Player.new()
@@ -59,6 +65,25 @@ func _build_input() -> void:
 	_router.look_delta.connect(_camera_rig.rotate_by)
 	_router.zoom_delta.connect(_camera_rig.zoom)
 	_player.input_router = _router
+
+
+# ВРЕМЕННО (T09): HUD из scenes/ui/hud.tscn для шкалы броска. Демо-панель уберут в T13.
+func _build_hud() -> void:
+	var hud_scene: PackedScene = load("res://scenes/ui/hud.tscn")
+	_hud = hud_scene.instantiate()
+	_hud.name = "Hud"
+	add_child(_hud)
+
+
+func _setup_throw() -> void:
+	_throw_controller = ThrowController.new()
+	_throw_controller.name = "ThrowController"
+	_world.add_child(_throw_controller)
+	_throw_controller.player = _player
+	_throw_controller.camera_rig = _camera_rig
+	_throw_controller.hud = _hud
+	_throw_controller._meter = _hud.throw_meter
+	_router.action_pressed.connect(_throw_controller.action_pressed)
 
 
 func _build_ui() -> void:

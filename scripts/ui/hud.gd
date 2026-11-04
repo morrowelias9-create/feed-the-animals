@@ -1,5 +1,6 @@
+class_name Hud
 extends Control
-## HUD: деньги, сила, кнопки, подсказка цели (шаг T08, справочник R6).
+## HUD: деньги, сила, кнопки, подсказка цели, шкала броска (шаги T08/T09, справочник R6).
 ## Сцена: scenes/ui/hud.tscn (Control на весь экран, mouse_filter = IGNORE, якоря от краёв).
 
 signal index_pressed
@@ -14,12 +15,14 @@ var _strength: Label
 var _money: Label
 var _income: Label
 var _buttons: Dictionary = {}
+var throw_meter: ThrowMeter
 
 
 func _ready() -> void:
 	_build_texts()
 	_build_stats()
 	_build_buttons()
+	_build_throw_meter()
 	_refresh()
 	if not Game.money_changed.is_connected(_on_money_changed):
 		Game.money_changed.connect(_on_money_changed)
@@ -39,6 +42,12 @@ func set_hint(text: String) -> void:
 func set_mode(full: bool) -> void:
 	_full = full
 	_update_visibility()
+
+
+## В полёте шкала броска скрывается: приземление уже сделано, цель — полёт.
+func set_flight(active: bool) -> void:
+	if throw_meter != null:
+		throw_meter.visible = not active
 
 
 func set_strength(value: int) -> void:
@@ -129,12 +138,22 @@ func _refresh() -> void:
 	_update_visibility()
 
 
+func _build_throw_meter() -> void:
+	throw_meter = ThrowMeter.new()
+	throw_meter.name = "ThrowMeter"
+	throw_meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	throw_meter.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(throw_meter)
+
+
 func _update_visibility() -> void:
 	_goal.visible = _full
 	_hint.visible = not _full
 	_strength.visible = true
 	_money.visible = _full
 	_income.visible = _full
+	if throw_meter != null:
+		throw_meter.visible = not _full
 	for key in _buttons:
 		var button: Button = _buttons[key]
 		button.visible = _full
