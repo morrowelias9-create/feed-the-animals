@@ -5,10 +5,12 @@ var _score := 0
 var _info: Label
 var _stats: Label
 var _buttons := {}
+var _world_builder: WorldBuilder  # временно, в T13 станет частью чистого main
 
 
 func _ready() -> void:
 	Loc.language_changed.connect(_refresh_texts)
+	_build_world_preview()
 	_build_ui()
 	_refresh_texts()
 	await Ya.initialize()
@@ -17,6 +19,23 @@ func _ready() -> void:
 	Ya.loading_ready()
 	Ya.gameplay_start()
 	_refresh_texts()
+
+
+# ВРЕМЕННО (T05): мир и камера для проверки глазами. В T06 камеру заменит CameraRig.
+func _build_world_preview() -> void:
+	var world: Node3D = Node3D.new()
+	world.name = "World"
+	add_child(world)
+	_world_builder = WorldBuilder.new()
+	_world_builder.build(world)
+	var cam: Camera3D = Camera3D.new()
+	cam.name = "TempCamera"
+	cam.fov = 70.0
+	cam.far = 2500.0
+	cam.position = Vector3(0.0, 12.0, 70.0)
+	cam.rotation_degrees = Vector3(-12.0, 0.0, 0.0)
+	world.add_child(cam)
+	cam.make_current()
 
 
 func _build_ui() -> void:
