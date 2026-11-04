@@ -1,8 +1,8 @@
 class_name ThrowController
 extends Node3D
 ## Бросок: шкала, полёт, приземление (шаг T09, справочник R2/R3/R6).
-## Состояния: FREE -> AIMING -> THROWING -> FLIGHT -> LANDED -> COOLDOWN -> (AIMING | FREE).
-## Состояния ARRIVE и CLAIM пока заглушки (шаг T10).
+## Состояния: FREE -> AIMING -> THROWING -> FLIGHT -> LANDED -> ARRIVE -> CLAIM -> COOLDOWN -> (AIMING | FREE).
+## ARRIVE и CLAIM ведут ArrivalController (шаг T10).
 
 signal landed(dist: float, zone: int, perfect: bool, position: Vector3)
 signal state_changed(state: String)
@@ -13,10 +13,11 @@ const STATE_THROWING: String = "THROWING"
 const STATE_FLIGHT: String = "FLIGHT"
 const STATE_LANDED: String = "LANDED"
 const STATE_COOLDOWN: String = "COOLDOWN"
-const STATE_ARRIVE: String = "ARRIVE"   # заглушка, шаг T10
-const STATE_CLAIM: String = "CLAIM"     # заглушка, шаг T10
+const STATE_ARRIVE: String = "ARRIVE"
+const STATE_CLAIM: String = "CLAIM"
 
 const COOLDOWN_S: float = 0.6
+const CLAIM_S: float = 1.5
 const LAND_T: float = 1.2
 const THROW_ANIM_S: float = 0.55
 const GRAVITY: float = 9.8
@@ -39,6 +40,8 @@ var _land_pos: Vector3 = Vector3.ZERO
 var _dist: float = 0.0
 var _zone: int = 0
 var _perfect: bool = false
+var _arrival: ArrivalController
+var _claim_t: float = 0.0
 
 
 func _ready() -> void:
@@ -49,6 +52,10 @@ func _ready() -> void:
 	toast.modulate = Color.WHITE
 	add_child(toast)
 	_toast = toast
+	_arrival = ArrivalController.new()
+	_arrival.name = "ArrivalController"
+	add_child(_arrival)
+	_arrival.throw_controller = self
 
 
 ## Событие короткого нажатия (действие) из InputRouter: в AIMING это бросок.
@@ -104,16 +111,20 @@ func _process(delta: float) -> void:
 			if _toast_t >= LAND_T:
 				_toast_t = 0.0
 				_set_toast(false)
-				state = STATE_COOLDOWN
-				_cooldown_t = 0.0
+				_begin_arrive()
+		STATE_ARRIVE:
+			if _arrival.is_finished():
+				arrival_done()
+		STATE_CLAIM:
+			_claim_t += delta
+			if _claim_t >= CLAIM_S:
+				_claim_t = 0.0
+				_enter_cooldown()
 		STATE_COOLDOWN:
 			_cooldown_t += delta
 			if _cooldown_t >= COOLDOWN_S:
 				_cooldown_t = 0.0
-				if player != null and _in_throw_zone():
-					_enter_aiming()
-				else:
-					_return_to_free()
+				_enter_cooldown()
 
 
 func is_busy() -> bool:
@@ -149,6 +160,24 @@ func _return_to_free() -> void:
 	state_changed.emit(state)
 
 
+func _begin_arrive() -> void:
+	state = STATE_ARRIVE
+
+
+func arrival_done() -> void:
+	state = STATE_CLAIM
+	_claim_t = 0.0
+
+
+func _enter_cooldown() -> void:
+	_cooldown_t = 0.0
+	camera_rig.return_to_player()
+	if player != null and _in_throw_zone():
+		_enter_aiming()
+	else:
+		_return_to_free()
+
+
 func _land() -> void:
 	var dist: float = _dist
 	var zone: int = _zone
@@ -163,7 +192,6 @@ func _land() -> void:
 	_spawn_land_fx(position)
 	landed.emit(dist, zone, perfect, position)
 	state = STATE_LANDED
-	camera_rig.return_to_player()
 
 
 func _set_toast(show: bool, dist: float = 0.0) -> void:

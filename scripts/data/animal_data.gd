@@ -47,6 +47,21 @@ const ANIMALS: Array[Dictionary] = [
 	{"id": "orca", "name_key": "animal_orca", "zone": 4, "rarity": 4, "size_m": 7.0},
 ]
 
+const RARITY_COLORS: Array[Color] = [
+	Color("#B0B0B0"),
+	Color("#55E05A"),
+	Color("#4DB8FF"),
+	Color("#B05CFF"),
+	Color("#FFC83D"),
+]
+
+
+## Цвет редкости по номеру 0-4 (справочник R4).
+static func rarity_color(r: int) -> Color:
+	if r < 0 or r >= RARITY_COLORS.size():
+		return RARITY_COLORS[0]
+	return RARITY_COLORS[r]
+
 
 ## Описание зверя по id или пустой словарь, если такого нет.
 static func by_id(id: String) -> Dictionary:

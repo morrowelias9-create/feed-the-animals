@@ -37,9 +37,9 @@
 - [x] **T09** Бросок: шкала, полёт, приземление
   - коммит: `T09: бросок еды`
   - зафиксировано: да
-- [ ] **T10** Зверь приходит и забирается
+- [x] **T10** Зверь приходит и забирается
   - коммит: `T10: появление и получение зверя`
-  - зафиксировано: нет
+  - зафиксировано: да
 - [ ] **T11** Участок: загоны и размещённые звери
   - коммит: `T11: загоны и размещённые звери`
   - зафиксировано: нет
@@ -142,4 +142,9 @@ T08: сделаны `scripts/ui/ui_style.gd` (outline_label, panel_style, make_i
 
 T09: сделаны `ThrowMeter` (шкала, ползунок-волна, `start/stop/get_value`), `ThrowController` (FREE→AIMING→THROWING→FLIGHT→LANDED, `landed`), `FoodView` (полёт по параболе), `Hud.set_flight`, `FoodData.color`, ключ `land_toast`. Решение: исправлены headless-ошибки Godot 4.7 — `Tween` это RefCounted (нет `add_child`), скругления StyleBox через `set_*_all`, `Label.font_size` только через тему. Проверено: игра 180 кадров без ошибок, `check.py` 0 ошибок, `test.py` 96/0.
 Не проверено глазами: визуал шкалы/полёта/приземления, плашка «Зона, N м»; на телефоне и в вебе.
+
+T10: сделаны `ModelLoader` (заглушки + `_fit_to_size`), `AnimalView` (модель + подписи gold/название/доход, run_to/eat), `ArrivalController` (прибытие от `landed`: бег, еда, вспышка, popup, карточка `RareCard`), `RareCard`; `ThrowController`: LANDED→ARRIVE→CLAIM→COOLDOWN, камера следует за зверем. Решение: модель появляется у точки приземления, получение — игроком через CLAIM. Не проверено глазами: визуал, редкие карточки, на телефоне и в вебе.
+T10: исправлена ошибка «Cannot call non-static function "_make_placeholder()" from the static function "get_animal()"» — вспомогательные методы `ModelLoader` (`_make_placeholder`, `_animal_mat`, `_fit_to_size`, `_collect_aabb`) переведены в `static`. После фикса: headless без ошибок, `check.py` 0/0, `test.py` 96/0.
+T10: исправлена ошибка при приземлении «Invalid call. Nonexistent function 'is_child_of' in base 'Node3D'» — в Godot 4 метод `Node` называется `is_ancestor_of`, а не `is_child_of`; в `AnimalView.set_creature` заменён на `is_ancestor_of(_model)`. После фикса: headless без ошибок, `check.py` 0/0, `test.py` 96/0.
+T10: исправлена ошибка «работает, но только один раз» — `ArrivalController.start()` не сбрасывал `_finished` (оставался `true` после первого цикла, из-за чего второй бросок игнорировался). Теперь `_finished = false` в начале `start()`. После фикса: headless без ошибок, `check.py` 0/0, `test.py` 96/0.
 
