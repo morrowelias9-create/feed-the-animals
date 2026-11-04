@@ -20,6 +20,7 @@ run/max_fps=60
 Loc="*res://autoload/loc.gd"
 Save="*res://autoload/save.gd"
 Ya="*res://autoload/ya.gd"
+Game="*res://autoload/game.gd"
 
 [display]
 

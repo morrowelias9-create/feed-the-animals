@@ -13,6 +13,7 @@ func _ready() -> void:
 	_refresh_texts()
 	await Ya.initialize()
 	await Save.load_all()
+	Game.start()
 	Ya.loading_ready()
 	Ya.gameplay_start()
 	_refresh_texts()
@@ -30,7 +31,7 @@ func _build_ui() -> void:
 	_add_button(box, "tap", _on_tap)
 	_add_button(box, "interstitial", func(): Ya.show_interstitial())
 	_add_button(box, "rewarded", _on_rewarded)
-	_add_button(box, "submit", func(): Ya.submit_score("main", Save.data["best_score"]))
+	_add_button(box, "submit", func(): Ya.submit_score("main", int(Save.data["best_throw"])))
 	_add_button(box, "sound", _on_sound)
 
 
@@ -55,21 +56,20 @@ func _refresh_texts() -> void:
 	for key in _buttons:
 		_buttons[key].text = Loc.t(key)
 	_info.text = Loc.t("sdk_ok") if Ya.sdk_ok else Loc.t("sdk_mock")
-	_stats.text = "%s: %d    %s: %d" % [Loc.t("coins"), Save.data["coins"], Loc.t("score"), _score]
+	_stats.text = "%s: %d    %s: %d" % [Loc.t("coins"), int(Game.money()), Loc.t("score"), _score]
 
 
 func _on_tap() -> void:
 	_score += 1
-	Save.data["coins"] += 1
-	Save.data["best_score"] = maxi(Save.data["best_score"], _score)
+	Game.add_money(1)
+	Save.data["best_throw"] = maxi(int(Save.data["best_throw"]), _score)
 	Save.save_data()
 	_refresh_texts()
 
 
 func _on_rewarded() -> void:
 	Ya.show_rewarded(func():
-		Save.data["coins"] += 10
-		Save.save_data()
+		Game.add_money(10)
 		_refresh_texts()
 	)
 

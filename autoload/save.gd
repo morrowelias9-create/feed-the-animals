@@ -7,8 +7,23 @@ const CLOUD_THROTTLE := 3.0  # не чаще раза в N секунд отпр
 
 ## Здесь описываешь все поля игры с дефолтами. Новые поля добавляются безопасно.
 const DEFAULTS := {
-	"coins": 0,
-	"best_score": 0,
+	"money": 0.0,
+	"strength": 1,
+	"strength_xp": 0.0,
+	"bar_tier": 0,
+	"food_unlocked": 0,
+	"food_selected": 0,
+	"slots_level": 0,
+	"animals": [],
+	"next_uid": 1,
+	"found": [],
+	"claimed_zones": [],
+	"best_throw": 0,
+	"throws": 0,
+	"reps": 0,
+	"last_seen": 0,
+	"boost_until": 0,
+	"tutorial_step": 0,
 	"sound_on": true,
 	"_ts": 0,
 }
