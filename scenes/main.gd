@@ -6,11 +6,13 @@ var _info: Label
 var _stats: Label
 var _buttons := {}
 var _world_builder: WorldBuilder  # временно, в T13 станет частью чистого main
+var _player: Player
+var _camera_rig: CameraRig
 
 
 func _ready() -> void:
 	Loc.language_changed.connect(_refresh_texts)
-	_build_world_preview()
+	_build_world()
 	_build_ui()
 	_refresh_texts()
 	await Ya.initialize()
@@ -21,26 +23,30 @@ func _ready() -> void:
 	_refresh_texts()
 
 
-# ВРЕМЕННО (T05): мир и камера для проверки глазами. В T06 камеру заменит CameraRig.
-func _build_world_preview() -> void:
+# ВРЕМЕННО (T06): мир, игрок и камера. Демо-кнопки уберутся в T13.
+func _build_world() -> void:
 	var world: Node3D = Node3D.new()
 	world.name = "World"
 	add_child(world)
 	_world_builder = WorldBuilder.new()
 	_world_builder.build(world)
-	var cam: Camera3D = Camera3D.new()
-	cam.name = "TempCamera"
-	cam.fov = 70.0
-	cam.far = 2500.0
-	cam.position = Vector3(0.0, 12.0, 70.0)
-	cam.rotation_degrees = Vector3(-12.0, 0.0, 0.0)
-	world.add_child(cam)
-	cam.make_current()
+	_player = Player.new()
+	_player.name = "Player"
+	world.add_child(_player)
+	_camera_rig = CameraRig.new()
+	_camera_rig.name = "CameraRig"
+	world.add_child(_camera_rig)
+	_player.camera_rig = _camera_rig
+	_camera_rig.set_follow_target(_player)
+	_camera_rig.snap_to_target()
 
 
 func _build_ui() -> void:
 	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	center.position = Vector2(16.0, 16.0)
+	center.size = Vector2(460.0, 460.0)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 14)
