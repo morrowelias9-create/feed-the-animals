@@ -8,6 +8,7 @@ var _buttons := {}
 var _world_builder: WorldBuilder  # временно, в T13 станет частью чистого main
 var _player: Player
 var _camera_rig: CameraRig
+var _router: InputRouter
 
 
 func _ready() -> void:
@@ -39,6 +40,25 @@ func _build_world() -> void:
 	_player.camera_rig = _camera_rig
 	_camera_rig.set_follow_target(_player)
 	_camera_rig.snap_to_target()
+	_build_input()
+
+
+# Ввод: один роутер на всю игру, два плавающих джойстика (движение слева, камера справа), но под интерфейсом.
+func _build_input() -> void:
+	_router = InputRouter.new()
+	_router.name = "InputRouter"
+	add_child(_router)
+	var joy_movement: JoystickView = JoystickView.new()
+	joy_movement.name = "VirtualJoystick"
+	add_child(joy_movement)
+	var joy_camera: JoystickView = JoystickView.new()
+	joy_camera.name = "CameraJoystick"
+	add_child(joy_camera)
+	_router.movement_joystick = joy_movement
+	_router.camera_joystick = joy_camera
+	_router.look_delta.connect(_camera_rig.rotate_by)
+	_router.zoom_delta.connect(_camera_rig.zoom)
+	_player.input_router = _router
 
 
 func _build_ui() -> void:

@@ -18,7 +18,7 @@ const FOOD_BACK: float = 10.0
 const FOOD_UP: float = 5.0
 const RETURN_DEFAULT: float = 0.8
 
-# ВРЕМЕННО (T06): ввод мышью до появления InputRouter в T07.
+# Чувствительность поворота: градусов на пиксель перетаскивания.
 const DRAG_SENS_DEG: float = 0.25
 const ZOOM_STEP: float = 1.12
 
@@ -30,7 +30,6 @@ var distance: float = DISTANCE_DEFAULT
 var _target: Node3D
 var _food: Node3D
 var _look_focus: Vector3 = Vector3.ZERO
-var _dragging: bool = false
 
 var _return_left: float = 0.0
 var _return_total: float = 0.0
@@ -126,21 +125,3 @@ func _orbit_position() -> Vector3:
 
 func _focus_position() -> Vector3:
 	return _target.global_position + Vector3(0.0, FOCUS_HEIGHT, 0.0)
-
-
-# ВРЕМЕННО (T06): перетаскивание мышью и колесо. В T07 ввод придёт из InputRouter.
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton:
-		var mb: InputEventMouseButton = event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_LEFT:
-			_dragging = mb.pressed
-		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
-			zoom(-1.0)
-		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			zoom(1.0)
-	elif event is InputEventMouseMotion and _dragging:
-		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-			_dragging = false
-			return
-		var mm: InputEventMouseMotion = event as InputEventMouseMotion
-		rotate_by(mm.relative)
