@@ -13,6 +13,8 @@ var _router: InputRouter
 var _hud: Hud
 var _throw_controller: ThrowController
 var _slot_manager: SlotManager
+var _carry_controller: CarryController
+var _hotbar: Hotbar
 
 
 func _ready() -> void:
@@ -24,6 +26,9 @@ func _ready() -> void:
 	await Ya.initialize()
 	await Save.load_all()
 	Game.start()
+	_world_builder.refresh_pen_geometry()
+	if not Game.slots_changed.is_connected(_world_builder.refresh_pen_geometry):
+		Game.slots_changed.connect(_world_builder.refresh_pen_geometry)
 	Ya.loading_ready()
 	Ya.gameplay_start()
 	_refresh_texts()
@@ -90,6 +95,26 @@ func _setup_throw() -> void:
 	_slot_manager.name = "SlotManager"
 	_slot_manager.throw_controller = _throw_controller
 	_world.add_child(_slot_manager)
+
+	_carry_controller = CarryController.new()
+	_carry_controller.name = "CarryController"
+	_carry_controller.player = _player
+	_carry_controller.camera_rig = _camera_rig
+	_carry_controller.hud = _hud
+	_carry_controller.slot_manager = _slot_manager
+	_carry_controller.router = _router
+	_carry_controller.throw_controller = _throw_controller
+	_world.add_child(_carry_controller)
+	_throw_controller.carry_controller = _carry_controller
+	_throw_controller.reveal_completed.connect(_carry_controller.on_reveal_finished)
+
+	_hotbar = Hotbar.new()
+	_hotbar.name = "Hotbar"
+	_carry_controller.hotbar = _hotbar
+	_hotbar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hotbar.mouse_filter = Control.MOUSE_FILTER_PASS
+	_hud.add_child(_hotbar)
+	_hotbar.animal_selected.connect(_carry_controller.take)
 
 
 func _build_ui() -> void:

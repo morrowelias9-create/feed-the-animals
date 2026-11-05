@@ -4,17 +4,12 @@ extends Node3D
 ## в 16 местах WorldLayout.slot_position(i). Ограду строит WorldBuilder, соседние загоны пустые.
 ## - Обновляется по разнице: у неизменившихся зверей AnimalView не пересоздаётся.
 ## - Место зверя закреплено за uid, пока он размещён; новый зверь занимает самое раннее свободное.
-## - Места с i >= Game.total_slots() закрыты тёмной плиткой с замком (всё в двух MultiMeshInstance3D).
 ## - В загоне зверь не длиннее MAX_DISPLAY_M (крупные ужимаются).
 ## - Появление зверя: масштаб 0 -> 1 за POP_S. Пока идёт кинематика получения (REVEAL), появление ждёт её конца.
 ## - Раз в POPUP_EVERY_S над случайным зверем всплывает «+$N» (пул из POPUP_POOL подписей).
 
 const MAX_DISPLAY_M: float = 5.0
 const POP_S: float = 0.3
-const LOCK_ANIM_S: float = 0.3
-const TILE_X: float = 5.0
-const TILE_Y: float = 0.05
-const TILE_Z: float = 4.6
 const POPUP_POOL: int = 8
 const POPUP_EVERY_S: float = 2.0
 const POPUP_LIFE_S: float = 1.2
@@ -22,12 +17,6 @@ const POPUP_RISE_M: float = 1.5
 const REVEAL_STATE: String = "REVEAL"  # ThrowController.STATE_REVEAL, без ссылки на класс (тесты с `-s`)
 
 # Части замка: смещение центра и размер (тело, две стойки дужки, перекладина).
-const LOCK_PARTS: Array = [
-	[Vector3(0.0, 0.35, 0.0), Vector3(0.9, 0.7, 0.5)],
-	[Vector3(-0.28, 0.95, 0.0), Vector3(0.14, 0.5, 0.14)],
-	[Vector3(0.28, 0.95, 0.0), Vector3(0.14, 0.5, 0.14)],
-	[Vector3(0.0, 1.22, 0.0), Vector3(0.7, 0.14, 0.14)],
-]
 
 ## Нужен, чтобы появление зверя ждало конца кинематики получения (не обязателен).
 ## Тип Node, а не ThrowController: иначе тесты с `-s` потянут его зависимости-автозагрузки.
@@ -43,11 +32,6 @@ var _done: Array[int] = []             # временный список зак�
 var _slot_used: Array[int] = []        # место -> uid или -1
 var _initialized: bool = false
 
-var _tiles_mm: MultiMesh
-var _lock_mm: MultiMesh
-var _lock_vis: Array[float] = []       # 1 плитка видна, 0 скрыта
-var _lock_target: Array[float] = []
-var _locks_dirty: bool = true
 
 var _popup_nodes: Array[Label3D] = []
 var _popup_t: Array[float] = []        # секунд с начала показа, -1 если не активна
@@ -62,14 +46,11 @@ func _init() -> void:
 
 func _ready() -> void:
 	_game = _autoload("Game")
-	_build_locks()
 	_build_popups()
 	if _game != null:
 		_game.inventory_changed.connect(refresh)
 		_game.slots_changed.connect(refresh)
 	refresh()
-	_locks_dirty = false
-	_apply_locks()    # сразу, чтобы в первый кадр не торчали единичные кубы
 
 
 ## Автозагрузка из дерева: в тестах с `-s` имена автозагрузок не видны как идентификаторы.
@@ -83,7 +64,6 @@ func _autoload(autoload_name: String) -> Node:
 func _process(delta: float) -> void:
 	_release_pending()
 	_update_pops(delta)
-	_update_lock_anim(delta)
 	_update_popups(delta)
 	_popup_clock += delta
 	if _popup_clock >= POPUP_EVERY_S:
@@ -110,7 +90,12 @@ func refresh() -> void:
 	for a in placed:
 		if not _views.has(int(a["uid"])):
 			_spawn(a)
-	_update_lock_targets()
+		var view: AnimalView = _views.get(int(a["uid"])) as AnimalView
+		if view == null:
+			continue
+		var saved: Array = a.get("pos", [])
+		if saved.size() >= 2:
+			view.position = Vector3(float(saved[0]), 0.0, float(saved[1]))
 	_initialized = true
 
 
@@ -129,11 +114,7 @@ func slot_of(uid: int) -> int:
 
 ## Сколько плиток с замком должно быть видно (места за пределами открытых).
 func locked_count() -> int:
-	var n: int = 0
-	for t in _lock_target.size():
-		if _lock_target[t] > 0.5:
-			n += 1
-	return n
+	return 0
 
 
 func active_popups() -> int:
@@ -282,77 +263,6 @@ static func _ease_out_back(k: float) -> float:
 
 
 # ---------- Замки ----------
-
-func _build_locks() -> void:
-	var count: int = WorldLayout.SLOT_COUNT - UpgradeData.START_SLOTS
-	_lock_vis.resize(count)
-	_lock_vis.fill(1.0)
-	_lock_target.resize(count)
-	_lock_target.fill(1.0)
-
-	var unit: BoxMesh = BoxMesh.new()
-	unit.size = Vector3.ONE
-
-	var tile_mat: StandardMaterial3D = StandardMaterial3D.new()
-	tile_mat.albedo_color = Color(0.0, 0.0, 0.0, 0.5)
-	tile_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	tile_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_tiles_mm = _make_multimesh(unit, count, "LockTiles", tile_mat)
-
-	var lock_mat: StandardMaterial3D = StandardMaterial3D.new()
-	lock_mat.albedo_color = Color("#D5D8E0")
-	lock_mat.roughness = 0.7
-	_lock_mm = _make_multimesh(unit, count * LOCK_PARTS.size(), "LockIcons", lock_mat)
-	_locks_dirty = true
-
-
-func _make_multimesh(mesh: Mesh, count: int, node_name: String, mat: Material) -> MultiMesh:
-	var mm: MultiMesh = MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = mesh
-	mm.instance_count = count
-	var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	mmi.name = node_name
-	mmi.multimesh = mm
-	mmi.material_override = mat
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mmi)
-	return mm
-
-
-func _update_lock_targets() -> void:
-	var open_slots: int = int(_game.total_slots()) if _game != null else UpgradeData.START_SLOTS
-	for t in _lock_target.size():
-		_lock_target[t] = 1.0 if (UpgradeData.START_SLOTS + t) >= open_slots else 0.0
-		if not _initialized:
-			_lock_vis[t] = _lock_target[t]    # при загрузке без анимации
-	_locks_dirty = true
-
-
-func _update_lock_anim(delta: float) -> void:
-	for t in _lock_vis.size():
-		if not is_equal_approx(_lock_vis[t], _lock_target[t]):
-			_lock_vis[t] = move_toward(_lock_vis[t], _lock_target[t], delta / LOCK_ANIM_S)
-			_locks_dirty = true
-	if _locks_dirty:
-		_locks_dirty = false
-		_apply_locks()
-
-
-func _apply_locks() -> void:
-	var parts: int = LOCK_PARTS.size()
-	for t in _lock_vis.size():
-		var v: float = maxf(_lock_vis[t], 0.0001)
-		var base: Vector3 = WorldLayout.slot_position(UpgradeData.START_SLOTS + t)
-		_tiles_mm.set_instance_transform(t,
-			Transform3D(Basis.from_scale(Vector3(TILE_X, TILE_Y, TILE_Z) * v), base + Vector3(0.0, 0.04, 0.0)))
-		for k in parts:
-			var part: Array = LOCK_PARTS[k]
-			var offset: Vector3 = (part[0] as Vector3) * v
-			var size: Vector3 = (part[1] as Vector3) * v
-			_lock_mm.set_instance_transform(t * parts + k,
-				Transform3D(Basis.from_scale(size), base + Vector3(0.0, 0.04, 0.0) + offset))
-
 
 # ---------- «+$N» ----------
 

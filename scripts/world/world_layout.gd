@@ -73,6 +73,21 @@ static func plot_rect(p: int) -> Rect2:
 	var cx: float = plot_center_x(p)
 	return Rect2(Vector2(cx - PLOT_W / 2.0, PLOT_Z_FRONT), Vector2(PLOT_W, PLOT_Z_BACK - PLOT_Z_FRONT))
 
+## Фактическая площадь своего загона. Расширения добавляют полосу в глубину,
+## не меняя соседние участки и не создавая фиксированные клетки.
+static func pen_rect_for_level(level: int, margin: float = 0.0) -> Rect2:
+	var base: Rect2 = plot_rect(PLAYER_PLOT)
+	var extra: float = float(maxi(level, 0)) * 1.0
+	return Rect2(
+		Vector2(base.position.x + margin, base.position.y + margin),
+		Vector2(maxf(base.size.x - margin * 2.0, 1.0), maxf(base.size.y + extra - margin * 2.0, 1.0))
+	)
+
+
+static func clamp_pen_position(point: Vector3, level: int = 0, margin: float = 1.5) -> Vector3:
+	var r: Rect2 = pen_rect_for_level(level, margin)
+	return Vector3(clampf(point.x, r.position.x, r.end.x), 0.0, clampf(point.z, r.position.y, r.end.y))
+
 
 ## Зона начала прицеливания: ширина края земли, z от -3 до 3.
 static func throw_zone_rect() -> Rect2:

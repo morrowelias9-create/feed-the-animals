@@ -41,6 +41,7 @@ var _shirt_color: Color = COLOR_SHIRT
 var _pants_color: Color = COLOR_PANTS
 
 var _built: bool = false
+var _carrying: bool = false
 var _walk_speed: float = 0.0
 var _walk_amp: float = 0.0
 var _walk_phase: float = 0.0
@@ -68,7 +69,21 @@ func set_walk(speed: float) -> void:
 	_walk_speed = clampf(speed, 0.0, WALK_SPEED_MAX)
 
 
+func set_carrying(value: bool) -> void:
+	_carrying = value
+	_throw_t = 0.0
+	if value:
+		_pullup_t = 0.0
+
+
+## Точка крепления зверя в левой руке.
+func carry_socket() -> Node3D:
+	return _pivot_arm_l
+
+
 func play_throw() -> void:
+	if _carrying:
+		return
 	_throw_t = THROW_TIME
 
 
@@ -107,7 +122,9 @@ func _process(delta: float) -> void:
 		arm_r = _throw_angle(progress)
 
 	var y_offset: float = absf(sin(_walk_phase)) * WALK_BOB * _walk_amp
-	if _pullup_t > 0.0:
+	if _carrying:
+		arm_l = 1.45
+	elif _pullup_t > 0.0:
 		_pullup_t = maxf(_pullup_t - delta, 0.0)
 		var progress: float = 1.0 - _pullup_t / _pullup_duration
 		var k: float = sin(progress * PI)

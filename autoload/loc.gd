@@ -33,6 +33,10 @@ const T := {
 	"reveal_score": {"ru": "SCORE %d", "en": "SCORE %d"},
 	"reveal_tap": {"ru": "Нажмите, чтобы продолжить", "en": "Tap to continue"},
 	"reveal_size": {"ru": "Размер: %s x%s", "en": "Size: %s x%s", "tr": "Boyut: %s x%s"},
+	"carry_hint": {"ru": "Выбери место и нажми «Поставить»", "en": "Choose a spot and press “Place”"},
+	"carry_place": {"ru": "Поставить", "en": "Place"},
+	"carry_back": {"ru": "В рюкзак", "en": "Backpack"},
+
 
 	# Зоны
 	"zone_forest": {"ru": "Лес", "en": "Forest"},

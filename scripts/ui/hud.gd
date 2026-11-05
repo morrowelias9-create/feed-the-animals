@@ -8,6 +8,7 @@ signal shop_pressed
 signal animals_pressed
 
 var _full: bool = true
+var _throw_meter_enabled: bool = true
 
 var _goal: Label
 var _hint: Label
@@ -44,6 +45,12 @@ func set_mode(full: bool) -> void:
 	_update_visibility()
 
 
+## Отключает шкалу броска независимо от режима HUD (например, пока зверь в руках).
+func set_throw_meter_enabled(enabled: bool) -> void:
+	_throw_meter_enabled = enabled
+	_update_visibility()
+
+
 ## Кинематика получения зверя: HUD скрыт целиком, кнопки недоступны (справочник R2, фаза REVEAL).
 func set_reveal(active: bool) -> void:
 	visible = not active
@@ -52,7 +59,7 @@ func set_reveal(active: bool) -> void:
 ## В полёте шкала броска скрывается: приземление уже сделано, цель — полёт.
 func set_flight(active: bool) -> void:
 	if throw_meter != null:
-		throw_meter.visible = not active
+		throw_meter.visible = not active and not _full and _throw_meter_enabled
 
 
 func set_strength(value: int) -> void:
@@ -158,7 +165,7 @@ func _update_visibility() -> void:
 	_money.visible = _full
 	_income.visible = _full
 	if throw_meter != null:
-		throw_meter.visible = not _full
+		throw_meter.visible = not _full and _throw_meter_enabled
 	for key in _buttons:
 		var button: Button = _buttons[key]
 		button.visible = _full

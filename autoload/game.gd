@@ -173,6 +173,7 @@ func add_animal(animal_id: String, variant: int, size: int = 0) -> Dictionary:
 		"variant": VariantData.clamp_variant(variant),
 		"size": SizeData.clamp_size(size),
 		"placed": 0,
+		"pos": [],
 	}
 
 	var found: Array = _arr("found")
@@ -182,6 +183,7 @@ func add_animal(animal_id: String, variant: int, size: int = 0) -> Dictionary:
 
 	if placed_count() < total_slots():
 		animal["placed"] = 1
+		animal["pos"] = _next_free_position()
 
 	var sold_new: bool = false
 	var sold_money: float = 0.0
@@ -229,20 +231,73 @@ func add_animal(animal_id: String, variant: int, size: int = 0) -> Dictionary:
 
 
 ## Ставит зверя в слот. false, если свободных слотов нет или зверя нет.
-func place(uid: int) -> bool:
+func place(uid: int, position: Vector3 = Vector3.INF) -> bool:
 	var i: int = _index_of(uid)
 	if i == -1:
 		return false
 	var a: Dictionary = _animals()[i]
 	if int(a["placed"]) == 1:
+		if position != Vector3.INF:
+			return move_placed(uid, position)
 		return true
 	if placed_count() >= total_slots():
 		return false
 	a["placed"] = 1
+	var p: Vector3 = WorldLayout.clamp_pen_position(position, _i("slots_level")) if position != Vector3.INF else Vector3.ZERO
+	if position == Vector3.INF:
+		var fallback: Array = _next_free_position()
+		p = Vector3(float(fallback[0]), 0.0, float(fallback[1]))
+	a["pos"] = [p.x, p.z]
 	_income_dirty = true
 	inventory_changed.emit()
 	Save.save_data()
 	return true
+
+
+func move_placed(uid: int, position: Vector3) -> bool:
+	var i: int = _index_of(uid)
+	if i == -1:
+		return false
+	var a: Dictionary = _animals()[i]
+	if int(a.get("placed", 0)) != 1:
+		return false
+	var p: Vector3 = WorldLayout.clamp_pen_position(position, _i("slots_level"))
+	a["pos"] = [p.x, p.z]
+	inventory_changed.emit()
+	Save.save_data()
+	return true
+
+
+func animal_by_uid(uid: int) -> Dictionary:
+	var i: int = _index_of(uid)
+	return {} if i == -1 else (_animals()[i] as Dictionary).duplicate(true)
+
+
+func backpack_animals() -> Array:
+	var result: Array = []
+	for a in _animals():
+		if int(a.get("placed", 0)) == 0:
+			result.append((a as Dictionary).duplicate(true))
+	result.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return int(x["uid"]) < int(y["uid"]))
+	return result
+
+
+func _next_free_position() -> Array:
+	var rect: Rect2 = WorldLayout.pen_rect_for_level(_i("slots_level"), 1.5)
+	for attempt in 48:
+		var candidate := Vector2(randf_range(rect.position.x, rect.end.x), randf_range(rect.position.y, rect.end.y))
+		var clear := true
+		for a in _animals():
+			if int(a.get("placed", 0)) != 1:
+				continue
+			var saved: Array = a.get("pos", [])
+			if saved.size() >= 2 and candidate.distance_to(Vector2(float(saved[0]), float(saved[1]))) < 2.0:
+				clear = false
+				break
+		if clear:
+			return [candidate.x, candidate.y]
+	var center := rect.get_center()
+	return [center.x, center.y]
 
 
 func unplace(uid: int) -> void:
@@ -457,6 +512,9 @@ func _migrate_animals() -> void:
 			if size != int(animal["size"]):
 				animal["size"] = size
 				changed = true
+		if int(animal.get("placed", 0)) == 1 and not _valid_saved_pos(animal.get("pos", [])):
+			animal["pos"] = _next_free_position()
+			changed = true
 		var id: String = String(animal.get("animal_id", ""))
 		if AnimalData.by_id(id).is_empty():
 			var replacement: String = AnimalData.legacy_replacement(animal)
@@ -484,6 +542,13 @@ func _migrate_variants() -> void:
 			animal["variant"] = VariantData.clamp_variant(int(animal["variant"]))
 	if changed:
 		Save.save_data()
+
+
+func _valid_saved_pos(value: Variant) -> bool:
+	if not value is Array or value.size() < 2:
+		return false
+	var r: Rect2 = WorldLayout.pen_rect_for_level(_i("slots_level"), 1.5)
+	return r.has_point(Vector2(float(value[0]), float(value[1])))
 
 
 func _index_of(uid: int) -> int:

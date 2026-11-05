@@ -12,6 +12,7 @@ var _mats: Dictionary = {}
 var _textures: Dictionary = {}
 var _env: Environment
 var _arch_labels: Dictionary = {}       # зона -> Label3D
+var _geo: Node3D
 var scenery: SceneryBuilder             # декор биомов, хранится для тестов и отладки
 
 
@@ -19,6 +20,7 @@ func build(parent: Node3D) -> void:
 	var geo: Node3D = Node3D.new()
 	geo.name = "WorldGeometry"
 	parent.add_child(geo)
+	_geo = geo
 	_build_yard(geo)
 	_build_ledge(geo)
 	_build_corridor(geo)
@@ -141,13 +143,25 @@ func _build_scenery(parent: Node3D) -> void:
 
 
 # Загоны всех 5 участков: рейки и столбики, по одному MultiMeshInstance3D на каждые.
+func refresh_pen_geometry() -> void:
+	if _geo == null:
+		return
+	for node_name in ["PenRails", "PenPosts"]:
+		var old := _geo.get_node_or_null(node_name)
+		if old != null:
+			_geo.remove_child(old)
+			old.queue_free()
+	_build_pens(_geo)
+
+
 func _build_pens(parent: Node3D) -> void:
 	var rails: Array[Transform3D] = []
 	var posts: Array[Transform3D] = []
 	var heights: Array[float] = [0.55, 1.05]
 	var gate: float = WorldLayout.PEN_GATE_W
+	var slots_level: int = _slots_level()
 	for p in WorldLayout.PLOT_COUNT:
-		var r: Rect2 = WorldLayout.plot_rect(p)
+		var r: Rect2 = WorldLayout.pen_rect_for_level(slots_level) if p == WorldLayout.PLAYER_PLOT else WorldLayout.plot_rect(p)
 		var x0: float = r.position.x
 		var x1: float = r.end.x
 		var z0: float = r.position.y
@@ -238,6 +252,25 @@ func _t(key: String) -> String:
 	if loc == null:
 		return key
 	return String(loc.call("t", key))
+
+
+## Автозагрузка Save из дерева: в тестах с `-s` имена автозагрузок не видны как идентификаторы.
+func _save() -> Node:
+	var loop: MainLoop = Engine.get_main_loop()
+	if loop is SceneTree:
+		return (loop as SceneTree).root.get_node_or_null("Save")
+	return null
+
+
+## Уровень расширения слотов игрока из Save.data.
+func _slots_level() -> int:
+	var save: Node = _save()
+	if save == null:
+		return 0
+	var data: Variant = save.get("data")
+	if data is Dictionary:
+		return int((data as Dictionary).get("slots_level", 0))
+	return 0
 
 
 # ---------- Примитивы ----------

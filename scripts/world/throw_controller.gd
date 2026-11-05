@@ -6,6 +6,7 @@ extends Node3D
 
 signal landed(dist: float, zone: int, perfect: bool, position: Vector3)
 signal state_changed(state: String)
+signal reveal_completed
 
 const STATE_FREE: String = "FREE"
 const STATE_AIMING: String = "AIMING"
@@ -28,6 +29,7 @@ var state: String = STATE_FREE
 var player: Player
 var camera_rig: CameraRig
 var hud: Hud
+var carry_controller: Node
 
 var _meter: ThrowMeter
 var _food: FoodView
@@ -67,6 +69,9 @@ func action_pressed() -> void:
 	if state == STATE_REVEAL:
 		_reveal.tap()
 		return
+	if carry_controller != null and carry_controller.is_carrying():
+		carry_controller.place_at_cursor()
+		return
 	if state != STATE_AIMING or player == null or camera_rig == null:
 		return
 	var v: float = _meter.stop()
@@ -104,13 +109,14 @@ func _process(delta: float) -> void:
 			_set_toast(false)
 	match state:
 		STATE_FREE:
-			if player != null:
-				var in_zone: bool = _in_throw_zone()
-				if _rearm_blocked:
-					if not in_zone:
-						_rearm_blocked = false
-				elif in_zone:
-					_enter_aiming()
+			if carry_controller == null or not carry_controller.is_carrying():
+				if player != null:
+					var in_zone: bool = _in_throw_zone()
+					if _rearm_blocked:
+						if not in_zone:
+							_rearm_blocked = false
+					elif in_zone:
+						_enter_aiming()
 		STATE_AIMING:
 			if _wants_back():
 				_cancel_aiming()
@@ -139,6 +145,18 @@ func _process(delta: float) -> void:
 
 func is_busy() -> bool:
 	return state != STATE_FREE
+
+
+## Сбрасывает прицеливание и блокировку движения при взятии зверя из рюкзака.
+func cancel_for_carry() -> void:
+	if state == STATE_AIMING:
+		state = STATE_FREE
+		_rearm_blocked = true
+		_meter.stop()
+		state_changed.emit(state)
+	_unlock_player()
+	if hud != null:
+		hud.set_flight(false)
 
 
 func _in_throw_zone() -> bool:
@@ -190,7 +208,11 @@ func _cancel_aiming() -> void:
 func _return_to_free() -> void:
 	state = STATE_FREE
 	_unlock_player()
-	hud.set_mode(true)
+	if carry_controller != null and carry_controller.is_carrying():
+		hud.set_mode(false)
+		hud.set_hint("Сначала поставь зверя")
+	else:
+		hud.set_mode(true)
 	_meter.stop()
 	state_changed.emit(state)
 
@@ -212,11 +234,14 @@ func _end_reveal() -> void:
 	state = STATE_COOLDOWN
 	_cooldown_t = 0.0
 	state_changed.emit(state)
+	reveal_completed.emit()
 
 
 # Камеру к игроку вернула сама кинематика (return_to_player), здесь только выбираем следующее состояние.
 func _finish_cooldown() -> void:
-	if player != null and _in_throw_zone():
+	if carry_controller != null and carry_controller.is_carrying():
+		_return_to_free()
+	elif player != null and _in_throw_zone():
 		_enter_aiming()
 	else:
 		_return_to_free()

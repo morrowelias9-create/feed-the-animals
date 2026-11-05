@@ -20,6 +20,7 @@ var _behavior: String = "idle"
 var _target: Vector3 = Vector3.ZERO
 var _run_t: float = 0.0
 var _run_dur: float = 0.0
+var _wander_bob_t: float = 0.0
 
 var _label_variant: Label3D
 var _label_name: Label3D
@@ -75,6 +76,14 @@ func idle() -> void:
 	_behavior = "idle"
 
 
+func is_running() -> bool:
+	return _behavior == "run_to"
+
+
+func current_target() -> Vector3:
+	return _target
+
+
 func run_to(target: Vector3, duration: float) -> void:
 	if _behavior != "run_to":
 		_behavior = "run_to"
@@ -94,9 +103,13 @@ func _process(delta: float) -> void:
 		global_position = global_position.lerp(_target, k)
 		var d: Vector3 = _target - global_position
 		if d.length() > 0.001:
-			rotation.y = atan2(-d.x, -d.z)
+			var target_yaw := atan2(-d.x, -d.z)
+			rotation.y = lerp_angle(rotation.y, target_yaw, clampf(delta * 7.0, 0.0, 1.0))
+		_wander_bob_t += delta * 8.0
+		position.y = sin(_wander_bob_t) * 0.04
 		if _run_t >= _run_dur:
 			_behavior = "idle"
+			position.y = 0.0
 	if _float_t >= 0.0:
 		_update_float(delta)
 

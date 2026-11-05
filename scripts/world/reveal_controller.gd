@@ -355,9 +355,7 @@ func _enter_exit() -> void:
 	_phase = Phase.EXIT
 	_t = 0.0
 	_flashed = false
-	# T11b: игрок к проёму своего загона, камера возвращается к нему.
-	if throw_controller != null and throw_controller.player != null:
-		throw_controller.player.position = WorldLayout.pen_gate_position()
+	# Камера возвращается к игроку в его текущей позиции; сам игрок не телепортируется.
 	_camera_rig.set_scripted(false)
 	_camera_rig.return_to_player(EXIT_S)
 

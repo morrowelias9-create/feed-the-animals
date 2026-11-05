@@ -10,6 +10,7 @@ var avatar: Avatar
 var camera_rig: CameraRig
 var input_router: InputRouter
 var enabled: bool = true
+var carrying: bool = false
 
 var _facing: float = 0.0
 
@@ -39,6 +40,10 @@ func _process(delta: float) -> void:
 		_face(direction, delta)
 		_move(direction, move_len * SPEED * delta)
 	avatar.set_walk(SPEED * move_len)
+
+
+func set_carrying(value: bool) -> void:
+	carrying = value
 
 
 func _face(direction: Vector3, delta: float) -> void:
