@@ -192,11 +192,12 @@ func _spawn(a: Dictionary) -> void:
 	var uid: int = int(a["uid"])
 	var id: String = String(a["animal_id"])
 	var variant: int = VariantData.clamp_variant(int(a.get("variant", 0)))
-	var rarity: int = int(AnimalData.by_id(id).get("rarity", 0))
+	var size_step: int = SizeData.clamp_size(int(a.get("size", 0)))
+	var rarity: int = AnimalData.rarity_of(id)
 	var view: AnimalView = AnimalView.new()
 	view.name = "Pet%d" % uid
 	add_child(view)
-	view.set_creature(id, variant, rarity, Economy.income(id, variant))
+	view.set_creature(id, variant, rarity, Economy.income(id, variant, size_step))
 	view.position = WorldLayout.slot_position(slot)
 	view.rotation.y = 0.0    # лицом к -Z, к игроку, который ходит перед загонами
 	var fit: float = display_scale(id)

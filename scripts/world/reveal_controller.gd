@@ -40,6 +40,7 @@ var _flashed: bool = false
 
 var _animal_id: String = ""
 var _variant: int = 0
+var _size_step: int = 0
 var _rarity: int = 0
 var _income: float = 0.0
 var _size: float = 1.2
@@ -77,15 +78,19 @@ func start(zone: int, dist: float, land_pos: Vector3, food: Node3D) -> void:
 	_camera_rig = throw_controller.camera_rig if throw_controller != null else null
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
-	var roll: Dictionary = SpawnRoller.roll(zone, int(Save.data.get("food_selected", 0)), rng)
+	var history: Array = []
+	if Save.data.get("catch_history", []) is Array:
+		history = Save.data["catch_history"]
+	var roll: Dictionary = SpawnRoller.roll(dist, int(Save.data.get("food_selected", 0)), history, rng, 1.0)
 	_animal_id = String(roll["animal_id"])
 	if _animal_id.is_empty():
 		_animal_id = "frog"
 	_variant = int(roll["variant"])
+	_size_step = int(roll.get("size", 0))
 	var data: Dictionary = AnimalData.by_id(_animal_id)
-	_rarity = int(data.get("rarity", 0))
+	_rarity = AnimalData.rank_to_rarity(int(data.get("rank", 1)))
 	_size = float(data.get("size_m", 1.2))
-	_income = Economy.income(_animal_id, _variant)
+	_income = Economy.income(_animal_id, _variant, _size_step)
 	_dist = dist
 	_land = land_pos
 	_floor_y = land_pos.y
@@ -94,7 +99,7 @@ func start(zone: int, dist: float, land_pos: Vector3, food: Node3D) -> void:
 	_finished = false
 	if _camera_rig == null:
 		# Без камеры показывать нечего: зверя всё равно получаем.
-		Game.add_animal(_animal_id, _variant)
+		Game.add_animal(_animal_id, _variant, _size_step)
 		_finish_run()
 		return
 	_overlay.open()
@@ -220,7 +225,7 @@ func _enter_result() -> void:
 	_view.position = _stop
 	_overlay.skip_typing()
 	_overlay.hide_typing()
-	Game.add_animal(_animal_id, _variant)
+	Game.add_animal(_animal_id, _variant, _size_step)
 	_view.set_variant(_variant, _income)
 	if _variant != VariantData.NONE:
 		_overlay.flash(0.6)

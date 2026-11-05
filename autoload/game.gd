@@ -38,6 +38,7 @@ func _process(delta: float) -> void:
 
 ## Вызывается после Save.load_all(). Переносит старые сохранения и записывает время.
 func start() -> void:
+	_migrate_animals()
 	_migrate_variants()
 	_loaded = true
 	_income_dirty = true
@@ -82,7 +83,7 @@ func income_per_sec() -> float:
 		_base_income = 0.0
 		for a in _animals():
 			if int(a["placed"]) == 1:
-				_base_income += Economy.income(String(a["animal_id"]), _variant_of(a))
+				_base_income += Economy.income(String(a["animal_id"]), _variant_of(a), _size_of(a))
 		_income_dirty = false
 	if _boost_active():
 		return _base_income * float(GameConfig.BOOST_MULT)
@@ -159,17 +160,25 @@ func add_xp(x: float) -> void:
 
 # ---------- Звери ----------
 
-## Новый зверь (variant: 0 обычный, 1 золото, 2 бриллиант): ставится в слот, если есть место, иначе в инвентарь.
+## Новый зверь (variant: 0 обычный, 1-5 мутации; size: ступень размера 0-10):
+## ставится в слот, если есть место, иначе в инвентарь.
 ## При переполнении инвентаря продаётся самый дешёвый неразмещённый (или новый, если он дешевле).
-func add_animal(animal_id: String, variant: int) -> Dictionary:
+func add_animal(animal_id: String, variant: int, size: int = 0) -> Dictionary:
 	var animals: Array = _animals()
 	var uid: int = _i("next_uid")
 	Save.data["next_uid"] = uid + 1
-	var animal: Dictionary = {"uid": uid, "animal_id": animal_id, "variant": VariantData.clamp_variant(variant), "placed": 0}
+	var animal: Dictionary = {
+		"uid": uid,
+		"animal_id": animal_id,
+		"variant": VariantData.clamp_variant(variant),
+		"size": SizeData.clamp_size(size),
+		"placed": 0,
+	}
 
 	var found: Array = _arr("found")
 	if not found.has(animal_id):
 		found.append(animal_id)
+	_touch_catch_history(animal_id)
 
 	if placed_count() < total_slots():
 		animal["placed"] = 1
@@ -179,7 +188,7 @@ func add_animal(animal_id: String, variant: int) -> Dictionary:
 	var full: bool = animals.size() >= GameConfig.INV_LIMIT
 	if full:
 		var cheapest: int = _cheapest_unplaced_index()
-		var new_price: float = Economy.sell_price(animal_id, int(animal["variant"]))
+		var new_price: float = Economy.sell_price(animal_id, int(animal["variant"]), int(animal["size"]))
 		if int(animal["placed"]) == 0:
 			var cheapest_price: float = INF
 			if cheapest != -1:
@@ -196,7 +205,7 @@ func add_animal(animal_id: String, variant: int) -> Dictionary:
 			animals.remove_at(cheapest)
 			animals.append(animal)
 		else:
-			# Недостижимо при лимите 60 и максимуме 16 слотов, но на всякий случай.
+			# Недостижимо при лимите 60 и максимуме 20 слотов, но на всякий случай.
 			sold_new = true
 			sold_money = new_price
 			animal["placed"] = 0
@@ -269,8 +278,8 @@ func sell(uid: int) -> float:
 func equip_best() -> void:
 	var list: Array = _animals().duplicate()   # копия массива, словари те же
 	list.sort_custom(func(x: Dictionary, y: Dictionary) -> bool:
-		var ix: float = Economy.income(String(x["animal_id"]), _variant_of(x))
-		var iy: float = Economy.income(String(y["animal_id"]), _variant_of(y))
+		var ix: float = Economy.income(String(x["animal_id"]), _variant_of(x), _size_of(x))
+		var iy: float = Economy.income(String(y["animal_id"]), _variant_of(y), _size_of(y))
 		if ix != iy:
 			return ix > iy
 		return int(x["uid"]) < int(y["uid"]))
@@ -288,14 +297,15 @@ func equip_best() -> void:
 		Save.save_data()
 
 
-## Продаёт всех неразмещённых редкости 0-1, возвращает сумму.
+## Продаёт всех неразмещённых ранга 1-5 без мутаций и размера, возвращает сумму.
 func sell_extras() -> float:
 	var animals: Array = _animals()
 	var total: float = 0.0
 	var i: int = animals.size() - 1
 	while i >= 0:
 		var a: Dictionary = animals[i]
-		if int(a["placed"]) == 0 and int(AnimalData.by_id(String(a["animal_id"])).get("rarity", 99)) <= 1:
+		if int(a["placed"]) == 0 and AnimalData.rank_of(String(a["animal_id"])) <= 5 \
+				and _variant_of(a) == VariantData.NONE and _size_of(a) == 0:
 			total += _price_of(a)
 			animals.remove_at(i)
 		i -= 1
@@ -421,6 +431,42 @@ func _variant_of(a: Dictionary) -> int:
 	return 1 if int(a.get("gold", 0)) != 0 else 0
 
 
+# Ступень размера из словаря; у старой записи без поля это 0.
+func _size_of(a: Dictionary) -> int:
+	return SizeData.clamp_size(int(a.get("size", 0)))
+
+
+# Два последних пойманных id, последний в конце массива (для анти-повтора SpawnRoller).
+func _touch_catch_history(animal_id: String) -> void:
+	var history: Array = _arr("catch_history")
+	history.append(animal_id)
+	while history.size() > 2:
+		history.pop_front()
+
+
+# Однократный перенос сохранения T11: у зверя появляется size, неизвестный id заменяется зверем той же зоны и ранга.
+func _migrate_animals() -> void:
+	var changed: bool = false
+	for a in _animals():
+		var animal: Dictionary = a
+		if not animal.has("size"):
+			animal["size"] = 0
+			changed = true
+		else:
+			var size: int = SizeData.clamp_size(int(animal["size"]))
+			if size != int(animal["size"]):
+				animal["size"] = size
+				changed = true
+		var id: String = String(animal.get("animal_id", ""))
+		if AnimalData.by_id(id).is_empty():
+			var replacement: String = AnimalData.legacy_replacement(animal)
+			if replacement != "":
+				animal["animal_id"] = replacement
+				changed = true
+	if changed:
+		Save.save_data()
+
+
 # Однократный перенос: поле gold (0/1) становится variant (0/1), gold удаляется. Повторный вызов ничего не меняет.
 func _migrate_variants() -> void:
 	var changed: bool = false
@@ -449,7 +495,7 @@ func _index_of(uid: int) -> int:
 
 
 func _price_of(a: Dictionary) -> float:
-	return Economy.sell_price(String(a["animal_id"]), _variant_of(a))
+	return Economy.sell_price(String(a["animal_id"]), _variant_of(a), _size_of(a))
 
 
 # Индекс самого дешёвого неразмещённого зверя или -1.

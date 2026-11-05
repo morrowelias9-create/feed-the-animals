@@ -26,6 +26,9 @@ const T := {
 	"sdk_mock": {"ru": "Режим заглушки (SDK нет)", "en": "Mock mode (no SDK)", "tr": "Sahte mod (SDK yok)"},
 	"variant_gold": {"ru": "Золото", "en": "Gold"},
 	"variant_diamond": {"ru": "Бриллиант", "en": "Diamond"},
+	"variant_emerald": {"ru": "Изумруд", "en": "Emerald"},
+	"variant_ruby": {"ru": "Рубин", "en": "Ruby"},
+	"variant_rainbow": {"ru": "Радуга", "en": "Rainbow"},
 	"reveal_luck": {"ru": "Удача!", "en": "Lucky!"},
 	"reveal_score": {"ru": "SCORE %d", "en": "SCORE %d"},
 	"reveal_tap": {"ru": "Нажмите, чтобы продолжить", "en": "Tap to continue"},
@@ -43,10 +46,16 @@ const T := {
 	"food_banana": {"ru": "Банан", "en": "Banana"},
 	"food_toast": {"ru": "Тост", "en": "Toast"},
 	"food_orange": {"ru": "Апельсин", "en": "Orange"},
+	"food_pear": {"ru": "Груша", "en": "Pear"},
 	"food_cheese": {"ru": "Сыр", "en": "Cheese"},
 	"food_bread": {"ru": "Батон", "en": "Bread"},
 	"food_watermelon": {"ru": "Арбуз", "en": "Watermelon"},
 	"food_pizza": {"ru": "Пицца", "en": "Pizza"},
+	"food_croissant": {"ru": "Круассан", "en": "Croissant"},
+	"food_chocolate": {"ru": "Шоколад", "en": "Chocolate"},
+	"food_donut": {"ru": "Пончик", "en": "Donut"},
+	"food_burger": {"ru": "Бургер", "en": "Burger"},
+	"food_steak": {"ru": "Стейк", "en": "Steak"},
 	"food_cake": {"ru": "Торт", "en": "Cake"},
 
 	# Звери
@@ -90,6 +99,29 @@ const T := {
 	"animal_dolphin": {"ru": "Дельфин", "en": "Dolphin"},
 	"animal_shark": {"ru": "Акула", "en": "Shark"},
 	"animal_orca": {"ru": "Косатка", "en": "Orca"},
+
+	# Турники
+	"bar_wood": {"ru": "Деревянный турник", "en": "Wooden bar"},
+	"bar_steel": {"ru": "Стальной турник", "en": "Steel bar"},
+	"bar_copper": {"ru": "Медный турник", "en": "Copper bar"},
+	"bar_gold": {"ru": "Золотой турник", "en": "Gold bar"},
+	"bar_turquoise": {"ru": "Бирюзовый турник", "en": "Turquoise bar"},
+	"bar_purple": {"ru": "Фиолетовый турник", "en": "Purple bar"},
+	"bar_ruby": {"ru": "Рубиновый турник", "en": "Ruby bar"},
+	"bar_neon": {"ru": "Неоновый турник", "en": "Neon bar"},
+	"bar_ice": {"ru": "Ледяной турник", "en": "Ice bar"},
+	"bar_star": {"ru": "Звёздный турник", "en": "Star bar"},
+	"bar_blue": {"ru": "Синий турник", "en": "Blue bar"},
+
+	# Мутации размера
+	"size_1": {"ru": "Крупный", "en": "Big"},
+	"size_2": {"ru": "Большой", "en": "Large"},
+	"size_3": {"ru": "Огромный", "en": "Huge"},
+	"size_4": {"ru": "Громадный", "en": "Massive"},
+	"size_5": {"ru": "Гигант", "en": "Giant"},
+	"size_6": {"ru": "Титан", "en": "Titan"},
+	"size_7": {"ru": "Колосс", "en": "Colossus"},
+	"size_8": {"ru": "Исполин", "en": "Behemoth"},
 
 	# Редкости и вариант
 	"rarity_0": {"ru": "Обычный", "en": "Common"},

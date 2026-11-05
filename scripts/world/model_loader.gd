@@ -96,7 +96,7 @@ static func _make_placeholder(id: String) -> Node3D:
 	var size_m: float = float(data.get("size_m", 1.2))
 	var node := Node3D.new()
 	node.name = id
-	var mat := _animal_mat(int(data.get("rarity", 0)))
+	var mat := _animal_mat(AnimalData.rarity_of(id))
 	var body := BoxMesh.new()
 	body.size = Vector3(size_m * 0.7, size_m * 0.8, size_m * 0.7)
 	var body_mi := MeshInstance3D.new()

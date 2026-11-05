@@ -10,6 +10,16 @@ const BONUS_MAX: int = 20            # максимальный бонус от 
 const SELL_MULT: float = 30.0        # цена продажи = доход * SELL_MULT
 const INV_LIMIT: int = 60            # лимит зверей (стоящих и нет)
 const INDEX_REWARD_BASE: float = 5000.0   # награда за полную зону = база * множитель зоны
+const RANK_STEP: float = 1.5         # доход ранга r = база зоны * RANK_STEP^(r-1)
+
+# Мутация размера
+const SIZE_STEP: float = 1.5         # SIZE_STEP^(SIZE_POW * k)
+const SIZE_POW: float = 1.8
+const SIZE_P0: float = 0.18          # начальный шанс ступени размера при lm = 1
+const SIZE_MAX: int = 10             # дальше размер не растёт
+
+# Сила: опыт следующего уровня растёт по зонам
+const XP_ZONE_K: float = 3.5
 
 # Оффлайн
 const OFFLINE_CAP_S: int = 7200      # максимум учитываемого отсутствия, секунд
@@ -23,17 +33,6 @@ const BOOST_MULT: int = 2            # множитель дохода при б
 
 # Сохранение
 const AUTOSAVE_S: float = 15.0       # период автосохранения, секунд
-
-# Сила: опыта до следующего уровня = NEED_A + NEED_B * S * (1 + S / NEED_C)
-const NEED_A: float = 10.0
-const NEED_B: float = 4.0
-const NEED_C: float = 60.0
-
-# Редкость и еда
-const TIER_LUCK: float = 0.25        # вес редкости r умножается на (1 + TIER_LUCK * tier)^r
-const RARITY_INCOME: Array[float] = [1.0, 3.0, 10.0, 40.0, 200.0]
-const BASE_W: Array[float] = [70.0, 20.0, 7.0, 2.5, 0.5]
-const SIZE_BY_RARITY: Array[float] = [1.2, 2.2, 3.5, 5.0, 7.0]
 
 # Кинематика получения зверя (справочник R2, фазы A-C)
 const REVEAL_EYES_S: float = 1.6     # фаза A: камера из глаз зверя

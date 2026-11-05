@@ -131,33 +131,63 @@ func _test_data() -> void:
 	_check("zone_at: границы 320, 700, 1100",
 		ZoneData.zone_at(320.0) == 2 and ZoneData.zone_at(700.0) == 3 and ZoneData.zone_at(1100.0) == 4)
 	_check("zone_at: дальше 1400 м это Океан", ZoneData.zone_at(5000.0) == 4)
-	_check("10 видов еды", FoodData.count() == 10)
+	_check("15 видов еды", FoodData.count() == 15)
 	_check("40 зверей", AnimalData.ANIMALS.size() == 40)
 	var ids: Dictionary = {}
 	for a in AnimalData.ANIMALS:
 		ids[String(a["id"])] = true
 	_check("id зверей уникальны", ids.size() == 40)
 	for z in ZoneData.count():
-		var counts: Array = [0, 0, 0, 0, 0]
+		var ranks: Array = []
 		for a in AnimalData.zone_animals(z):
-			counts[int(a["rarity"])] += 1
-		_check("зона %d: 8 зверей, редкости 3-2-1-1-1" % z,
-			AnimalData.zone_animals(z).size() == 8 and counts == [3, 2, 1, 1, 1])
-	_check("in_zone(0, 0) даёт 3 обычных зверя Леса", AnimalData.in_zone(0, 0).size() == 3)
-	_check("by_id(\"frog\") это зона 0", int(AnimalData.by_id("frog").get("zone", -1)) == 0)
+			ranks.append(int(a["rank"]))
+		_check("зона %d: 8 зверей с рангами 1-8" % z,
+			AnimalData.zone_animals(z).size() == 8 and ranks == [1, 2, 3, 4, 5, 6, 7, 8])
+	_check("at_rank(0, 1) это лягушка, at_rank(0, 8) это медведь",
+		String(AnimalData.at_rank(0, 1).get("id", "")) == "frog"
+		and String(AnimalData.at_rank(0, 8).get("id", "")) == "bear")
 	_check("by_id неизвестного даёт пустой словарь", AnimalData.by_id("нет_такого").is_empty())
+	_check("редкость из ранга: 1-3 обычный, 4-5 необычный, 6 редкий, 7 эпический, 8 легендарный",
+		AnimalData.rank_to_rarity(1) == 0 and AnimalData.rank_to_rarity(4) == 1
+		and AnimalData.rank_to_rarity(6) == 2 and AnimalData.rank_to_rarity(7) == 3
+		and AnimalData.rank_to_rarity(8) == 4)
+	_check("редкость по id: лягушка 0, лиса 1, кабан 2, волк 3, медведь 4",
+		AnimalData.rarity_of("frog") == 0 and AnimalData.rarity_of("fox") == 1
+		and AnimalData.rarity_of("boar") == 2 and AnimalData.rarity_of("wolf") == 3
+		and AnimalData.rarity_of("bear") == 4)
 	_check("размер лягушки 0.8, медведя 7.0",
 		_near(float(AnimalData.by_id("frog")["size_m"]), 0.8) and _near(float(AnimalData.by_id("bear")["size_m"]), 7.0))
-	_check("5 турников, 6 цен расширения, максимум 16 слотов",
-		UpgradeData.BARS.size() == 5 and UpgradeData.SLOT_PRICES.size() == 6
-		and UpgradeData.START_SLOTS + 6 * UpgradeData.SLOTS_PER_LEVEL == 16)
+	_check("зоны: база дохода 1, 40, 1600, 64000, 2560000",
+		_near(float(ZoneData.ZONES[0]["base"]), 1.0) and _near(float(ZoneData.ZONES[1]["base"]), 40.0)
+		and _near(float(ZoneData.ZONES[2]["base"]), 1600.0) and _near(float(ZoneData.ZONES[3]["base"]), 64000.0)
+		and _near(float(ZoneData.ZONES[4]["base"]), 2560000.0))
+	_check("у зон конец позже начала и положительный luck_ref",
+		float(ZoneData.ZONES[0]["end_m"]) > float(ZoneData.ZONES[0]["start_m"])
+		and float(ZoneData.ZONES[4]["luck_ref"]) > 0.0)
+	_check("10 турников, 8 цен расширения, максимум 20 слотов",
+		UpgradeData.BARS.size() == 10 and UpgradeData.SLOT_PRICES.size() == 8
+		and UpgradeData.START_SLOTS + 8 * UpgradeData.SLOTS_PER_LEVEL == 20)
+	_check("опыт турников удваивается: 1 ... 512",
+		_near(float(UpgradeData.BARS[0]["xp"]), 1.0) and _near(float(UpgradeData.BARS[9]["xp"]), 512.0))
+	_check("еда по зонам: по 3 вида, aim_rank 2/5/8",
+		FoodData.zone_of(0) == 0 and FoodData.zone_of(2) == 0 and FoodData.zone_of(3) == 1
+		and FoodData.zone_of(14) == 4 and FoodData.aim_rank(0) == 2 and FoodData.aim_rank(1) == 5
+		and FoodData.aim_rank(2) == 8)
+	_check("luck еды растёт от 1.0 до 3.0",
+		_near(FoodData.luck(0), 1.0) and _near(FoodData.luck(14), 3.0)
+		and FoodData.luck(7) > FoodData.luck(1))
+	_check("цены еды из R4: 0, 30, 200, ..., 15T",
+		_near(FoodData.price(0), 0.0) and _near(FoodData.price(1), 30.0)
+		and _near(FoodData.price(3), 2500.0) and _near(FoodData.price(14), 15000000000000.0))
 
 
 func _test_num_fmt() -> void:
 	var cases: Array = [
 		[0.0, "0"], [5.0, "5"], [999.0, "999"], [1000.0, "1K"], [2360.0, "2.36K"],
 		[12500.0, "12.5K"], [123456.0, "123K"], [1.2e6, "1.2M"], [999999.0, "1M"],
-		[4.5e9, "4.5B"], [-5.0, "0"], [NAN, "0"],
+		[4.5e9, "4.5B"], [1.0e12, "1T"], [1.0e15, "1Qa"], [1.0e18, "1Qi"], [1.0e21, "1Sx"],
+		[1.0e24, "1Sp"], [1.0e27, "1Oc"], [1.0e30, "1No"], [1.0e33, "1Dc"], [4.0e36, "4000Dc"],
+		[-5.0, "0"], [NAN, "0"],
 	]
 	for c in cases:
 		var got: String = NumFmt.format(float(c[0]))
@@ -181,91 +211,107 @@ func _test_throw_calc() -> void:
 
 
 func _test_economy() -> void:
-	_check("income(frog, 0) = 1.0", _near(Economy.income("frog", 0), 1.0))
-	_check("income(lion, 0) = 2800.0", _near(Economy.income("lion", 0), 2800.0))
-	_check("золотой даёт вдвое больше", _near(Economy.income("lion", 1), 5600.0))
-	_check("бриллиантовый даёт втрое больше", _near(Economy.income("lion", 2), 8400.0))
-	_check("sell_price(lion, 2) = 252000", _near(Economy.sell_price("lion", 2), 252000.0))
-	_check("income неизвестного зверя = 0", _near(Economy.income("нет_такого", 0), 0.0))
-	_check("sell_price(frog, 0) = 30.0", _near(Economy.sell_price("frog", 0), 30.0))
-	_check("xp_needed(1) примерно 14.07", _near(Economy.xp_needed(1), 14.07, 0.01))
+	_check("income(frog) = 1.0", _near(Economy.income("frog", 0, 0), 1.0))
+	_check("income(bear) = 1.5^7 = 17.086", _near(Economy.income("bear", 0, 0), 17.0859375))
+	_check("income(lion) = 40 * 1.5^7 = 683.4375", _near(Economy.income("lion", 0, 0), 683.4375))
+	_check("золотой даёт x1.5", _near(Economy.income("lion", 1, 0), 1025.15625))
+	_check("бриллиантовый даёт x3", _near(Economy.income("lion", 2, 0), 2050.3125))
+	_check("изумруд x5, рубин x10, радуга x20",
+		_near(VariantData.mult(3), 5.0) and _near(VariantData.mult(4), 10.0) and _near(VariantData.mult(5), 20.0))
+	_check("размер 1 даёт x2.0747, размер 2 даёт x4.3046",
+		_near(Economy.income("bear", 0, 1), 17.0859375 * 2.0747428008338873)
+		and _near(Economy.income("bear", 0, 2), 17.0859375 * 4.304557689612044))
+	_check("sell_price(lion, 2) = 61509.375", _near(Economy.sell_price("lion", 2, 0), 61509.375))
+	_check("income неизвестного зверя = 0", _near(Economy.income("нет_такого", 0, 0), 0.0))
+	_check("sell_price(frog) = 30.0", _near(Economy.sell_price("frog", 0, 0), 30.0))
+	_check("xp_needed(1) = 30.75", _near(Economy.xp_needed(1), 30.75))
+	_check("xp_needed(30) = 183.75 (начало Саванны)", _near(Economy.xp_needed(30), 183.75))
+	_check("xp_needed(100) = 1286.25 (начало Пустыни)", _near(Economy.xp_needed(100), 1286.25))
 	_check("offline_gain(10000, 5) = 18000 (потолок 2 часа, половина дохода)",
 		_near(Economy.offline_gain(10000.0, 5.0), 18000.0))
 	_check("offline_gain(100, 10) = 500", _near(Economy.offline_gain(100.0, 10.0), 500.0))
 	_check("zone_reward(1) = 70000", _near(Economy.zone_reward(1), 70000.0))
-	var w: Array[float] = SpawnRoller.rarity_weights(0)
-	var expected: Array = [70.0, 20.0, 7.0, 2.5, 0.5]
-	var same: bool = w.size() == 5
-	for i in mini(w.size(), 5):
-		if not _near(w[i], float(expected[i])):
-			same = false
-	_check("rarity_weights(0) = [70, 20, 7, 2.5, 0.5]", same)
-	_check("rarity_share(0, 4) примерно 0.5", _near(Economy.rarity_share(0, 4), 0.5, 0.001))
-	_check("rarity_share(3, 4) около 3.2%", _near(Economy.rarity_share(3, 4), 3.2, 0.1))
-	var total: float = 0.0
-	for r in 5:
-		total += Economy.rarity_share(7, r)
-	_check("доли редкостей на тире 7 в сумме 100%", _near(total, 100.0, 0.001))
 
 
 func _test_roller() -> void:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 20261105
 	var n: int = 10000
-	var legendary: int = 0
-	var gold: int = 0
-	var diamond: int = 0
+	var cap_ok: bool = true
 	var zone_ok: bool = true
 	for i in n:
-		var res: Dictionary = SpawnRoller.roll(0, 0, rng)
-		var a: Dictionary = AnimalData.by_id(String(res["animal_id"]))
-		if a.is_empty() or int(a["zone"]) != 0:
+		var res: Dictionary = SpawnRoller.roll(20.0, 2, [], rng)
+		if int(res["zone"]) != 0:
 			zone_ok = false
-		elif int(a["rarity"]) == 4:
-			legendary += 1
-		var variant: int = int(res["variant"])
-		if variant == 1:
-			gold += 1
-		elif variant == 2:
-			diamond += 1
-	var leg_pct: float = float(legendary) / float(n) * 100.0
-	var gold_pct: float = float(gold) / float(n) * 100.0
-	var diamond_pct: float = float(diamond) / float(n) * 100.0
-	print("      легендарных %.2f%%, золотых %.2f%%, бриллиантовых %.2f%%" % [leg_pct, gold_pct, diamond_pct])
-	_check("зверь всегда из заданной зоны (зона 0, 10000 бросков)", zone_ok)
-	_check("легендарный 0.3-0.8%", leg_pct >= 0.3 and leg_pct <= 0.8)
-	_check("золотых 2-4%", gold_pct >= 2.0 and gold_pct <= 4.0)
-	_check("бриллиантовых 0.4-1.8%", diamond_pct >= 0.4 and diamond_pct <= 1.8)
-	var other_ok: bool = true
-	for i in 500:
-		var res2: Dictionary = SpawnRoller.roll(3, 9, rng)
-		var b: Dictionary = AnimalData.by_id(String(res2["animal_id"]))
-		if b.is_empty() or int(b["zone"]) != 3:
-			other_ok = false
-	_check("зверь всегда из заданной зоны (зона 3, тир 9)", other_ok)
+		if int(res["rank"]) > 4:
+			cap_ok = false
+	_check("передняя треть Леса: 10000 бросков, зверь всегда из зоны 0", zone_ok)
+	_check("передняя треть Леса: ранг никогда выше 4", cap_ok)
+
+	_check("вес последнего пойманного делится на 50", _near(SpawnRoller.anti_repeat_mult(0, 1, ["frog"]), 0.02))
+	_check("вес предпоследнего делится на 2.5", _near(SpawnRoller.anti_repeat_mult(0, 1, ["frog", "bear"]), 0.4))
+	_check("если оба совпали, вес делится на 125", _near(SpawnRoller.anti_repeat_mult(0, 1, ["frog", "frog"]), 0.008))
+	_check("цель еды: своя зона aim_rank, прошлая 1, будущая 8",
+		SpawnRoller.aim_rank(0, 1) == 5 and SpawnRoller.aim_rank(1, 0) == 1 and SpawnRoller.aim_rank(0, 3) == 8)
+
+	var big: int = 0
+	var mutated: int = 0
+	for i in n:
+		var res2: Dictionary = SpawnRoller.roll(70.0, 0, [], rng)
+		if int(res2["size"]) > 0:
+			big += 1
+		if int(res2["variant"]) != VariantData.NONE:
+			mutated += 1
+	var big_pct: float = float(big) / float(n) * 100.0
+	var mut_pct: float = float(mutated) / float(n) * 100.0
+	print("      хотя бы Крупный %.2f%%, мутации %.2f%%" % [big_pct, mut_pct])
+	_check("доля «хотя бы Крупный» 15-22%", big_pct >= 15.0 and big_pct <= 22.0)
+	_check("доля мутаций 14-17% (база 15%)", mut_pct >= 14.0 and mut_pct <= 17.0)
+	_check("сумма базовых шансов мутаций 15%", _near(VariantData.mutation_chance_sum(), 0.15))
+
+	var res3: Dictionary = SpawnRoller.roll(900.0, 10, [], rng)
+	_check("roll возвращает animal_id, variant, size, luck",
+		res3.has("animal_id") and res3.has("variant") and res3.has("size") and res3.has("luck")
+		and not String(res3["animal_id"]).is_empty())
+	var a3: Dictionary = AnimalData.by_id(String(res3["animal_id"]))
+	_check("зверь из зоны 3 (Джунгли)", int(a3.get("zone", -1)) == 3)
 
 
 # ---------- T10b ----------
 
 func _test_variants() -> void:
-	_check("3 варианта: обычный, золото, бриллиант", VariantData.count() == 3)
-	_check("множители 1, 2, 3",
-		_near(VariantData.mult(0), 1.0) and _near(VariantData.mult(1), 2.0) and _near(VariantData.mult(2), 3.0))
-	_check("шансы: золото 3%, бриллиант 1%, обычный 96%",
-		_near(VariantData.chance(1), 0.03) and _near(VariantData.chance(2), 0.01) and _near(VariantData.chance(0), 0.96))
-	_check("roll: 0.005 бриллиант, 0.02 золото, 0.5 обычный, 0.0399 золото, 0.04 обычный",
-		VariantData.roll(0.005) == 2 and VariantData.roll(0.02) == 1 and VariantData.roll(0.5) == 0
-		and VariantData.roll(0.0399) == 1 and VariantData.roll(0.04) == 0)
-	_check("clamp_variant: мусор приводится к 0-2",
-		VariantData.clamp_variant(-3) == 0 and VariantData.clamp_variant(9) == 2)
-	_check("у золота и бриллианта есть ключи названий",
-		VariantData.name_key(1) == "variant_gold" and VariantData.name_key(2) == "variant_diamond")
+	_check("6 вариантов: обычный и 5 мутаций", VariantData.count() == 6)
+	_check("множители 1, 1.5, 3, 5, 10, 20",
+		_near(VariantData.mult(0), 1.0) and _near(VariantData.mult(1), 1.5)
+		and _near(VariantData.mult(2), 3.0) and _near(VariantData.mult(3), 5.0)
+		and _near(VariantData.mult(4), 10.0) and _near(VariantData.mult(5), 20.0))
+	_check("шансы мутаций 9, 3.5, 1.5, 0.7, 0.3%, обычный 85%",
+		_near(VariantData.chance(1), 0.09) and _near(VariantData.chance(2), 0.035)
+		and _near(VariantData.chance(3), 0.015) and _near(VariantData.chance(4), 0.007)
+		and _near(VariantData.chance(5), 0.003) and _near(VariantData.chance(0), 0.85))
+	_check("roll: 0.005 золото, 0.1 бриллиант, 0.13 изумруд, 0.145 рубин, 0.148 радуга, 0.2 обычный",
+		VariantData.roll(0.005) == 1 and VariantData.roll(0.1) == 2
+		and VariantData.roll(0.13) == 3 and VariantData.roll(0.145) == 4
+		and VariantData.roll(0.148) == 5 and VariantData.roll(0.2) == 0)
+	_check("roll с удачей lm=2: сумма мутаций 30%, порог сдвигается",
+		_near(VariantData.chances_with_luck(2.0)[0], 0.70)
+		and VariantData.roll(0.295, 2.0) == 5 and VariantData.roll(0.31, 2.0) == 0)
+	_check("clamp_variant: мусор приводится к 0-5",
+		VariantData.clamp_variant(-3) == 0 and VariantData.clamp_variant(9) == 5)
+	_check("у всех мутаций есть ключи названий",
+		VariantData.name_key(1) == "variant_gold" and VariantData.name_key(2) == "variant_diamond"
+		and VariantData.name_key(3) == "variant_emerald" and VariantData.name_key(4) == "variant_ruby"
+		and VariantData.name_key(5) == "variant_rainbow")
 	_fresh()
 	var d: Dictionary = _game.add_animal("lion", 2)
 	_check("add_animal(lion, 2) хранит variant, поля gold нет", int(d["variant"]) == 2 and not d.has("gold"))
-	_check("доход размещённого бриллиантового льва = 8400", _near(_game.income_per_sec(), 8400.0))
+	_check("доход размещённого бриллиантового льва = 2050.3125", _near(_game.income_per_sec(), 2050.3125))
+	var big: Dictionary = _game.add_animal("bear", 0, 2)
+	_check("add_animal хранит ступень размера", int(big["size"]) == 2)
 	var weird: Dictionary = _game.add_animal("frog", 7)
-	_check("add_animal с мусорным вариантом приводит его к 2", int(weird["variant"]) == 2)
+	_check("add_animal с мусорным вариантом приводит его к 5", int(weird["variant"]) == 5)
+	var big_weird: Dictionary = _game.add_animal("frog", 0, 99)
+	_check("add_animal с мусорным размером приводит его к 10", int(big_weird["size"]) == GameConfig.SIZE_MAX)
 	# модели: каждый вызов даёт новую копию, прототип не ломается
 	var a1: Node3D = ModelLoader.get_animal("frog", 0)
 	var a2: Node3D = ModelLoader.get_animal("frog", 2)
@@ -296,17 +342,26 @@ func _test_variant_migration() -> void:
 		{"uid": 0, "animal_id": "lion", "gold": 1, "placed": 1},
 		{"uid": 1, "animal_id": "frog", "gold": 0, "placed": 0},
 		{"uid": 2, "animal_id": "bear", "placed": 0},
+		{"uid": 3, "animal_id": "dragon", "zone": 2, "rarity": 2, "placed": 0},
 	]
-	_save.data["next_uid"] = 3
+	_save.data["next_uid"] = 4
 	_game.start()
 	var list: Array = _save.data["animals"]
 	_check("миграция: gold 1 стал variant 1", int(list[0]["variant"]) == 1 and not list[0].has("gold"))
 	_check("миграция: gold 0 стал variant 0", int(list[1]["variant"]) == 0 and not list[1].has("gold"))
 	_check("миграция: запись без полей получила variant 0", int(list[2]["variant"]) == 0)
+	var sizes_ok: bool = true
+	for a in list:
+		if int(a.get("size", -1)) != 0:
+			sizes_ok = false
+	_check("миграция: у всех зверей появился size = 0", sizes_ok)
+	_check("миграция: неизвестный id заменён зверем той же зоны и ранга (Варан)",
+		String(list[3]["animal_id"]) == "monitor")
 	_game.start()
 	_check("миграция повторно ничего не меняет",
-		int(list[0]["variant"]) == 1 and int(list[1]["variant"]) == 0 and int(list[2]["variant"]) == 0 and list.size() == 3)
-	_check("доход после миграции: золотой лев 5600", _near(_game.income_per_sec(), 5600.0))
+		int(list[0]["variant"]) == 1 and int(list[1]["variant"]) == 0 and int(list[2]["variant"]) == 0
+		and String(list[3]["animal_id"]) == "monitor" and int(list[3]["size"]) == 0 and list.size() == 4)
+	_check("доход после миграции: золотой лев 1025.15625", _near(_game.income_per_sec(), 1025.15625))
 
 
 # ---------- T10d ----------
@@ -367,17 +422,17 @@ func _test_game_money() -> void:
 	_game.add_money(1000.0)
 	_check("buy_food(2) с нарушенным порядком: false, деньги целы",
 		not _game.buy_food(2) and _near(_game.money(), 1000.0) and int(_save.data["food_unlocked"]) == 0)
-	_check("buy_food(1) покупает яблоко за 40", _game.buy_food(1) and _near(_game.money(), 960.0)
+	_check("buy_food(1) покупает яблоко за 30", _game.buy_food(1) and _near(_game.money(), 970.0)
 		and int(_save.data["food_unlocked"]) == 1)
-	_check("повторная покупка той же еды: false", not _game.buy_food(1) and _near(_game.money(), 960.0))
+	_check("повторная покупка той же еды: false", not _game.buy_food(1) and _near(_game.money(), 970.0))
 	_game.select_food(2)
 	_check("select_food непокупленной еды игнорируется", int(_save.data["food_selected"]) == 0)
 	_game.select_food(1)
 	_check("select_food купленной еды работает", int(_save.data["food_selected"]) == 1)
-	_check("spend(60) списывает", _game.spend(60.0) and _near(_game.money(), 900.0))
-	_check("buy_slots за 600: слотов становится 6", _game.buy_slots() and _near(_game.money(), 300.0)
+	_check("spend(60) списывает", _game.spend(60.0) and _near(_game.money(), 910.0))
+	_check("buy_slots за 600: слотов становится 6", _game.buy_slots() and _near(_game.money(), 310.0)
 		and _game.total_slots() == 6)
-	_check("buy_bar за 300: турник стальной, деньги 0", _game.buy_bar() and _near(_game.money(), 0.0)
+	_check("buy_bar за 60: турник стальной, деньги 250", _game.buy_bar() and _near(_game.money(), 250.0)
 		and int(_save.data["bar_tier"]) == 1)
 
 
@@ -403,7 +458,7 @@ func _test_game_animals() -> void:
 	_game.equip_best()
 	_check("equip_best ставит льва вместо лягушки",
 		int(_find(int(lion["uid"]))["placed"]) == 1 and _game.placed_count() == 4)
-	_check("доход после equip_best = 2803", _near(_game.income_per_sec(), 2803.0))
+	_check("доход после equip_best = 686.4375", _near(_game.income_per_sec(), 686.4375))
 	_game.unplace(int(lion["uid"]))
 	_check("unplace снимает зверя", _game.placed_count() == 3 and _near(_game.income_per_sec(), 3.0))
 	_check("place возвращает зверя на участок", _game.place(int(lion["uid"])) and _game.placed_count() == 4)
@@ -422,13 +477,16 @@ func _test_game_animals() -> void:
 	_check("placed_animals: только размещённые, по uid", placed.size() == 4 and sorted_ok)
 	_check("найденные звери записаны в found",
 		(_save.data["found"] as Array).has("frog") and (_save.data["found"] as Array).has("lion"))
+	var history: Array = _save.data["catch_history"]
+	_check("catch_history хранит двух последних пойманных",
+		history.size() == 2 and String(history[0]) == "frog" and String(history[1]) == "frog")
 
 
 func _test_game_xp_and_zone() -> void:
 	_fresh()
-	_game.add_xp(15.0)
-	_check("add_xp(15): сила 2, остаток около 0.93",
-		int(_save.data["strength"]) == 2 and _near(float(_save.data["strength_xp"]), 15.0 - Economy.xp_needed(1), 0.001))
+	_game.add_xp(31.0)
+	_check("add_xp(31): сила 2, остаток 0.25",
+		int(_save.data["strength"]) == 2 and _near(float(_save.data["strength_xp"]), 0.25, 0.001))
 	_game.add_xp(0.0)
 	_check("add_xp(0) ничего не меняет", int(_save.data["strength"]) == 2)
 

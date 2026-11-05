@@ -16,6 +16,7 @@ const DEFAULTS := {
 	"slots_level": 0,
 	"animals": [],
 	"next_uid": 1,
+	"catch_history": [],
 	"found": [],
 	"claimed_zones": [],
 	"best_throw": 0,

@@ -1,8 +1,8 @@
 class_name NumFmt
 extends RefCounted
-## Форматирование больших чисел: 3 значащие цифры и суффиксы K M B T Qa Qi Sx.
+## Форматирование больших чисел: 3 значащие цифры и суффиксы K M B T Qa Qi Sx Sp Oc No Dc.
 
-const SUFFIXES: Array[String] = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx"]
+const SUFFIXES: Array[String] = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"]
 
 
 ## 2360 -> "2.36K", 999 -> "999", 1.2e6 -> "1.2M". Отрицательные и NaN дают "0".

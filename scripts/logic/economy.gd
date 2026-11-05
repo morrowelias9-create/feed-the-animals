@@ -1,27 +1,29 @@
 class_name Economy
 extends RefCounted
-## Чистая экономика (справочник R3). Без узлов и состояния.
+## Чистая экономика (справочник R3, редакция 3). Без узлов и состояния.
 
 
-## Доход в секунду: множитель зоны * доход редкости * множитель варианта (VariantData). Неизвестный зверь даёт 0.
-static func income(animal_id: String, variant: int) -> float:
+## Доход в секунду: база зоны * RANK_STEP^(ранг-1) * множитель мутации * множитель размера.
+## Неизвестный зверь даёт 0.
+static func income(animal_id: String, variant: int, size: int = 0) -> float:
 	var a: Dictionary = AnimalData.by_id(animal_id)
 	if a.is_empty():
 		return 0.0
-	var zone: Dictionary = ZoneData.ZONES[int(a["zone"])]
-	var value: float = float(zone["mult"]) * GameConfig.RARITY_INCOME[int(a["rarity"])]
-	return value * VariantData.mult(variant)
+	var rank: int = int(a["rank"])
+	var value: float = float(a["base_income"]) * pow(GameConfig.RANK_STEP, float(rank - 1))
+	return value * VariantData.mult(variant) * SizeData.income_mult(size)
 
 
 ## Цена продажи: доход * SELL_MULT.
-static func sell_price(animal_id: String, variant: int) -> float:
-	return income(animal_id, variant) * GameConfig.SELL_MULT
+static func sell_price(animal_id: String, variant: int, size: int = 0) -> float:
+	return income(animal_id, variant, size) * GameConfig.SELL_MULT
 
 
-## Опыта до следующего уровня силы: 10 + 4 * S * (1 + S / 60).
+## Опыта до следующего уровня силы: 30 * XP_ZONE_K^zone_of(4*S) * (1 + S / 40).
 static func xp_needed(strength: int) -> float:
 	var s: float = float(maxi(strength, 0))
-	return GameConfig.NEED_A + GameConfig.NEED_B * s * (1.0 + s / GameConfig.NEED_C)
+	var zone: int = ZoneData.zone_at(float(GameConfig.DIST_K) * s)
+	return 30.0 * pow(GameConfig.XP_ZONE_K, float(zone)) * (1.0 + s / 40.0)
 
 
 ## Оффлайн-доход: min(прошло, OFFLINE_CAP_S) * доход размещённых * OFFLINE_RATE.
@@ -36,14 +38,3 @@ static func offline_gain(away_s: float, placed_income: float) -> float:
 static func zone_reward(zone: int) -> float:
 	var z: int = clampi(zone, 0, ZoneData.count() - 1)
 	return GameConfig.INDEX_REWARD_BASE * float(ZoneData.ZONES[z]["mult"])
-
-
-## Доля редкости rarity (0-4) при еде тира tier, в процентах.
-static func rarity_share(tier: int, rarity: int) -> float:
-	var weights: Array[float] = SpawnRoller.rarity_weights(tier)
-	if rarity < 0 or rarity >= weights.size():
-		return 0.0
-	var total: float = 0.0
-	for w in weights:
-		total += w
-	return weights[rarity] / total * 100.0

@@ -1,19 +1,30 @@
 class_name VariantData
 extends RefCounted
-## Варианты зверей (справочник R4): 0 обычный, 1 золото, 2 бриллиант.
-## Шанс считается один раз на зверя одним броском rng.randf(): сначала бриллиант, потом золото.
+## Мутации зверей (справочник R4, редакция 3): 0 обычный и 5 мутаций.
+## Базовые шансы даны при множителе удачи lm = 1; в игре они умножаются на lm (потолок суммы 35%).
 
 const NONE: int = 0
 const GOLD: int = 1
 const DIAMOND: int = 2
+const EMERALD: int = 3
+const RUBY: int = 4
+const RAINBOW: int = 5
+
+const MAX_MUTATION_CHANCE_SUM: float = 0.35
 
 const VARIANTS: Array[Dictionary] = [
 	{"id": "none", "name_key": "", "chance": 0.0, "mult": 1.0,
 		"text": "#FFFFFF", "tint": "#FFFFFF", "glow": "#FFFFFF", "spark": "#FFFFFF"},
-	{"id": "gold", "name_key": "variant_gold", "chance": 0.03, "mult": 2.0,
+	{"id": "gold", "name_key": "variant_gold", "chance": 0.09, "mult": 1.5,
 		"text": "#FFC83D", "tint": "#FFC83D", "glow": "#FFB000", "spark": "#FFE066"},
-	{"id": "diamond", "name_key": "variant_diamond", "chance": 0.01, "mult": 3.0,
+	{"id": "diamond", "name_key": "variant_diamond", "chance": 0.035, "mult": 3.0,
 		"text": "#4DE0FF", "tint": "#5CC8FF", "glow": "#00D8FF", "spark": "#7FEFFF"},
+	{"id": "emerald", "name_key": "variant_emerald", "chance": 0.015, "mult": 5.0,
+		"text": "#3DFF9A", "tint": "#4DFF8A", "glow": "#00FF7A", "spark": "#9BFFC4"},
+	{"id": "ruby", "name_key": "variant_ruby", "chance": 0.007, "mult": 10.0,
+		"text": "#FF4D6D", "tint": "#FF5C7A", "glow": "#FF0040", "spark": "#FFA3B5"},
+	{"id": "rainbow", "name_key": "variant_rainbow", "chance": 0.003, "mult": 20.0,
+		"text": "#FF7AD9", "tint": "#FF7AD9", "glow": "#FF3DF2", "spark": "#FFFFFF"},
 ]
 
 
@@ -21,7 +32,7 @@ static func count() -> int:
 	return VARIANTS.size()
 
 
-## Приводит любое число к допустимому варианту 0-2.
+## Приводит любое число к допустимому варианту 0-5.
 static func clamp_variant(variant: int) -> int:
 	return clampi(variant, 0, VARIANTS.size() - 1)
 
@@ -30,7 +41,7 @@ static func mult(variant: int) -> float:
 	return float(VARIANTS[clamp_variant(variant)]["mult"])
 
 
-## Шанс варианта; у обычного это остаток от остальных.
+## Базовый шанс варианта; у обычного это остаток от остальных.
 static func chance(variant: int) -> float:
 	var v: int = clamp_variant(variant)
 	if v == NONE:
@@ -39,6 +50,31 @@ static func chance(variant: int) -> float:
 			rest -= float(VARIANTS[i]["chance"])
 		return rest
 	return float(VARIANTS[v]["chance"])
+
+
+## Сумма базовых шансов всех мутаций (15%).
+static func mutation_chance_sum() -> float:
+	var total: float = 0.0
+	for i in range(1, VARIANTS.size()):
+		total += float(VARIANTS[i]["chance"])
+	return total
+
+
+## Шансы мутаций с множителем удачи lm; если сумма выше 35%, все шансы ужимаются пропорционально.
+static func chances_with_luck(lm: float) -> Array[float]:
+	var result: Array[float] = [0.0]
+	var total: float = 0.0
+	for i in range(1, VARIANTS.size()):
+		var c: float = float(VARIANTS[i]["chance"]) * maxf(lm, 0.0)
+		result.append(c)
+		total += c
+	if total > MAX_MUTATION_CHANCE_SUM and total > 0.0:
+		var k: float = MAX_MUTATION_CHANCE_SUM / total
+		for i in range(1, result.size()):
+			result[i] *= k
+		total = MAX_MUTATION_CHANCE_SUM
+	result[NONE] = maxf(1.0 - total, 0.0)
+	return result
 
 
 ## Ключ названия в Loc (у обычного пустая строка).
@@ -62,11 +98,12 @@ static func spark_color(variant: int) -> Color:
 	return Color.html(String(VARIANTS[clamp_variant(variant)]["spark"]))
 
 
-## Вариант по одному числу r из [0, 1): r < 1% бриллиант, r < 4% золото, иначе обычный.
-static func roll(r: float) -> int:
-	var diamond: float = chance(DIAMOND)
-	if r < diamond:
-		return DIAMOND
-	if r < diamond + chance(GOLD):
-		return GOLD
+## Вариант по одному числу r из [0, 1) с множителем удачи lm из R3.
+static func roll(r: float, lm: float = 1.0) -> int:
+	var chances: Array[float] = chances_with_luck(lm)
+	var acc: float = 0.0
+	for i in range(1, chances.size()):
+		acc += chances[i]
+		if r < acc:
+			return i
 	return NONE
