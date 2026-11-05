@@ -12,7 +12,7 @@ static func rarity_weights(tier: int) -> Array[float]:
 	return result
 
 
-## Бросок кубика: {"animal_id": String, "gold": int (0/1)}.
+## Бросок кубика: {"animal_id": String, "variant": int (0 обычный, 1 золото, 2 бриллиант)}.
 ## Зверь всегда из зоны zone, внутри редкости выбирается равновероятно.
 static func roll(zone: int, tier: int, rng: RandomNumberGenerator) -> Dictionary:
 	var z: int = clampi(zone, 0, ZoneData.count() - 1)
@@ -30,7 +30,7 @@ static func roll(zone: int, tier: int, rng: RandomNumberGenerator) -> Dictionary
 			break
 	var candidates: Array = AnimalData.in_zone(z, rarity)
 	if candidates.is_empty():
-		return {"animal_id": "", "gold": 0}
+		return {"animal_id": "", "variant": 0}
 	var animal: Dictionary = candidates[rng.randi_range(0, candidates.size() - 1)]
-	var gold: int = 1 if rng.randf() < GameConfig.GOLD_CHANCE else 0
-	return {"animal_id": String(animal["id"]), "gold": gold}
+	var variant: int = VariantData.roll(rng.randf())
+	return {"animal_id": String(animal["id"]), "variant": variant}

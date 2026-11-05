@@ -5,8 +5,6 @@ extends RefCounted
 # Бросок
 const DIST_K: float = 4.0            # метров на единицу эффективной силы
 const BONUS_MAX: int = 20            # максимальный бонус от шкалы
-const GOLD_CHANCE: float = 0.03      # шанс золотого зверя
-const GOLD_MULT: int = 2             # множитель дохода золотого
 
 # Экономика и инвентарь
 const SELL_MULT: float = 30.0        # цена продажи = доход * SELL_MULT
@@ -36,6 +34,12 @@ const TIER_LUCK: float = 0.25        # вес редкости r умножае�
 const RARITY_INCOME: Array[float] = [1.0, 3.0, 10.0, 40.0, 200.0]
 const BASE_W: Array[float] = [70.0, 20.0, 7.0, 2.5, 0.5]
 const SIZE_BY_RARITY: Array[float] = [1.2, 2.2, 3.5, 5.0, 7.0]
+
+# Кинематика получения зверя (справочник R2, фазы A-C)
+const REVEAL_EYES_S: float = 1.6     # фаза A: камера из глаз зверя
+const REVEAL_SIDE_S: float = 1.2     # фаза B: вид сбоку, минимум до ожидания конца печати имени
+const REVEAL_LETTER_S: float = 0.12  # интервал между буквами имени
+const REVEAL_AUTO_S: float = 8.0     # фаза C сама закроется через столько секунд
 
 # Тренировка и эффекты
 const BAR_REP_INTERVAL: float = 0.25 # минимальный интервал между повторениями, секунд

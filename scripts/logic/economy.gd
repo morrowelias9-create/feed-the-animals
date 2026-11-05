@@ -3,21 +3,19 @@ extends RefCounted
 ## Чистая экономика (справочник R3). Без узлов и состояния.
 
 
-## Доход в секунду: множитель зоны * доход редкости * (2 для золотого). Неизвестный зверь даёт 0.
-static func income(animal_id: String, gold: int) -> float:
+## Доход в секунду: множитель зоны * доход редкости * множитель варианта (VariantData). Неизвестный зверь даёт 0.
+static func income(animal_id: String, variant: int) -> float:
 	var a: Dictionary = AnimalData.by_id(animal_id)
 	if a.is_empty():
 		return 0.0
 	var zone: Dictionary = ZoneData.ZONES[int(a["zone"])]
 	var value: float = float(zone["mult"]) * GameConfig.RARITY_INCOME[int(a["rarity"])]
-	if gold != 0:
-		value *= float(GameConfig.GOLD_MULT)
-	return value
+	return value * VariantData.mult(variant)
 
 
 ## Цена продажи: доход * SELL_MULT.
-static func sell_price(animal_id: String, gold: int) -> float:
-	return income(animal_id, gold) * GameConfig.SELL_MULT
+static func sell_price(animal_id: String, variant: int) -> float:
+	return income(animal_id, variant) * GameConfig.SELL_MULT
 
 
 ## Опыта до следующего уровня силы: 10 + 4 * S * (1 + S / 60).

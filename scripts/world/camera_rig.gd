@@ -35,6 +35,8 @@ var _return_left: float = 0.0
 var _return_total: float = 0.0
 var _return_from_pos: Vector3 = Vector3.ZERO
 var _return_from_focus: Vector3 = Vector3.ZERO
+var _return_from_fov: float = FOV
+var _scripted: bool = false
 
 
 func _ready() -> void:
@@ -48,7 +50,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if camera == null:
+	if camera == null or _scripted:
 		return
 
 	if _return_left > 0.0 and _target != null:
@@ -60,6 +62,7 @@ func _process(delta: float) -> void:
 		camera.global_position = _return_from_pos.lerp(target_pos, k)
 		_look_focus = _return_from_focus.lerp(target_focus, k)
 		camera.look_at(_look_focus, Vector3.UP)
+		camera.fov = lerpf(_return_from_fov, FOV, k)
 		return
 
 	if _food != null and is_instance_valid(_food):
@@ -81,14 +84,46 @@ func set_follow_target(target: Node3D) -> void:
 	_return_left = 0.0
 
 
+## Режим сценария: камерой управляет внешний код через set_pose (кинематика получения зверя).
+## При выключении поле зрения возвращается плавно вместе с return_to_player.
+func set_scripted(on: bool) -> void:
+	_scripted = on
+	if on:
+		_food = null
+		_return_left = 0.0
+	elif camera != null:
+		_return_from_fov = camera.fov
+
+
+## Ставит камеру в точку pos, смотрит на target; fov_deg это поле зрения, roll_deg это крен.
+func set_pose(pos: Vector3, target: Vector3, fov_deg: float = FOV, roll_deg: float = 0.0) -> void:
+	if camera == null:
+		return
+	camera.global_position = pos
+	if pos.distance_to(target) > 0.001:
+		camera.look_at(target, Vector3.UP)
+	if absf(roll_deg) > 0.001:
+		camera.rotate_object_local(Vector3(0.0, 0.0, 1.0), deg_to_rad(roll_deg))
+	camera.fov = fov_deg
+	_look_focus = target
+
+
+func is_scripted() -> bool:
+	return _scripted
+
+
 ## Поворот камеры в градусах: x это yaw, y это pitch.
 func rotate_by(delta_deg: Vector2) -> void:
+	if _scripted:
+		return
 	yaw_deg -= delta_deg.x * DRAG_SENS_DEG
 	pitch_deg = clampf(pitch_deg - delta_deg.y * DRAG_SENS_DEG, PITCH_MIN_DEG, PITCH_MAX_DEG)
 
 
 ## Шаги колеса мыши: положительное значение отдаляет камеру.
 func zoom(steps: float) -> void:
+	if _scripted:
+		return
 	distance = clampf(distance * pow(ZOOM_STEP, steps), DISTANCE_MIN, DISTANCE_MAX)
 
 
@@ -116,6 +151,7 @@ func return_to_player(duration: float = RETURN_DEFAULT) -> void:
 	_return_left = _return_total
 	_return_from_pos = camera.global_position
 	_return_from_focus = _look_focus
+	_return_from_fov = camera.fov
 
 
 func _orbit_position() -> Vector3:

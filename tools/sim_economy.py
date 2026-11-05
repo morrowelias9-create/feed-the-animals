@@ -20,7 +20,8 @@ ZONE_START = [0, 120, 320, 700, 1100]                  # метры
 ZONE_MULT = [1, 14, 200, 3000, 45000]
 RAR_INC = [1, 3, 10, 40, 200]
 BASE_W = [70, 20, 7, 2.5, 0.5]
-GOLD_CHANCE = 0.03
+DIAMOND_CHANCE = 0.01                                  # VariantData: бриллиант x3
+GOLD_CHANCE = 0.03                                     # VariantData: золото x2
 FOOD_PRICE = [0, 40, 300, 3000, 25000, 200000, 1.5e6, 12e6, 100e6, 800e6]
 BAR_PRICE = [0, 300, 5000, 60000, 800000]
 BAR_XP = [1, 2, 4, 8, 16]
@@ -45,8 +46,9 @@ def zone_of(dist: float) -> int:
 def roll_income(food: int, zone: int) -> float:
     weights = [BASE_W[r] * (1 + 0.25 * food) ** r for r in range(5)]
     r = random.choices(range(5), weights)[0]
-    gold = 2 if random.random() < GOLD_CHANCE else 1
-    return ZONE_MULT[zone] * RAR_INC[r] * gold
+    x = random.random()                                # один бросок на вариант, как SpawnRoller
+    variant = 3 if x < DIAMOND_CHANCE else (2 if x < DIAMOND_CHANCE + GOLD_CHANCE else 1)
+    return ZONE_MULT[zone] * RAR_INC[r] * variant
 
 
 t = 0.0

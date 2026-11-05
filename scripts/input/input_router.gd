@@ -3,7 +3,7 @@ extends Node
 ## Единая точка ввода игры (справочник R2).
 ## Мышь и клавиатура для компьютера, касания для телефона:
 ## левая половина экрана — плавающий джойстик (движение), правая — плавающий джойстик (поворот камеры),
-## короткое нажатие — действие, колесо мыши — дистанция камеры.
+## короткое нажатие в любой половине — действие, колесо мыши — дистанция камеры.
 ## Кнопки интерфейса поглощают касания сами, сюда они не доходят.
 
 signal action_pressed
@@ -124,9 +124,12 @@ func _end_touch(index: int, pos: Vector2) -> void:
 		if instant:
 			_emit_action()
 	elif index == _look_index:
+		var instant_look: bool = not _look_moved and _is_tap(_look_start_ms, _look_start_pos, pos)
 		_look_index = -1
 		if camera_joystick != null:
 			camera_joystick.hide_joystick()
+		if instant_look:
+			_emit_action()
 
 
 func _on_screen_drag(event: InputEventScreenDrag) -> void:
@@ -242,6 +245,8 @@ func _end_mouse_session(was_tap: bool) -> void:
 	elif was_look:
 		if camera_joystick != null:
 			camera_joystick.hide_joystick()
+		if was_tap:
+			_emit_action()
 
 
 func _release_all() -> void:

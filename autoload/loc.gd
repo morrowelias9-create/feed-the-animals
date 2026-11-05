@@ -24,6 +24,11 @@ const T := {
 	"score": {"ru": "Счёт", "en": "Score", "tr": "Skor"},
 	"sdk_ok": {"ru": "Яндекс SDK подключён", "en": "Yandex SDK connected", "tr": "Yandex SDK bağlı"},
 	"sdk_mock": {"ru": "Режим заглушки (SDK нет)", "en": "Mock mode (no SDK)", "tr": "Sahte mod (SDK yok)"},
+	"variant_gold": {"ru": "Золото", "en": "Gold"},
+	"variant_diamond": {"ru": "Бриллиант", "en": "Diamond"},
+	"reveal_luck": {"ru": "Удача!", "en": "Lucky!"},
+	"reveal_score": {"ru": "SCORE %d", "en": "SCORE %d"},
+	"reveal_tap": {"ru": "Нажмите, чтобы продолжить", "en": "Tap to continue"},
 
 	# Зоны
 	"zone_forest": {"ru": "Лес", "en": "Forest"},

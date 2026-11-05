@@ -1,8 +1,8 @@
 class_name ThrowController
 extends Node3D
-## Бросок: шкала, полёт, приземление (шаг T09, справочник R2/R3/R6).
-## Состояния: FREE -> AIMING -> THROWING -> FLIGHT -> LANDED -> ARRIVE -> CLAIM -> COOLDOWN -> (AIMING | FREE).
-## ARRIVE и CLAIM ведут ArrivalController (шаг T10).
+## Бросок: шкала, полёт, приземление, кинематика получения зверя (шаги T09/T10c, справочник R2/R3/R6).
+## Состояния: FREE -> AIMING -> THROWING -> FLIGHT -> LANDED -> REVEAL -> COOLDOWN -> (AIMING | FREE).
+## В REVEAL всё ведёт RevealController: камера, зверь, экран награды.
 
 signal landed(dist: float, zone: int, perfect: bool, position: Vector3)
 signal state_changed(state: String)
@@ -12,17 +12,17 @@ const STATE_AIMING: String = "AIMING"
 const STATE_THROWING: String = "THROWING"
 const STATE_FLIGHT: String = "FLIGHT"
 const STATE_LANDED: String = "LANDED"
+const STATE_REVEAL: String = "REVEAL"
 const STATE_COOLDOWN: String = "COOLDOWN"
-const STATE_ARRIVE: String = "ARRIVE"
-const STATE_CLAIM: String = "CLAIM"
 
 const COOLDOWN_S: float = 0.6
-const CLAIM_S: float = 1.5
-const LAND_T: float = 1.2
+const LANDED_S: float = 0.25          # пауза после приземления перед кинематикой
+const LAND_T: float = 1.2             # плашка с дальностью держится поверх начала REVEAL
 const THROW_ANIM_S: float = 0.55
-const GRAVITY: float = 9.8
 const MOVE_CANCEL_M: float = 0.05
 const TOAST_UP: float = 2.5
+const HAND_H: float = 1.3             # высота руки над землёй при броске
+const LAND_X_LIMIT: float = 15.0      # еда падает не дальше этого от оси коридора
 
 var state: String = STATE_FREE
 var player: Player
@@ -31,35 +31,42 @@ var hud: Hud
 
 var _meter: ThrowMeter
 var _food: FoodView
+var _reveal: RevealController
 var _toast: Label3D
 var _toast_t: float = 0.0
 var _throw_t: float = 0.0
+var _landed_t: float = 0.0
 var _cooldown_t: float = 0.0
 var _aim_enter: Vector3 = Vector3.ZERO
 var _land_pos: Vector3 = Vector3.ZERO
 var _dist: float = 0.0
 var _zone: int = 0
 var _perfect: bool = false
-var _arrival: ArrivalController
-var _claim_t: float = 0.0
 
 
 func _ready() -> void:
 	var toast := Label3D.new()
 	toast.name = "LandToast"
 	toast.visible = false
-	toast.font_size = 30.0
+	toast.font_size = 48
+	toast.pixel_size = 0.02
+	toast.outline_size = 12
+	toast.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	toast.no_depth_test = true
 	toast.modulate = Color.WHITE
 	add_child(toast)
 	_toast = toast
-	_arrival = ArrivalController.new()
-	_arrival.name = "ArrivalController"
-	add_child(_arrival)
-	_arrival.throw_controller = self
+	_reveal = RevealController.new()
+	_reveal.name = "RevealController"
+	add_child(_reveal)
+	_reveal.throw_controller = self
 
 
-## Событие короткого нажатия (действие) из InputRouter: в AIMING это бросок.
+## Событие короткого нажатия (действие) из InputRouter: в AIMING это бросок, в REVEAL пропуск или выход.
 func action_pressed() -> void:
+	if state == STATE_REVEAL:
+		_reveal.tap()
+		return
 	if state != STATE_AIMING or player == null or camera_rig == null:
 		return
 	var v: float = _meter.stop()
@@ -68,28 +75,33 @@ func action_pressed() -> void:
 	_perfect = ThrowCalc.is_perfect(ThrowCalc.bonus_of(v))
 	_zone = ZoneData.zone_at(dist)
 	_dist = dist
-	var from: Vector3 = player.position
-	var forward: Vector3 = Vector3(0.0, 0.0, -1.0).rotated(Vector3.UP, deg_to_rad(camera_rig.yaw_deg))
-	var flight: float = ThrowCalc.flight_time(dist)
+	# Бросок строго вперёд (-Z). Еда падает на землю в точке dist от линии: на краю земли или на пол коридора.
+	var from: Vector3 = player.position + Vector3(0.0, HAND_H, 0.0)
+	var land_z: float = -minf(dist, WorldLayout.CORRIDOR_LEN - 12.0)
+	var to: Vector3 = Vector3(clampf(player.position.x, -LAND_X_LIMIT, LAND_X_LIMIT), 0.0, land_z)
+	to.y = WorldLayout.ground_y(to.z)
 	var height: float = clampf(dist * 0.15, 3.0, 60.0)
-	var vel_y: float = (height + 0.5 * GRAVITY * flight * flight) / flight
-	var vel_z: float = dist / flight
-	var vel: Vector3 = Vector3(forward.x * vel_z, vel_y, forward.z * vel_z)
-	var land_t: float = 2.0 * vel_y / GRAVITY
 	if _food == null:
 		_food = FoodView.new()
 		_food.name = "Food"
 		add_child(_food)
-	_food.launch(from, vel, land_t)
+	_food.visible = true
+	_food.scale = Vector3.ONE
+	_food.rotation = Vector3.ZERO
+	_food.launch_arc(from, to, height, ThrowCalc.flight_time(dist))
 	_food.set_color(_food_color())
 	camera_rig.follow_food(_food)
 	player.avatar.play_throw()
 	state = STATE_THROWING
 	_throw_t = 0.0
-	_aim_enter = from
+	_aim_enter = player.position
 
 
 func _process(delta: float) -> void:
+	if _toast != null and _toast.visible:
+		_toast_t += delta
+		if _toast_t >= LAND_T:
+			_set_toast(false)
 	match state:
 		STATE_FREE:
 			if player != null and _in_throw_zone():
@@ -107,24 +119,17 @@ func _process(delta: float) -> void:
 			if _food != null and _food.is_landed():
 				_land()
 		STATE_LANDED:
-			_toast_t += delta
-			if _toast_t >= LAND_T:
-				_toast_t = 0.0
-				_set_toast(false)
-				_begin_arrive()
-		STATE_ARRIVE:
-			if _arrival.is_finished():
-				arrival_done()
-		STATE_CLAIM:
-			_claim_t += delta
-			if _claim_t >= CLAIM_S:
-				_claim_t = 0.0
-				_enter_cooldown()
+			_landed_t += delta
+			if _landed_t >= LANDED_S:
+				_begin_reveal()
+		STATE_REVEAL:
+			if _reveal.is_finished():
+				_end_reveal()
 		STATE_COOLDOWN:
 			_cooldown_t += delta
 			if _cooldown_t >= COOLDOWN_S:
 				_cooldown_t = 0.0
-				_enter_cooldown()
+				_finish_cooldown()
 
 
 func is_busy() -> bool:
@@ -160,18 +165,31 @@ func _return_to_free() -> void:
 	state_changed.emit(state)
 
 
-func _begin_arrive() -> void:
-	state = STATE_ARRIVE
+func _begin_reveal() -> void:
+	state = STATE_REVEAL
+	_landed_t = 0.0
+	hud.set_reveal(true)
+	if player != null:
+		player.enabled = false
+	camera_rig.set_scripted(true)
+	state_changed.emit(state)
+	_reveal.start(_zone, _dist, _land_pos, _food)
 
 
-func arrival_done() -> void:
-	state = STATE_CLAIM
-	_claim_t = 0.0
-
-
-func _enter_cooldown() -> void:
+func _end_reveal() -> void:
+	hud.set_reveal(false)
+	hud.set_mode(true)
+	if player != null:
+		player.enabled = true
+	if _food != null:
+		_food.visible = false
+	state = STATE_COOLDOWN
 	_cooldown_t = 0.0
-	camera_rig.return_to_player()
+	state_changed.emit(state)
+
+
+# Камеру к игроку вернула сама кинематика (return_to_player), здесь только выбираем следующее состояние.
+func _finish_cooldown() -> void:
 	if player != null and _in_throw_zone():
 		_enter_aiming()
 	else:
@@ -184,6 +202,7 @@ func _land() -> void:
 	var perfect: bool = _perfect
 	var position: Vector3 = _food.landing_position()
 	_land_pos = position
+	_landed_t = 0.0
 	# Счёт и рекорд броска (шаг T09, справочник R5).
 	Save.data["throws"] = int(Save.data.get("throws", 0)) + 1
 	Save.data["best_throw"] = maxi(int(Save.data.get("best_throw", 0)), int(dist))
@@ -198,25 +217,34 @@ func _set_toast(show: bool, dist: float = 0.0) -> void:
 	if _toast == null:
 		return
 	_toast.visible = show
+	_toast_t = 0.0
 	if show:
 		_toast.text = Loc.t("land_toast") % int(dist)
 		_toast.position = _land_pos + Vector3(0.0, TOAST_UP, 0.0)
-		_toast_t = 0.0
 
 
 func _spawn_land_fx(position: Vector3) -> void:
 	var particles := CPUParticles3D.new()
 	particles.name = "LandParticles"
 	particles.one_shot = true
-	particles.amount = 1 + int(randi() % 20)
+	particles.amount = 12
 	particles.lifetime = 0.5
+	particles.explosiveness = 1.0
 	particles.gravity = Vector3(0.0, -9.8, 0.0)
 	particles.direction = Vector3(0.0, 1.0, 0.0)
-	var param: int = CPUParticles3D.PARAM_INITIAL_LINEAR_VELOCITY
-	particles.set_param_min(param, 2.0)
-	particles.set_param_max(param, 2.0)
+	particles.initial_velocity_min = 2.0
+	particles.initial_velocity_max = 3.0
+	var chip := BoxMesh.new()
+	chip.size = Vector3(0.15, 0.15, 0.15)
+	var chip_mat := StandardMaterial3D.new()
+	chip_mat.albedo_color = _food_color()
+	chip.material = chip_mat
+	particles.mesh = chip
 	particles.position = position
 	add_child(particles)
+	particles.emitting = true
+	# Одноразовый эффект убирается сам, иначе узлов становится больше с каждым броском.
+	get_tree().create_timer(1.0).timeout.connect(particles.queue_free)
 
 
 func _food_color() -> Color:

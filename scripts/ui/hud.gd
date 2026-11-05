@@ -16,7 +16,6 @@ var _money: Label
 var _income: Label
 var _buttons: Dictionary = {}
 var throw_meter: ThrowMeter
-var rare_card: RareCard
 
 
 func _ready() -> void:
@@ -24,7 +23,6 @@ func _ready() -> void:
 	_build_stats()
 	_build_buttons()
 	_build_throw_meter()
-	_build_rare_card()
 	_refresh()
 	if not Game.money_changed.is_connected(_on_money_changed):
 		Game.money_changed.connect(_on_money_changed)
@@ -44,6 +42,11 @@ func set_hint(text: String) -> void:
 func set_mode(full: bool) -> void:
 	_full = full
 	_update_visibility()
+
+
+## Кинематика получения зверя: HUD скрыт целиком, кнопки недоступны (справочник R2, фаза REVEAL).
+func set_reveal(active: bool) -> void:
+	visible = not active
 
 
 ## В полёте шкала броска скрывается: приземление уже сделано, цель — полёт.
@@ -146,21 +149,6 @@ func _build_throw_meter() -> void:
 	throw_meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	throw_meter.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(throw_meter)
-
-
-func _build_rare_card() -> void:
-	rare_card = RareCard.new()
-	rare_card.name = "RareCard"
-	rare_card.visible = false
-	add_child(rare_card)
-
-
-func show_rare_card(animal_name: String, rarity: int, income: float) -> void:
-	rare_card.open(animal_name, rarity, income)
-
-
-func hide_rare_card() -> void:
-	rare_card.close()
 
 
 func _update_visibility() -> void:

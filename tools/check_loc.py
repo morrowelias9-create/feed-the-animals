@@ -50,7 +50,8 @@ animals = ("frog rabbit squirrel fox deer boar wolf bear hyena zebra antelope gi
 foods = "carrot apple banana toast orange cheese bread watermelon pizza cake".split()
 zones = "forest savanna desert jungle ocean".split()
 required = [f"animal_{a}" for a in animals] + [f"food_{f}" for f in foods] + [f"zone_{z}" for z in zones] \
-    + [f"rarity_{r}" for r in range(5)] + ["gold"]
+    + [f"rarity_{r}" for r in range(5)] \
+    + ["variant_gold", "variant_diamond", "reveal_luck", "reveal_score", "reveal_tap"]
 game_files_exist = (ROOT / "scripts" / "data" / "animal_data.gd").exists()
 if game_files_exist:
     for key in required:

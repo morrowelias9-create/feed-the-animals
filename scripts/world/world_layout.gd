@@ -1,81 +1,97 @@
 class_name WorldLayout
 extends RefCounted
 ## Единый источник позиций и размеров мира (справочник R1). Единица 1 м.
-## Начало координат в центре линии броска, вперёд и направление броска это -Z, Y вверх.
+## Начало координат в центре белой полосы броска на краю обрыва.
+## Вперёд и направление броска это -Z, Y вверх, пол двора на y = 0.
 ## В Rect2 поле x это мировой X, поле y это мировой Z.
+## Размеры оценены по скриншотам оригинала с опорой на рост аватара 1.8 м (точность примерно +-25%).
 
-# Участок и пол
-const PLOT_HALF_W: float = 28.0         # забор по x от -28 до 28
-const PLOT_DEPTH: float = 56.0          # участок по z от 0 до 56
-const FLOOR_DEPTH: float = 76.0         # пол с запасом позади участка (место для камеры)
-const SPAWN_Z: float = 52.0
+# Двор: общая площадка на 5 участков, стены с трёх сторон, спереди обрыв
+const YARD_HALF_W: float = 65.0          # внутренняя ширина двора 130 м
+const YARD_DEPTH: float = 56.0           # z от 0 до 56
+const YARD_WALL_T: float = 4.0
 
-# Коридор
-const CORRIDOR_HALF_W: float = 30.0
+# Край земли (оранжевая клетчатая площадка) и обрыв
+const LEDGE_D: float = 10.0              # глубина оранжевой площадки, z от 0 до -10
+const DROP_H: float = 8.0                # высота обрыва: пол коридора на y = -8
+const LINE_HALF_D: float = 1.0           # белая светящаяся полоса триггера: z от -1 до 1
+const THROW_ZONE_Z: float = 3.0          # зона начала прицеливания: z от -3 до 3
+
+# Коридор с биомами внизу
+const CORRIDOR_HALF_W: float = 18.0      # ширина 36 м, равна ширине края земли
 const CORRIDOR_LEN: float = 1400.0
+const CORRIDOR_WALL_T: float = 12.0
 
-# Забор и стены
-const FENCE_H: float = 1.5
-const FENCE_T: float = 0.4
-const WALL_H: float = 12.0
-const WALL_T: float = 2.0
+# Стены (общие высоты): от дна коридора до верха
+const WALL_BOTTOM_Y: float = -8.0
+const WALL_TOP_Y: float = 10.0
 
-# Линия броска (z от -1.5 до 0.5) и зона броска (z от -3 до 3)
-const LINE_Z_MIN: float = -1.5
-const LINE_Z_MAX: float = 0.5
-const THROW_ZONE_Z: float = 3.0
+# Участки игроков: 5 в ряд, свой по центру
+const PLOT_COUNT: int = 5
+const PLAYER_PLOT: int = 2
+const PLOT_W: float = 22.0
+const PLOT_GAP: float = 3.0
+const PLOT_Z_FRONT: float = 26.0         # передняя линия загона
+const PLOT_Z_BACK: float = 46.0          # задняя линия загона (глубина 20)
+const PEN_GATE_W: float = 6.0            # проём в передней ограде
 
-# Загоны: 4 в ряду, ряды по z, порядок заполнения по колонкам
+# Места зверей на своём участке: 4 колонки x 4 ряда, порядок заполнения по массивам
 const SLOT_COUNT: int = 16
-const SLOT_SIZE: float = 10.0
-const SLOT_ROW_Z: Array[float] = [46.0, 34.0, 22.0, 10.0]
-const SLOT_COL_X: Array[float] = [-12.0, 12.0, -22.0, 22.0]
+const SLOT_COL_X: Array[float] = [-2.75, 2.75, -8.25, 8.25]   # от центра участка
+const SLOT_ROW_Z: Array[float] = [28.5, 33.5, 38.5, 43.5]
 
-# Турник и табличка расширения
-const BAR_X: float = -4.0
-const BAR_Z: float = 8.0
-const SIGN_X: float = 4.0
-const SIGN_Z: float = 8.0
+# Турник и табличка расширения (перед загоном)
+const BAR_X: float = -7.0
+const BAR_Z: float = 18.0
+const SIGN_X: float = 7.0
+const SIGN_Z: float = 18.0
 
-# Арки с названиями зон (арка Леса стоит чуть за линией броска)
-const ARCH0_Z: float = -6.0
-const ARCH_BEAM_Y: float = 9.75
-const ARCH_LABEL_Y: float = 12.5
-const ARCH_BEAM_H: float = 1.5
+# Арки с названиями зон и их подписи
+const ARCH_BEAM_Y: float = 6.0
+const ARCH_BEAM_H: float = 5.0
 const ARCH_BEAM_T: float = 1.5
-const ARCH_PILLAR_W: float = 3.0
-const ARCH_LABEL_DZ: float = 0.9
 
-# Декор забора и стен
-const POST_STEP: float = 7.0
-const POST_SIZE: Vector3 = Vector3(0.7, 2.0, 0.7)
-const RIM_H: float = 0.6
-const RIM_OVER: float = 0.4
-
-# Границы игрока
-const PLAYER_X: float = 27.0
-const PLAYER_Z_MIN: float = -2.5
-const PLAYER_Z_MAX: float = 55.0
+# Спавн и границы игрока (ходит по двору перед загонами)
+const SPAWN_Z: float = 20.0
+const PLAYER_Z_MIN: float = 0.0
+const PLAYER_MARGIN: float = 2.0
 
 
 static func spawn_position() -> Vector3:
-	return Vector3(0.0, 0.0, SPAWN_Z)
+	return Vector3(plot_center_x(PLAYER_PLOT), 0.0, SPAWN_Z)
 
 
-## Зона броска: x от -28 до 28, z от -3 до 3.
+## Центр участка p (0-4) по X.
+static func plot_center_x(p: int) -> float:
+	var idx: int = clampi(p, 0, PLOT_COUNT - 1)
+	return (float(idx) - float(PLOT_COUNT - 1) / 2.0) * (PLOT_W + PLOT_GAP)
+
+
+## Загон участка p: x и z.
+static func plot_rect(p: int) -> Rect2:
+	var cx: float = plot_center_x(p)
+	return Rect2(Vector2(cx - PLOT_W / 2.0, PLOT_Z_FRONT), Vector2(PLOT_W, PLOT_Z_BACK - PLOT_Z_FRONT))
+
+
+## Зона начала прицеливания: ширина края земли, z от -3 до 3.
 static func throw_zone_rect() -> Rect2:
-	return Rect2(Vector2(-PLOT_HALF_W, -THROW_ZONE_Z), Vector2(2.0 * PLOT_HALF_W, 2.0 * THROW_ZONE_Z))
+	return Rect2(Vector2(-CORRIDOR_HALF_W, -THROW_ZONE_Z), Vector2(2.0 * CORRIDOR_HALF_W, 2.0 * THROW_ZONE_Z))
 
 
-## Светящаяся полоса линии броска.
+## Белая светящаяся полоса триггера на краю земли.
 static func throw_line_rect() -> Rect2:
-	return Rect2(Vector2(-PLOT_HALF_W, LINE_Z_MIN), Vector2(2.0 * PLOT_HALF_W, LINE_Z_MAX - LINE_Z_MIN))
+	return Rect2(Vector2(-CORRIDOR_HALF_W, -LINE_HALF_D), Vector2(2.0 * CORRIDOR_HALF_W, 2.0 * LINE_HALF_D))
 
 
-## Центр загона i (0-15): ряд i / 4, колонка i % 4.
+## Оранжевая клетчатая площадка за полосой, до обрыва.
+static func ledge_rect() -> Rect2:
+	return Rect2(Vector2(-CORRIDOR_HALF_W, -LEDGE_D), Vector2(2.0 * CORRIDOR_HALF_W, LEDGE_D))
+
+
+## Центр места i (0-15) на своём участке: ряд i / 4, колонка i % 4.
 static func slot_position(i: int) -> Vector3:
 	var idx: int = clampi(i, 0, SLOT_COUNT - 1)
-	return Vector3(SLOT_COL_X[idx % 4], 0.0, SLOT_ROW_Z[idx / 4])
+	return Vector3(plot_center_x(PLAYER_PLOT) + SLOT_COL_X[idx % 4], 0.0, SLOT_ROW_Z[floori(idx / 4.0)])
 
 
 static func bar_position() -> Vector3:
@@ -86,19 +102,37 @@ static func sign_position() -> Vector3:
 	return Vector3(SIGN_X, 0.0, SIGN_Z)
 
 
+## Высота пола коридора (обрыв вниз от пола двора).
+static func corridor_floor_y() -> float:
+	return -DROP_H
+
+
+## Высота земли в точке z: край земли и двор на 0, дальше за обрывом пол коридора.
+static func ground_y(z: float) -> float:
+	if z > -LEDGE_D:
+		return 0.0
+	return corridor_floor_y()
+
+
 ## z, где начинается зона (дальше от линии это меньше z).
 static func zone_start_z(zone: int) -> float:
 	var z: int = clampi(zone, 0, ZoneData.count() - 1)
 	return -float(ZoneData.ZONES[z]["start_m"])
 
 
-## z арки с названием зоны.
-static func arch_z(zone: int) -> float:
+## z начала видимого пола зоны в коридоре (Лес начинается за обрывом).
+static func floor_start_z(zone: int) -> float:
 	if zone <= 0:
-		return ARCH0_Z
+		return -LEDGE_D
 	return zone_start_z(zone)
 
 
-## Границы, в которых ходит игрок (x от -27 до 27, z от -2.5 до 55).
+## z арки с названием зоны (у зоны 0 арки нет, она начинается на краю земли).
+static func arch_z(zone: int) -> float:
+	return zone_start_z(zone)
+
+
+## Границы, в которых ходит игрок: весь двор перед загонами.
 static func player_bounds() -> Rect2:
-	return Rect2(Vector2(-PLAYER_X, PLAYER_Z_MIN), Vector2(2.0 * PLAYER_X, PLAYER_Z_MAX - PLAYER_Z_MIN))
+	var half: float = YARD_HALF_W - PLAYER_MARGIN
+	return Rect2(Vector2(-half, PLAYER_Z_MIN), Vector2(2.0 * half, PLOT_Z_FRONT - 1.0 - PLAYER_Z_MIN))

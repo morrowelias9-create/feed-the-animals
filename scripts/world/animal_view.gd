@@ -1,44 +1,70 @@
 class_name AnimalView
 extends Node3D
-## Модель зверя + подписи над головой (шаг T10, справочник R4/R6/R8).
+## Модель зверя + подпись из трёх строк над головой (шаги T10/T10b, справочник R4/R6/R8):
+## вариант (его цветом, мелко), название цветом редкости, доход зелёным.
 
-const GOLD_COLOR: Color = Color("#FFC83D")
+const SIGN_GAP: Array[float] = [1.0, 0.55, 0.12]   # высота строк над головой: вариант, имя, доход
 
-var _id: String = ""
+var animal_id: String = ""
+var variant: int = 0
+var rarity: int = 0
+var income: float = 0.0
+
 var _model: Node3D
-var _height: float = 0.0
-var _gold: bool = false
-var _rarity: int = 0
-var _income: float = 0.0
+var _fx: Node3D
+var _height: float = 1.0
+var _size_m: float = 1.2
+var _signs_visible: bool = true
 var _behavior: String = "idle"
 var _target: Vector3 = Vector3.ZERO
 var _run_t: float = 0.0
 var _run_dur: float = 0.0
 
-var _label_gold: Label3D
+var _label_variant: Label3D
 var _label_name: Label3D
 var _label_income: Label3D
 
 
 func _ready() -> void:
-	_label_gold = _make_label("SignGold", Loc.t("gold"), 12, GOLD_COLOR, _height + 1.0)
-	_label_name = _make_label("SignName", "", 14, AnimalData.rarity_color(0), _height + 0.55)
-	_label_income = _make_label("SignIncome", "", 12, Color("#55E05A"), _height + 0.12)
-
-
-## Модель + подписи: что зверь, золотой ли он, его редкость и доход.
-func set_creature(id: String, gold: bool, rarity: int, income: float) -> void:
-	_id = id
-	_gold = gold
-	_rarity = rarity
-	_income = income
-	_model = ModelLoader.get_animal(id)
-	_model.name = "Model"
-	if not is_ancestor_of(_model):
-		add_child(_model)
-	_height = _measure_height()
-	_apply_gold()
+	_ensure_labels()
 	_update_labels()
+
+
+## Модель, подписи и эффекты: что за зверь, какой вариант, редкость и доход.
+func set_creature(id: String, new_variant: int, new_rarity: int, new_income: float) -> void:
+	_ensure_labels()
+	animal_id = id
+	variant = VariantData.clamp_variant(new_variant)
+	rarity = new_rarity
+	income = new_income
+	_size_m = float(AnimalData.by_id(id).get("size_m", 1.2))
+	if _model != null and is_instance_valid(_model):
+		_model.queue_free()
+	_model = ModelLoader.get_animal(id, variant)
+	_model.name = "Model"
+	add_child(_model)
+	_height = ModelLoader.height_of(_model)
+	_rebuild_fx()
+	_update_labels()
+
+
+## Меняет вариант уже стоящего зверя (экран награды: «Удача!» вспыхивает позже появления).
+func set_variant(new_variant: int, new_income: float) -> void:
+	variant = VariantData.clamp_variant(new_variant)
+	income = new_income
+	if _model != null:
+		ModelLoader.apply_variant(_model, variant)
+	_rebuild_fx()
+	_update_labels()
+
+
+func set_signs_visible(on: bool) -> void:
+	_signs_visible = on
+	_update_labels()
+
+
+func model_height() -> float:
+	return _height
 
 
 func idle() -> void:
@@ -69,16 +95,29 @@ func _process(delta: float) -> void:
 			_behavior = "idle"
 
 
-func _make_label(node_name: String, text: String, font_size: int, color: Color, y: float) -> Label3D:
+func _rebuild_fx() -> void:
+	if _fx != null and is_instance_valid(_fx):
+		_fx.queue_free()
+	_fx = ModelLoader.make_variant_fx(variant, _size_m)
+	add_child(_fx)
+
+
+func _ensure_labels() -> void:
+	if _label_variant != null:
+		return
+	_label_variant = _make_label("SignVariant", 12, Color.WHITE)
+	_label_name = _make_label("SignName", 14, AnimalData.rarity_color(0))
+	_label_income = _make_label("SignIncome", 12, UiStyle.COLOR_MONEY)
+
+
+func _make_label(node_name: String, font_size: int, color: Color) -> Label3D:
 	var l := Label3D.new()
 	l.name = node_name
-	l.text = text
 	l.font_size = font_size
 	l.modulate = color
-	l.billboard = 1  # BillboardMode: Enabled (1) — надпись всегда повёрнута к камере
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED  # надпись всегда повёрнута к камере
 	l.fixed_size = true
 	l.no_depth_test = true
-	l.position = Vector3(0.0, y, 0.0)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.outline_size = 4
@@ -87,61 +126,20 @@ func _make_label(node_name: String, text: String, font_size: int, color: Color, 
 
 
 func _update_labels() -> void:
-	_label_gold.text = Loc.t("gold") if _gold else ""
-	_label_gold.visible = _gold
-	_label_name.text = Loc.t("animal_" + _id)
-	_label_name.modulate = AnimalData.rarity_color(_rarity)
-	_label_income.text = NumFmt.money(_income) + "/s"
-	_label_gold.position = Vector3(0.0, _height + 1.0, 0.0)
-	_label_name.position = Vector3(0.0, _height + 0.55, 0.0)
-	_label_income.position = Vector3(0.0, _height + 0.12, 0.0)
-
-
-func _measure_height() -> float:
-	var bounds: Array = []
-	_scan_bounds(_model, bounds)
-	if bounds.is_empty():
-		return 0.0
-	var lo: Vector3 = bounds[0]
-	var hi: Vector3 = bounds[0]
-	for v in bounds:
-		lo = lo.min(v)
-		hi = hi.max(v)
-	return hi.y - lo.y
-
-
-func _scan_bounds(node: Node3D, acc: Array) -> void:
-	for c in node.get_children():
-		if c is MeshInstance3D:
-			var mi: MeshInstance3D = c
-			var aabb: AABB = (mi.mesh as Mesh).get_aabb()
-			var g: Transform3D = mi.global_transform
-			acc.append(g * aabb.position)
-			acc.append(g * (aabb.position + aabb.size))
-		if c is Node3D:
-			_scan_bounds(c as Node3D, acc)
-
-
-func _apply_gold() -> void:
-	var mi: MeshInstance3D = _find_mesh(_model)
-	if mi == null:
+	if _label_variant == null:
 		return
-	var mat: Material = mi.material_override
-	var copy: Material = mat.duplicate() if mat != null else StandardMaterial3D.new()
-	var std: StandardMaterial3D = copy as StandardMaterial3D
-	std.albedo_color = GOLD_COLOR
-	std.emission_enabled = true
-	std.emission = GOLD_COLOR
-	std.emission_energy_multiplier = 1.5
-	mi.material_override = std
-
-
-func _find_mesh(node: Node) -> MeshInstance3D:
-	for c in node.get_children():
-		if c is MeshInstance3D:
-			return c as MeshInstance3D
-		if c is Node3D:
-			var found: MeshInstance3D = _find_mesh(c as Node3D)
-			if found != null:
-				return found
-	return null
+	var has_variant: bool = variant != VariantData.NONE
+	_label_variant.visible = _signs_visible and has_variant
+	_label_name.visible = _signs_visible
+	_label_income.visible = _signs_visible
+	if has_variant:
+		_label_variant.text = Loc.t(VariantData.name_key(variant))
+		_label_variant.modulate = VariantData.text_color(variant)
+	else:
+		_label_variant.text = ""
+	_label_name.text = Loc.t("animal_" + animal_id) if animal_id != "" else ""
+	_label_name.modulate = AnimalData.rarity_color(rarity)
+	_label_income.text = NumFmt.money(income) + "/s"
+	_label_variant.position = Vector3(0.0, _height + SIGN_GAP[0], 0.0)
+	_label_name.position = Vector3(0.0, _height + SIGN_GAP[1], 0.0)
+	_label_income.position = Vector3(0.0, _height + SIGN_GAP[2], 0.0)

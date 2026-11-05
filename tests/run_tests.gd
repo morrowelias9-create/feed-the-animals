@@ -44,6 +44,11 @@ func _run_all() -> void:
 	_test_economy()
 	print("== T02: выбор зверя (10000 бросков)")
 	_test_roller()
+	print("== T10b: варианты зверей")
+	_test_variants()
+	_test_variant_migration()
+	print("== T10d: декор биомов")
+	_test_scenery()
 	print("== T03: Game")
 	_test_game_money()
 	_test_game_animals()
@@ -177,6 +182,8 @@ func _test_economy() -> void:
 	_check("income(frog, 0) = 1.0", _near(Economy.income("frog", 0), 1.0))
 	_check("income(lion, 0) = 2800.0", _near(Economy.income("lion", 0), 2800.0))
 	_check("золотой даёт вдвое больше", _near(Economy.income("lion", 1), 5600.0))
+	_check("бриллиантовый даёт втрое больше", _near(Economy.income("lion", 2), 8400.0))
+	_check("sell_price(lion, 2) = 252000", _near(Economy.sell_price("lion", 2), 252000.0))
 	_check("income неизвестного зверя = 0", _near(Economy.income("нет_такого", 0), 0.0))
 	_check("sell_price(frog, 0) = 30.0", _near(Economy.sell_price("frog", 0), 30.0))
 	_check("xp_needed(1) примерно 14.07", _near(Economy.xp_needed(1), 14.07, 0.01))
@@ -205,6 +212,7 @@ func _test_roller() -> void:
 	var n: int = 10000
 	var legendary: int = 0
 	var gold: int = 0
+	var diamond: int = 0
 	var zone_ok: bool = true
 	for i in n:
 		var res: Dictionary = SpawnRoller.roll(0, 0, rng)
@@ -213,13 +221,19 @@ func _test_roller() -> void:
 			zone_ok = false
 		elif int(a["rarity"]) == 4:
 			legendary += 1
-		gold += int(res["gold"])
+		var variant: int = int(res["variant"])
+		if variant == 1:
+			gold += 1
+		elif variant == 2:
+			diamond += 1
 	var leg_pct: float = float(legendary) / float(n) * 100.0
 	var gold_pct: float = float(gold) / float(n) * 100.0
-	print("      легендарных %.2f%%, золотых %.2f%%" % [leg_pct, gold_pct])
+	var diamond_pct: float = float(diamond) / float(n) * 100.0
+	print("      легендарных %.2f%%, золотых %.2f%%, бриллиантовых %.2f%%" % [leg_pct, gold_pct, diamond_pct])
 	_check("зверь всегда из заданной зоны (зона 0, 10000 бросков)", zone_ok)
 	_check("легендарный 0.3-0.8%", leg_pct >= 0.3 and leg_pct <= 0.8)
 	_check("золотых 2-4%", gold_pct >= 2.0 and gold_pct <= 4.0)
+	_check("бриллиантовых 0.4-1.8%", diamond_pct >= 0.4 and diamond_pct <= 1.8)
 	var other_ok: bool = true
 	for i in 500:
 		var res2: Dictionary = SpawnRoller.roll(3, 9, rng)
@@ -227,6 +241,113 @@ func _test_roller() -> void:
 		if b.is_empty() or int(b["zone"]) != 3:
 			other_ok = false
 	_check("зверь всегда из заданной зоны (зона 3, тир 9)", other_ok)
+
+
+# ---------- T10b ----------
+
+func _test_variants() -> void:
+	_check("3 варианта: обычный, золото, бриллиант", VariantData.count() == 3)
+	_check("множители 1, 2, 3",
+		_near(VariantData.mult(0), 1.0) and _near(VariantData.mult(1), 2.0) and _near(VariantData.mult(2), 3.0))
+	_check("шансы: золото 3%, бриллиант 1%, обычный 96%",
+		_near(VariantData.chance(1), 0.03) and _near(VariantData.chance(2), 0.01) and _near(VariantData.chance(0), 0.96))
+	_check("roll: 0.005 бриллиант, 0.02 золото, 0.5 обычный, 0.0399 золото, 0.04 обычный",
+		VariantData.roll(0.005) == 2 and VariantData.roll(0.02) == 1 and VariantData.roll(0.5) == 0
+		and VariantData.roll(0.0399) == 1 and VariantData.roll(0.04) == 0)
+	_check("clamp_variant: мусор приводится к 0-2",
+		VariantData.clamp_variant(-3) == 0 and VariantData.clamp_variant(9) == 2)
+	_check("у золота и бриллианта есть ключи названий",
+		VariantData.name_key(1) == "variant_gold" and VariantData.name_key(2) == "variant_diamond")
+	_fresh()
+	var d: Dictionary = _game.add_animal("lion", 2)
+	_check("add_animal(lion, 2) хранит variant, поля gold нет", int(d["variant"]) == 2 and not d.has("gold"))
+	_check("доход размещённого бриллиантового льва = 8400", _near(_game.income_per_sec(), 8400.0))
+	var weird: Dictionary = _game.add_animal("frog", 7)
+	_check("add_animal с мусорным вариантом приводит его к 2", int(weird["variant"]) == 2)
+	# модели: каждый вызов даёт новую копию, прототип не ломается
+	var a1: Node3D = ModelLoader.get_animal("frog", 0)
+	var a2: Node3D = ModelLoader.get_animal("frog", 2)
+	_check("get_animal отдаёт разные копии", a1 != a2)
+	_check("высота модели больше нуля", ModelLoader.height_of(a1) > 0.0)
+	var m1: MeshInstance3D = a1.get_child(0) as MeshInstance3D
+	var m2: MeshInstance3D = a2.get_child(0) as MeshInstance3D
+	_check("у бриллиантовой копии свечение, у обычной нет",
+		(m2.material_override as StandardMaterial3D).emission_enabled
+		and not (m1.material_override as StandardMaterial3D).emission_enabled)
+	ModelLoader.apply_variant(a2, 0)
+	_check("apply_variant(0) возвращает обычный вид", not (m2.material_override as StandardMaterial3D).emission_enabled)
+	var fx: Node3D = ModelLoader.make_variant_fx(2, 1.0)
+	var sparks: CPUParticles3D = fx.get_node_or_null("Sparks") as CPUParticles3D
+	_check("искры бриллианта не больше 12 частиц, есть диск",
+		sparks != null and sparks.amount <= 12 and fx.get_node_or_null("GlowDisc") != null)
+	var fx0: Node3D = ModelLoader.make_variant_fx(0, 1.0)
+	_check("у обычного зверя эффектов нет", fx0.get_child_count() == 0)
+	a1.free()
+	a2.free()
+	fx.free()
+	fx0.free()
+
+
+func _test_variant_migration() -> void:
+	_fresh()
+	_save.data["animals"] = [
+		{"uid": 0, "animal_id": "lion", "gold": 1, "placed": 1},
+		{"uid": 1, "animal_id": "frog", "gold": 0, "placed": 0},
+		{"uid": 2, "animal_id": "bear", "placed": 0},
+	]
+	_save.data["next_uid"] = 3
+	_game.start()
+	var list: Array = _save.data["animals"]
+	_check("миграция: gold 1 стал variant 1", int(list[0]["variant"]) == 1 and not list[0].has("gold"))
+	_check("миграция: gold 0 стал variant 0", int(list[1]["variant"]) == 0 and not list[1].has("gold"))
+	_check("миграция: запись без полей получила variant 0", int(list[2]["variant"]) == 0)
+	_game.start()
+	_check("миграция повторно ничего не меняет",
+		int(list[0]["variant"]) == 1 and int(list[1]["variant"]) == 0 and int(list[2]["variant"]) == 0 and list.size() == 3)
+	_check("доход после миграции: золотой лев 5600", _near(_game.income_per_sec(), 5600.0))
+
+
+# ---------- T10d ----------
+
+func _count_nodes(node: Node, cls: String) -> int:
+	var n: int = 1 if node.get_class() == cls else 0
+	for c in node.get_children():
+		n += _count_nodes(c, cls)
+	return n
+
+
+func _instances(node: Node) -> int:
+	var n: int = 0
+	if node is MultiMeshInstance3D:
+		n += (node as MultiMeshInstance3D).multimesh.instance_count
+	for c in node.get_children():
+		n += _instances(c)
+	return n
+
+
+func _test_scenery() -> void:
+	var a: Node3D = Node3D.new()
+	var wb_a: WorldBuilder = WorldBuilder.new()
+	wb_a.build(a)
+	var b: Node3D = Node3D.new()
+	var wb_b: WorldBuilder = WorldBuilder.new()
+	wb_b.build(b)
+	var meshes: int = _count_nodes(a, "MeshInstance3D")
+	var multis: int = _count_nodes(a, "MultiMeshInstance3D")
+	var inst: int = _instances(a)
+	print("      MeshInstance3D %d, MultiMeshInstance3D %d, объектов декора %d" % [meshes, multis, inst])
+	_check("MeshInstance3D в мире не больше 100", meshes <= 100)
+	_check("декор есть и собран в MultiMesh (до 80 узлов)", inst > 100 and multis > 5 and multis <= 80)
+	_check("расстановка детерминирована (два построения дают одно и то же)", _instances(b) == inst)
+	# В headless MultiMesh.get_instance_transform() не читается (dummy renderer хранит нули),
+	# поэтому SceneryBuilder сам считает минимальный |x| точек экземпляров.
+	# Сдвиги частей деревьев (ветки, руки кактуса) не больше 2 м от точки в полосе.
+	_check("центр коридора свободен от декора", wb_a.scenery != null
+		and wb_a.scenery.min_abs_x >= SceneryBuilder.CENTER_CLEAR_M - 2.0)
+	_check("света ровно один (Sun)", _count_nodes(a, "DirectionalLight3D") == 1
+		and _count_nodes(a, "OmniLight3D") == 0 and _count_nodes(a, "SpotLight3D") == 0)
+	a.free()
+	b.free()
 
 
 # ---------- T03 ----------
@@ -261,13 +382,13 @@ func _test_game_money() -> void:
 func _test_game_animals() -> void:
 	_fresh()
 	for i in 4:
-		_game.add_animal("frog", false)
+		_game.add_animal("frog", 0)
 	_check("первые 4 зверя встают в слоты", _game.placed_count() == 4 and _animals().size() == 4)
 	_check("доход 4 лягушек = 4.0 в секунду", _near(_game.income_per_sec(), 4.0))
 	var m0: float = _game.money()
 	_game.tick(1.0)
 	_check("tick(1.0) добавляет доход", _near(_game.money(), m0 + 4.0))
-	var extra: Dictionary = _game.add_animal("frog", false)
+	var extra: Dictionary = _game.add_animal("frog", 0)
 	_check("пятый зверь не помещается в слот", int(extra["placed"]) == 0 and _animals().size() == 5)
 	_check("place при полных слотах: false", not _game.place(int(extra["uid"])))
 	var before: float = _game.money()
@@ -275,7 +396,7 @@ func _test_game_animals() -> void:
 	_check("sell возвращает 30 и деньги растут", _near(got, 30.0) and _near(_game.money(), before + 30.0)
 		and _animals().size() == 4)
 	_check("sell неизвестного uid даёт 0", _near(_game.sell(99999), 0.0))
-	var lion: Dictionary = _game.add_animal("lion", false)
+	var lion: Dictionary = _game.add_animal("lion", 0)
 	_check("лев при полных слотах не размещён", int(lion["placed"]) == 0)
 	_game.equip_best()
 	_check("equip_best ставит льва вместо лягушки",
@@ -284,9 +405,9 @@ func _test_game_animals() -> void:
 	_game.unplace(int(lion["uid"]))
 	_check("unplace снимает зверя", _game.placed_count() == 3 and _near(_game.income_per_sec(), 3.0))
 	_check("place возвращает зверя на участок", _game.place(int(lion["uid"])) and _game.placed_count() == 4)
-	_game.add_animal("elephant", false)
-	_game.add_animal("frog", false)
-	_game.add_animal("frog", false)
+	_game.add_animal("elephant", 0)
+	_game.add_animal("frog", 0)
+	_game.add_animal("frog", 0)
 	var unplaced_before: int = _unplaced_count()
 	var extras: float = _game.sell_extras()
 	_check("sell_extras продаёт неразмещённых обычных (3 лягушки = 90), слона оставляет",
@@ -312,7 +433,7 @@ func _test_game_xp_and_zone() -> void:
 	_fresh()
 	_check("награда за пустую зону: 0", _near(_game.claim_zone_reward(0), 0.0))
 	for a in AnimalData.zone_animals(0):
-		_game.add_animal(String(a["id"]), false)
+		_game.add_animal(String(a["id"]), 0)
 	var m: float = _game.money()
 	_check("награда за собранный Лес = 5000", _near(_game.claim_zone_reward(0), 5000.0)
 		and _near(_game.money(), m + 5000.0))
@@ -324,15 +445,15 @@ func _test_game_xp_and_zone() -> void:
 func _test_game_limit() -> void:
 	_fresh()
 	for i in 70:
-		_game.add_animal("frog", false)
+		_game.add_animal("frog", 0)
 	_check("лимит инвентаря: не больше 60 зверей", _animals().size() == GameConfig.INV_LIMIT)
 	_check("при переполнении приходит notice_inventory_full", _notices.has("notice_inventory_full"))
 	_check("проданные при переполнении лягушки принесли деньги (10 x 30)", _near(_game.money(), 300.0))
-	var lion: Dictionary = _game.add_animal("lion", false)
+	var lion: Dictionary = _game.add_animal("lion", 0)
 	var has_lion: bool = not _find(int(lion["uid"])).is_empty()
 	_check("дорогой зверь при полном инвентаре вытесняет самого дешёвого",
 		has_lion and _animals().size() == GameConfig.INV_LIMIT and not lion.has("sold"))
-	var cheap: Dictionary = _game.add_animal("frog", false)
+	var cheap: Dictionary = _game.add_animal("frog", 0)
 	_check("дешёвый новый зверь при полном инвентаре продаётся сам",
 		int(cheap.get("sold", 0)) == 1 and _animals().size() == GameConfig.INV_LIMIT
 		and _find(int(cheap["uid"])).is_empty())
