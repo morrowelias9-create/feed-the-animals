@@ -133,13 +133,23 @@ func _update_labels() -> void:
 	_label_name.visible = _signs_visible
 	_label_income.visible = _signs_visible
 	if has_variant:
-		_label_variant.text = Loc.t(VariantData.name_key(variant))
+		_label_variant.text = _t(VariantData.name_key(variant))
 		_label_variant.modulate = VariantData.text_color(variant)
 	else:
 		_label_variant.text = ""
-	_label_name.text = Loc.t("animal_" + animal_id) if animal_id != "" else ""
+	_label_name.text = _t("animal_" + animal_id) if animal_id != "" else ""
 	_label_name.modulate = AnimalData.rarity_color(rarity)
 	_label_income.text = NumFmt.money(income) + "/s"
 	_label_variant.position = Vector3(0.0, _height + SIGN_GAP[0], 0.0)
 	_label_name.position = Vector3(0.0, _height + SIGN_GAP[1], 0.0)
 	_label_income.position = Vector3(0.0, _height + SIGN_GAP[2], 0.0)
+
+
+## Перевод через автозагрузку Loc из дерева: в тестах с `-s` имя Loc как идентификатор недоступно.
+func _t(key: String) -> String:
+	var loop: MainLoop = Engine.get_main_loop()
+	if loop is SceneTree:
+		var loc: Node = (loop as SceneTree).root.get_node_or_null("Loc")
+		if loc != null:
+			return String(loc.call("t", key))
+	return key

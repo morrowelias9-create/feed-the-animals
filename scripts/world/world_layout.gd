@@ -12,7 +12,8 @@ const YARD_DEPTH: float = 56.0           # z от 0 до 56
 const YARD_WALL_T: float = 4.0
 
 # Край земли (оранжевая клетчатая площадка) и обрыв
-const LEDGE_D: float = 10.0              # глубина оранжевой площадки, z от 0 до -10
+const LEDGE_D: float = 3.0               # глубина оранжевой кромки, z от 0 до -3 (видимая часть шириной с белую полосу)
+const MIN_LAND_M: float = 6.0            # еда падает не ближе: даже самый слабый бросок попадает в начало Леса
 const DROP_H: float = 8.0                # высота обрыва: пол коридора на y = -8
 const LINE_HALF_D: float = 1.0           # белая светящаяся полоса триггера: z от -1 до 1
 const THROW_ZONE_Z: float = 3.0          # зона начала прицеливания: z от -3 до 3
@@ -105,6 +106,11 @@ static func sign_position() -> Vector3:
 ## Высота пола коридора (обрыв вниз от пола двора).
 static func corridor_floor_y() -> float:
 	return -DROP_H
+
+
+## Дальность, на которой еда реально падает: не меньше MIN_LAND_M, чтобы всегда внутри коридора.
+static func landing_dist(dist: float) -> float:
+	return maxf(dist, MIN_LAND_M)
 
 
 ## Высота земли в точке z: край земли и двор на 0, дальше за обрывом пол коридора.

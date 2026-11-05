@@ -19,7 +19,7 @@ const COOLDOWN_S: float = 0.6
 const LANDED_S: float = 0.25          # пауза после приземления перед кинематикой
 const LAND_T: float = 1.2             # плашка с дальностью держится поверх начала REVEAL
 const THROW_ANIM_S: float = 0.55
-const MOVE_CANCEL_M: float = 0.05
+const BACK_CANCEL: float = 0.3          # насколько назад надо потянуть, чтобы отменить прицеливание
 const TOAST_UP: float = 2.5
 const HAND_H: float = 1.3             # высота руки над землёй при броске
 const LAND_X_LIMIT: float = 15.0      # еда падает не дальше этого от оси коридора
@@ -37,7 +37,7 @@ var _toast_t: float = 0.0
 var _throw_t: float = 0.0
 var _landed_t: float = 0.0
 var _cooldown_t: float = 0.0
-var _aim_enter: Vector3 = Vector3.ZERO
+var _rearm_blocked: bool = false      # после отмены не прицеливаемся снова, пока игрок не выйдет из зоны
 var _land_pos: Vector3 = Vector3.ZERO
 var _dist: float = 0.0
 var _zone: int = 0
@@ -77,7 +77,7 @@ func action_pressed() -> void:
 	_dist = dist
 	# Бросок строго вперёд (-Z). Еда падает на землю в точке dist от линии: на краю земли или на пол коридора.
 	var from: Vector3 = player.position + Vector3(0.0, HAND_H, 0.0)
-	var land_z: float = -minf(dist, WorldLayout.CORRIDOR_LEN - 12.0)
+	var land_z: float = -minf(WorldLayout.landing_dist(dist), WorldLayout.CORRIDOR_LEN - 12.0)
 	var to: Vector3 = Vector3(clampf(player.position.x, -LAND_X_LIMIT, LAND_X_LIMIT), 0.0, land_z)
 	to.y = WorldLayout.ground_y(to.z)
 	var height: float = clampf(dist * 0.15, 3.0, 60.0)
@@ -94,7 +94,7 @@ func action_pressed() -> void:
 	player.avatar.play_throw()
 	state = STATE_THROWING
 	_throw_t = 0.0
-	_aim_enter = player.position
+	_lock_player()
 
 
 func _process(delta: float) -> void:
@@ -104,10 +104,15 @@ func _process(delta: float) -> void:
 			_set_toast(false)
 	match state:
 		STATE_FREE:
-			if player != null and _in_throw_zone():
-				_enter_aiming()
+			if player != null:
+				var in_zone: bool = _in_throw_zone()
+				if _rearm_blocked:
+					if not in_zone:
+						_rearm_blocked = false
+				elif in_zone:
+					_enter_aiming()
 		STATE_AIMING:
-			if player != null and player.position.distance_to(_aim_enter) > MOVE_CANCEL_M:
+			if _wants_back():
 				_cancel_aiming()
 		STATE_THROWING:
 			_throw_t += delta
@@ -143,9 +148,31 @@ func _in_throw_zone() -> bool:
 	return rect.has_point(Vector2(player.position.x, player.position.z))
 
 
+# Движение блокируется с входа в зону броска до отмены (шаг назад) или конца броска.
+func _lock_player() -> void:
+	if player != null:
+		player.enabled = false
+
+
+func _unlock_player() -> void:
+	if player != null:
+		player.enabled = true
+
+
+# Игрок тянет назад, от линии (+Z в мире с учётом поворота камеры): это отмена прицеливания.
+func _wants_back() -> bool:
+	if player == null or player.input_router == null:
+		return false
+	var move: Vector2 = player.input_router.get_move()
+	if move.length() < BACK_CANCEL:
+		return false
+	var world: Vector3 = Vector3(move.x, 0.0, move.y).rotated(Vector3.UP, deg_to_rad(camera_rig.yaw_deg))
+	return world.z > BACK_CANCEL
+
+
 func _enter_aiming() -> void:
 	state = STATE_AIMING
-	_aim_enter = player.position
+	_lock_player()
 	hud.set_mode(false)
 	_meter.start()
 	state_changed.emit(state)
@@ -153,6 +180,8 @@ func _enter_aiming() -> void:
 
 func _cancel_aiming() -> void:
 	state = STATE_FREE
+	_rearm_blocked = true
+	_unlock_player()
 	hud.set_mode(true)
 	_meter.stop()
 	state_changed.emit(state)
@@ -160,6 +189,7 @@ func _cancel_aiming() -> void:
 
 func _return_to_free() -> void:
 	state = STATE_FREE
+	_unlock_player()
 	hud.set_mode(true)
 	_meter.stop()
 	state_changed.emit(state)
@@ -169,8 +199,6 @@ func _begin_reveal() -> void:
 	state = STATE_REVEAL
 	_landed_t = 0.0
 	hud.set_reveal(true)
-	if player != null:
-		player.enabled = false
 	camera_rig.set_scripted(true)
 	state_changed.emit(state)
 	_reveal.start(_zone, _dist, _land_pos, _food)
@@ -179,8 +207,6 @@ func _begin_reveal() -> void:
 func _end_reveal() -> void:
 	hud.set_reveal(false)
 	hud.set_mode(true)
-	if player != null:
-		player.enabled = true
 	if _food != null:
 		_food.visible = false
 	state = STATE_COOLDOWN

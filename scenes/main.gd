@@ -12,6 +12,7 @@ var _camera_rig: CameraRig
 var _router: InputRouter
 var _hud: Hud
 var _throw_controller: ThrowController
+var _slot_manager: SlotManager
 
 
 func _ready() -> void:
@@ -84,6 +85,11 @@ func _setup_throw() -> void:
 	_throw_controller.hud = _hud
 	_throw_controller._meter = _hud.throw_meter
 	_router.action_pressed.connect(_throw_controller.action_pressed)
+	# Загон игрока (T11): звери в местах, замки на закрытых, «+$N» над зверями.
+	_slot_manager = SlotManager.new()
+	_slot_manager.name = "SlotManager"
+	_slot_manager.throw_controller = _throw_controller
+	_world.add_child(_slot_manager)
 
 
 func _build_ui() -> void:

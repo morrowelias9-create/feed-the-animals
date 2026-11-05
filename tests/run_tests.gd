@@ -54,6 +54,8 @@ func _run_all() -> void:
 	_test_game_animals()
 	_test_game_xp_and_zone()
 	_test_game_limit()
+	print("== T11: загон игрока")
+	_test_slot_manager()
 
 	_restore_save(backup)
 	print("")
@@ -457,3 +459,48 @@ func _test_game_limit() -> void:
 	_check("дешёвый новый зверь при полном инвентаре продаётся сам",
 		int(cheap.get("sold", 0)) == 1 and _animals().size() == GameConfig.INV_LIMIT
 		and _find(int(cheap["uid"])).is_empty())
+
+
+# ---------- T11 ----------
+
+func _test_slot_manager() -> void:
+	_fresh()
+	var mgr: SlotManager = SlotManager.new()
+	root.add_child(mgr)
+	_check("загон пуст: зверей 0, замков 12, «+$N» не показывается",
+		mgr.view_count() == 0 and mgr.locked_count() == 12 and not mgr.show_income_popup())
+	var uids: Array[int] = []
+	for i in 4:
+		uids.append(int(_game.add_animal("frog", 0)["uid"]))
+	_check("4 зверя встали в места 0-3 по порядку",
+		mgr.view_count() == 4 and mgr.slot_of(uids[0]) == 0 and mgr.slot_of(uids[3]) == 3)
+	var extra: Dictionary = _game.add_animal("frog", 0)
+	_check("неразмещённый зверь в загоне не показывается",
+		mgr.view_count() == 4 and mgr.slot_of(int(extra["uid"])) == -1)
+	var keep: AnimalView = mgr.view_of(uids[0])
+	_game.sell(uids[1])
+	_check("проданный ушёл, место 1 свободно, остальные не пересозданы",
+		mgr.view_count() == 3 and mgr.slot_of(uids[1]) == -1 and mgr.view_of(uids[0]) == keep)
+	_game.place(int(extra["uid"]))
+	_check("новый зверь занимает освободившееся место 1", mgr.slot_of(int(extra["uid"])) == 1)
+	_check("в загоне звери стоят в местах WorldLayout.slot_position",
+		mgr.view_of(uids[0]).position.is_equal_approx(WorldLayout.slot_position(0))
+		and mgr.view_of(int(extra["uid"])).position.is_equal_approx(WorldLayout.slot_position(1)))
+	_check("размер в загоне не больше 5 м: медведь 7 м ужимается, лягушка нет",
+		SlotManager.display_scale("bear") <= 5.0 / 7.0 + 0.0001 and _near(SlotManager.display_scale("frog"), 1.0))
+	_game.add_money(600.0)
+	_game.buy_slots()
+	_check("после расширения замков 10", mgr.locked_count() == 10)
+	_check("«+$N» появляется над зверем", mgr.show_income_popup() and mgr.active_popups() == 1)
+	for i in 20:
+		mgr.show_income_popup()
+	_check("пул «+$N» не больше 8", mgr.active_popups() <= SlotManager.POPUP_POOL)
+	var before: int = mgr.get_child_count()
+	for i in 20:
+		var cur: Array = _game.placed_animals()
+		_game.sell(int(cur[0]["uid"]))
+		_game.add_animal("rabbit", 0)
+	_check("20 продаж и покупок: число узлов не растёт, зверей столько же, сколько размещено",
+		mgr.get_child_count() == before and mgr.view_count() == int(_game.placed_count()))
+	root.remove_child(mgr)
+	mgr.free()
