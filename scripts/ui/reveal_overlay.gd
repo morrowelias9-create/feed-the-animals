@@ -22,10 +22,12 @@ var _ui: Control
 var _rays: RayBurst
 var _title: Label
 var _score: Label
+var _score_val: int = 0
 var _variant: Label
 var _name: Label
 var _rarity: Label
 var _income: Label
+var _size: Label
 var _prompt: Label
 var _slots_root: Control
 var _flash: ColorRect
@@ -69,6 +71,7 @@ func _ready() -> void:
 	_name = _row("Name", 50, 8, Color.WHITE, 605.0)
 	_rarity = _row("Rarity", 20, 5, Color.WHITE, 635.0)
 	_income = _row("Income", 33, 6, UiStyle.COLOR_MONEY, 665.0)
+	_size = _row("Size", 18, 4, Color.WHITE, 652.0)
 	_prompt = _row("Prompt", 20, 5, Color.WHITE, 703.0)
 	_slots_root = Control.new()
 	_slots_root.name = "NameSlots"
@@ -117,7 +120,7 @@ func reset() -> void:
 	_flash.color.a = 0.0
 	_ui.modulate.a = 1.0
 	_clear_slots()
-	for l in [_title, _score, _variant, _name, _rarity, _income, _prompt]:
+	for l in [_title, _score, _variant, _name, _rarity, _income, _size, _prompt]:
 		(l as Label).visible = false
 	_rays.visible = false
 
@@ -209,7 +212,8 @@ func hide_typing() -> void:
 
 # ---------- Итог (фаза C) ----------
 
-## info: score (дальность), variant, name, rarity, income, lucky (показывать ли «Удача!» с лучами).
+## info: score (дальность), variant, name, rarity, income, lucky (показывать ли «Удача!» с лучами),
+## size_step (ступень цепочки роста размера: мелкая строка «Размер: ...»).
 func show_result(info: Dictionary) -> void:
 	var variant: int = int(info.get("variant", 0))
 	var rarity: int = int(info.get("rarity", 0))
@@ -220,7 +224,8 @@ func show_result(info: Dictionary) -> void:
 	_rays.visible = _title.visible
 	_rays.color = RAY_COLOR if variant != VariantData.NONE else rarity_color
 	_rays.queue_redraw()
-	_score.text = Loc.t("reveal_score") % int(info.get("score", 0))
+	_score_val = int(info.get("score", 0))
+	_score.text = Loc.t("reveal_score") % _score_val
 	_score.visible = true
 	_variant.visible = variant != VariantData.NONE
 	if _variant.visible:
@@ -234,8 +239,40 @@ func show_result(info: Dictionary) -> void:
 	_rarity.visible = true
 	_income.text = NumFmt.money(float(info.get("income", 0.0))) + "/s"
 	_income.visible = true
+	var size_step: int = int(info.get("size_step", 0))
+	_size.visible = size_step > 0
+	_size.text = _size_text(size_step)
 	_prompt.text = Loc.t("reveal_tap")
 	_prompt.visible = true
+
+
+## Цель накрутки SCORE (финиш): текст экрана обновляется до этого значения.
+func set_score(final: int) -> void:
+	_score_val = int(final)
+	_score.text = Loc.t("reveal_score") % _score_val
+
+
+## Текущий SCORE с накруткой: t секунд с начала фазы C, ease_out от 0 до _score_val.
+## Обновляет текст и возвращает текущее значение: накрутка сама идёт от 0 до итогового.
+func score_at(t: float) -> int:
+	var u: float = clampf(t / GameConfig.REVEAL_SCORE_S, 0.0, 1.0)
+	var k: float = 1.0 - pow(1.0 - u, 2.0)
+	var value: int = int(roundf(lerpf(0.0, float(_score_val), k)))
+	_score.text = Loc.t("reveal_score") % value
+	return value
+
+
+## Ступень цепочки роста размера: мелкая строка под названием зверя.
+func set_size_step(size_step: int) -> void:
+	_size.visible = size_step > 0
+	_size.text = _size_text(size_step)
+
+
+func _size_text(size_step: int) -> String:
+	if size_step <= 0:
+		return ""
+	var mult: float = SizeData.income_mult(size_step)
+	return Loc.t("reveal_size") % [SizeData.name(size_step), str(roundf(mult * 10.0) / 10.0)]
 
 
 # ---------- Внутреннее ----------

@@ -4,6 +4,7 @@ extends Node3D
 ## вариант (его цветом, мелко), название цветом редкости, доход зелёным.
 
 const SIGN_GAP: Array[float] = [1.0, 0.55, 0.12]   # высота строк над головой: вариант, имя, доход
+const FLOAT_SIZE_S: float = 0.8           # длительность всплытия названия размера
 
 var animal_id: String = ""
 var variant: int = 0
@@ -23,6 +24,9 @@ var _run_dur: float = 0.0
 var _label_variant: Label3D
 var _label_name: Label3D
 var _label_income: Label3D
+var _label_size: Label3D
+var _float_t: float = -1.0          # секунд с начала всплытия, -1 если не показываем
+var _float_step: int = 0
 
 
 func _ready() -> void:
@@ -93,6 +97,8 @@ func _process(delta: float) -> void:
 			rotation.y = atan2(-d.x, -d.z)
 		if _run_t >= _run_dur:
 			_behavior = "idle"
+	if _float_t >= 0.0:
+		_update_float(delta)
 
 
 func _rebuild_fx() -> void:
@@ -143,6 +149,41 @@ func _update_labels() -> void:
 	_label_variant.position = Vector3(0.0, _height + SIGN_GAP[0], 0.0)
 	_label_name.position = Vector3(0.0, _height + SIGN_GAP[1], 0.0)
 	_label_income.position = Vector3(0.0, _height + SIGN_GAP[2], 0.0)
+
+
+## Название ступени размера всплывает над головой («Крупный!»): шаг 0 скрывает.
+func float_size(step: int) -> void:
+	_float_step = step
+	_float_t = 0.0
+	_ensure_float_label()
+
+
+func _ensure_float_label() -> void:
+	if _label_size == null:
+		_label_size = Label3D.new()
+		_label_size.name = "SignSizeFloat"
+		_label_size.font_size = 40
+		_label_size.outline_size = 6
+		_label_size.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_label_size.no_depth_test = true
+		_label_size.fixed_size = true
+		_label_size.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_label_size.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		add_child(_label_size)
+	_label_size.visible = _float_step > 0
+
+
+func _update_float(delta: float) -> void:
+	if _float_t < 0.0:
+		return
+	_float_t += delta
+	var life: float = clampf(_float_t / FLOAT_SIZE_S, 0.0, 1.0)
+	if _float_step > 0:
+		_label_size.text = _t("size_" + str(_float_step)) + "!"
+		_label_size.position = Vector3(0.0, _height + SIGN_GAP[1] + 0.9, 0.0) + Vector3.UP * (1.5 * smoothstep(0.0, 1.0, life))
+		_label_size.modulate.a = 1.0 - life
+	if life >= 1.0:
+		_float_t = -1.0
 
 
 ## Перевод через автозагрузку Loc из дерева: в тестах с `-s` имя Loc как идентификатор недоступно.

@@ -201,7 +201,7 @@ func _begin_reveal() -> void:
 	hud.set_reveal(true)
 	camera_rig.set_scripted(true)
 	state_changed.emit(state)
-	_reveal.start(_zone, _dist, _land_pos, _food)
+	_reveal.start(_zone, _dist, _land_pos, _food, _perfect)
 
 
 func _end_reveal() -> void:

@@ -142,3 +142,8 @@ static func arch_z(zone: int) -> float:
 static func player_bounds() -> Rect2:
 	var half: float = YARD_HALF_W - PLAYER_MARGIN
 	return Rect2(Vector2(-half, PLAYER_Z_MIN), Vector2(2.0 * half, PLOT_Z_FRONT - 1.0 - PLAYER_Z_MIN))
+
+
+## Точка проёма своего загона: сюда телепортируется игрок после получения зверя (T11b, R2).
+static func pen_gate_position() -> Vector3:
+	return Vector3(plot_center_x(PLAYER_PLOT), 0.0, PLOT_Z_FRONT - 1.0)

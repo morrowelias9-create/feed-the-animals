@@ -32,6 +32,7 @@ const T := {
 	"reveal_luck": {"ru": "Удача!", "en": "Lucky!"},
 	"reveal_score": {"ru": "SCORE %d", "en": "SCORE %d"},
 	"reveal_tap": {"ru": "Нажмите, чтобы продолжить", "en": "Tap to continue"},
+	"reveal_size": {"ru": "Размер: %s x%s", "en": "Size: %s x%s", "tr": "Boyut: %s x%s"},
 
 	# Зоны
 	"zone_forest": {"ru": "Лес", "en": "Forest"},

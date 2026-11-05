@@ -65,6 +65,18 @@ var _c_to_target: Vector3 = Vector3.ZERO
 var _face_from: float = 0.0
 var _face_to: float = 0.0
 
+var _luck: int = 0                # SCORE фазы C: очки удачи, дальность * luck еды
+var _final_luck: int = 0          # финальное значение SCORE, до которого накручивается
+var _final_size: int = 0          # финальная ступень цепочки роста размера (мутация)
+var _size_k: int = 0               # текущая ступень в цепочке роста (0 — без мутации)
+var _ramp_done: bool = false      # накрутка SCORE закончилась (или показана итог сразу)
+var _skip_final: bool = false     # тап во время накрутки: сразу показываем итог
+var _next_step_t: float = 0.0     # время следующего шага цепочки роста
+var _pop_t: float = -1.0          # поп-эффект вспухания: -1 — тика нет, иначе секунда с начала
+var _score_shown: int = 0         # SCORE, который сейчас показывает экран (накрутка от 0)
+var _score_ticked: int = 0        # последний SCORE, на который уже был тик звука
+var _sound_t: float = 0.0         # накопленная длительность до следующего тика звука
+
 
 func _ready() -> void:
 	_overlay = RevealOverlay.new()
@@ -73,7 +85,8 @@ func _ready() -> void:
 
 
 ## Запуск после приземления: land_pos это точка земли под едой, food это узел еды (лежит и вращается).
-func start(zone: int, dist: float, land_pos: Vector3, food: Node3D) -> void:
+## perfect — «Идеально!»: множитель удачи SCORE (1.25), тот же учитывает мутацию размера.
+func start(zone: int, dist: float, land_pos: Vector3, food: Node3D, perfect: bool = false) -> void:
 	_cleanup()
 	_camera_rig = throw_controller.camera_rig if throw_controller != null else null
 	var rng := RandomNumberGenerator.new()
@@ -81,7 +94,7 @@ func start(zone: int, dist: float, land_pos: Vector3, food: Node3D) -> void:
 	var history: Array = []
 	if Save.data.get("catch_history", []) is Array:
 		history = Save.data["catch_history"]
-	var roll: Dictionary = SpawnRoller.roll(dist, int(Save.data.get("food_selected", 0)), history, rng, 1.0)
+	var roll: Dictionary = SpawnRoller.roll(dist, int(Save.data.get("food_selected", 0)), history, rng, _luck_mult(perfect))
 	_animal_id = String(roll["animal_id"])
 	if _animal_id.is_empty():
 		_animal_id = "frog"
@@ -91,6 +104,9 @@ func start(zone: int, dist: float, land_pos: Vector3, food: Node3D) -> void:
 	_rarity = AnimalData.rank_to_rarity(int(data.get("rank", 1)))
 	_size = float(data.get("size_m", 1.2))
 	_income = Economy.income(_animal_id, _variant, _size_step)
+	_luck = int(roll.get("luck", 0))
+	_final_luck = _luck
+	_final_size = SizeData.clamp_size(_size_step)
 	_dist = dist
 	_land = land_pos
 	_floor_y = land_pos.y
@@ -111,6 +127,7 @@ func is_finished() -> bool:
 
 
 ## Тап игрока: из A или B сразу к итогу, из итога к выходу. Тапы сразу после перехода игнорируются.
+## Во время накрутки SCORE (фаза C) тап сразу показывает итог: финализация без накрутки.
 func tap() -> void:
 	if _finished or _lock_t > 0.0:
 		return
@@ -118,7 +135,35 @@ func tap() -> void:
 		Phase.EYES, Phase.SIDE:
 			_enter_result()
 		Phase.RESULT:
+			if not _ramp_done and not _skip_final:
+				_skip_to_final()
 			_enter_exit()
+
+
+## Тап во время накрутки: показываем итог сразу — без накрутки и без роста размера.
+func _skip_to_final() -> void:
+	_skip_final = true
+	_t = TO_RESULT_S
+	_ramp_done = true
+	_size_k = _final_size
+	_pop_t = -1.0
+	_overlay.set_score(int(_final_luck))
+	if _view != null:
+		if _final_size > 0:
+			_view.float_size(_final_size)
+		_view.scale = Vector3.ONE * _final_view_scale()
+
+
+## Масштаб зверя на финальную ступень цепочки роста: мутация > 0 — визуальный масштаб, иначе 1.0.
+func _final_view_scale() -> float:
+	if _final_size <= 0:
+		return 1.0
+	return SizeData.visual_scale(_final_size)
+
+
+## Множитель удачи SCORE: «Идеально!» даёт 1.25, обычный бросок — 1.0.
+static func _luck_mult(perfect: bool) -> float:
+	return 1.25 if perfect else 1.0
 
 
 func _process(delta: float) -> void:
@@ -134,7 +179,7 @@ func _process(delta: float) -> void:
 		Phase.SIDE:
 			_update_side(delta)
 		Phase.RESULT:
-			_update_result()
+			_update_result(delta)
 		Phase.EXIT:
 			_update_exit()
 
@@ -220,6 +265,10 @@ func _enter_result() -> void:
 	_phase = Phase.RESULT
 	_t = 0.0
 	_lock_t = TAP_LOCK_S
+	_score_shown = 0
+	_score_ticked = 0
+	_sound_t = 0.0
+	_next_step_t = 0.0
 	if _view == null:
 		_spawn_view(_stop)
 	_view.position = _stop
@@ -227,15 +276,17 @@ func _enter_result() -> void:
 	_overlay.hide_typing()
 	Game.add_animal(_animal_id, _variant, _size_step)
 	_view.set_variant(_variant, _income)
+	var lucky: bool = _final_size > 0 or _variant != VariantData.NONE or _rarity >= 3
 	if _variant != VariantData.NONE:
 		_overlay.flash(0.6)
 	_overlay.show_result({
-		"score": int(_dist),
+		"score": int(_final_luck),
 		"variant": _variant,
 		"name": Loc.t("animal_" + _animal_id),
 		"rarity": _rarity,
 		"income": _income,
-		"lucky": _variant != VariantData.NONE or _rarity >= 3,
+		"lucky": lucky,
+		"size_step": _final_size,
 	})
 	# Вид 3/4 спереди: камера впереди зверя и сбоку, зверь поворачивается к ней.
 	var az: float = deg_to_rad(RESULT_AZIMUTH_DEG)
@@ -255,12 +306,47 @@ func _enter_result() -> void:
 	_face_to = _yaw_of(cdir)
 
 
-func _update_result() -> void:
+func _update_result(delta: float) -> void:
 	var k: float = smoothstep(0.0, 1.0, clampf(_t / TO_RESULT_S, 0.0, 1.0))
 	_set_pose(_c_from_pos.lerp(_c_to_pos, k), _c_from_target.lerp(_c_to_target, k), SIDE_FOV, 0.0)
 	_view.rotation.y = lerp_angle(_face_from, _face_to, k)
+	_update_score(delta)
+	_update_size(delta)
 	if _t >= GameConfig.REVEAL_AUTO_S:
 		_enter_exit()
+
+
+## Накрутка SCORE: от 0 до _final_luck за REVEAL_SCORE_S с ease_out, тик звука type ≤ 15/с.
+func _update_score(delta: float) -> void:
+	var score_now: int = int(_final_luck) if _skip_final else _overlay.score_at(_t)
+	_sound_t += delta
+	if score_now > _score_ticked and _sound_t >= GameConfig.REVEAL_SCORE_TICK_S:
+		_sound_t = 0.0
+		_score_ticked = score_now
+		# SoundBank.play("type") — тик нарастания SCORE (R2, T11b; проигрывание — T26).
+	if score_now != _score_shown:
+		_score_shown = score_now
+	if not _skip_final and _t >= GameConfig.REVEAL_SCORE_S:
+		_ramp_done = true
+
+
+## Рост цепочки размера: шаг каждые REVEAL_SIZE_EVERY_S, «вспухание» и всплытие названия.
+func _update_size(delta: float) -> void:
+	if _final_size > 0 and not _skip_final and _size_k < _final_size and _t >= _next_step_t:
+		_size_k += 1
+		_next_step_t = _t + GameConfig.REVEAL_SIZE_EVERY_S
+		_pop_t = 0.0
+		if _view != null:
+			_view.float_size(_size_k)
+		_overlay.flash(0.6)
+	_pop_t = maxf(_pop_t - delta, -1.0)
+	if _final_size > 0 and _view != null:
+		var pop_env: float = 0.0
+		if _pop_t >= 0.0:
+			pop_env = 1.0 - smoothstep(0.0, GameConfig.REVEAL_SIZE_POP_S, _pop_t)
+		_view.scale = Vector3.ONE * SizeData.visual_scale(_size_k) * (1.0 + GameConfig.SIZE_GROWTH * pop_env)
+	else:
+		_view.scale = Vector3.ONE
 
 
 # ---------- Фаза D: выход ----------
@@ -269,6 +355,9 @@ func _enter_exit() -> void:
 	_phase = Phase.EXIT
 	_t = 0.0
 	_flashed = false
+	# T11b: игрок к проёму своего загона, камера возвращается к нему.
+	if throw_controller != null and throw_controller.player != null:
+		throw_controller.player.position = WorldLayout.pen_gate_position()
 	_camera_rig.set_scripted(false)
 	_camera_rig.return_to_player(EXIT_S)
 

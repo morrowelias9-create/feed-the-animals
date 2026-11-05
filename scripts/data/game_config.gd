@@ -39,6 +39,11 @@ const REVEAL_EYES_S: float = 1.6     # фаза A: камера из глаз з
 const REVEAL_SIDE_S: float = 1.2     # фаза B: вид сбоку, минимум до ожидания конца печати имени
 const REVEAL_LETTER_S: float = 0.12  # интервал между буквами имени
 const REVEAL_AUTO_S: float = 8.0     # фаза C сама закроется через столько секунд
+const REVEAL_SCORE_S: float = 1.2    # фаза C: накрутка SCORE от 0 до luck (R2, T11b)
+const REVEAL_SCORE_TICK_S: float = 1.0 / 15.0  # тик звука нарастания SCORE не чаще 15 раз в секунду (R2, T11b)
+const REVEAL_SIZE_EVERY_S: float = 0.35  # шаг цепочки роста размера в фазе C (R2, T11b)
+const REVEAL_SIZE_POP_S: float = 0.25   # «вспухает» (масштаб x1.15 и обратно) за шаг роста (R2, T11b)
+const SIZE_GROWTH: float = 0.15         # амплитуда вспухания: масштаб x(1 + SIZE_GROWTH) и обратно
 
 # Тренировка и эффекты
 const BAR_REP_INTERVAL: float = 0.25 # минимальный интервал между повторениями, секунд
