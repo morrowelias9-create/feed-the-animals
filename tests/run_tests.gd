@@ -56,6 +56,8 @@ func _run_all() -> void:
 	_test_game_limit()
 	print("== T11: загон игрока")
 	_test_slot_manager()
+	print("== T12: окно «Животные» и лавка (логика Game)")
+	_test_sell_logic()
 
 	_restore_save(backup)
 	print("")
@@ -566,3 +568,68 @@ func _test_slot_manager() -> void:
 		mgr.get_child_count() <= before + 1 and mgr.view_count() == int(_game.placed_count()))
 	root.remove_child(mgr)
 	mgr.free()
+
+
+# ---------- T12 / T12a ----------
+
+func _test_sell_logic() -> void:
+	_fresh()
+	for i in 4:
+		_game.add_animal("frog", 0)
+	var fox: Dictionary = _game.add_animal("fox", 0)            # ранг 4, в рюкзаке
+	var deer: Dictionary = _game.add_animal("deer", 0)          # ранг 5, в рюкзаке
+	var gold_frog: Dictionary = _game.add_animal("frog", 1)     # мутация
+	var big_frog: Dictionary = _game.add_animal("frog", 0, 1)   # размер 1
+	var huge_frog: Dictionary = _game.add_animal("frog", 0, 2)  # размер 2
+	var wolf: Dictionary = _game.add_animal("wolf", 0)          # ранг 7
+	_check("в загоне 4, остальные 6 в рюкзаке", _game.placed_count() == 4 and _unplaced_count() == 6)
+
+	_check("all_animals возвращает копии всех зверей", _game.all_animals().size() == 10)
+	var copy: Array = _game.all_animals()
+	(copy[0] as Dictionary)["placed"] = 5
+	_check("правка копии не меняет сохранение", int(_animals()[0]["placed"]) == 1)
+
+	_check("редкие: ранг 7, мутация, размер 2 и выше",
+		_game.is_rare_animal(_find(int(wolf["uid"]))) and _game.is_rare_animal(_find(int(gold_frog["uid"])))
+		and _game.is_rare_animal(_find(int(huge_frog["uid"]))))
+	_check("не редкие: ранг 4-5 и размер 1",
+		not _game.is_rare_animal(_find(int(fox["uid"]))) and not _game.is_rare_animal(_find(int(deer["uid"])))
+		and not _game.is_rare_animal(_find(int(big_frog["uid"]))))
+	_check("в рюкзаке есть редкие", _game.backpack_has_rare())
+
+	var fox_price: float = Economy.sell_price("fox", 0, 0)
+	_check("extras_value считает только лису (ранг 5, мутации и размеры не лишние)",
+		_near(_game.extras_value(), fox_price))
+	var money_before: float = _game.money()
+	var extras: float = _game.sell_extras()
+	_check("sell_extras продаёт ранг 1-4 без мутации и размера, оленя (ранг 5) оставляет",
+		_near(extras, fox_price) and _find(int(fox["uid"])).is_empty() and not _find(int(deer["uid"])).is_empty()
+		and _near(_game.money(), money_before + fox_price))
+	_check("после sell_extras лишних нет", _near(_game.extras_value(), 0.0) and _near(_game.sell_extras(), 0.0))
+
+	var expected: float = 0.0
+	for a in _animals():
+		if int(a["placed"]) == 0:
+			expected += Economy.sell_price(String(a["animal_id"]), int(a["variant"]), int(a["size"]))
+	_check("backpack_value равна сумме цен рюкзака", _near(_game.backpack_value(), expected) and expected > 0.0)
+	var income_before: float = _game.income_per_sec()
+	money_before = _game.money()
+	var sold: float = _game.sell_backpack()
+	_check("sell_backpack продаёт весь рюкзак и платит сумму",
+		_near(sold, expected) and _unplaced_count() == 0 and _near(_game.money(), money_before + expected))
+	_check("sell_backpack не трогает загон и доход",
+		_game.placed_count() == 4 and _animals().size() == 4 and _near(_game.income_per_sec(), income_before))
+	_check("пустой рюкзак: нет редких, сумма 0, продажа ничего не даёт",
+		not _game.backpack_has_rare() and _near(_game.backpack_value(), 0.0) and _near(_game.sell_backpack(), 0.0))
+
+	# equip_best даёт новым размещённым зверям точку в загоне
+	_fresh()
+	for i in 4:
+		_game.add_animal("frog", 0)
+	var lion: Dictionary = _game.add_animal("lion", 0)
+	_check("лев сначала в рюкзаке без точки", int(_find(int(lion["uid"]))["placed"]) == 0
+		and (_find(int(lion["uid"]))["pos"] as Array).is_empty())
+	_game.equip_best()
+	var placed_lion: Dictionary = _find(int(lion["uid"]))
+	_check("equip_best ставит льва и даёт ему точку в загоне",
+		int(placed_lion["placed"]) == 1 and (placed_lion["pos"] as Array).size() == 2)

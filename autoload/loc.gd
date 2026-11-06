@@ -37,6 +37,26 @@ const T := {
 	"carry_place": {"ru": "Поставить", "en": "Place"},
 	"carry_back": {"ru": "В рюкзак", "en": "Backpack"},
 
+	# Окно «Животные» (T12) и лавка (T12a)
+	"animals_title": {"ru": "Животные", "en": "Animals"},
+	"animals_on_plot": {"ru": "На участке %d/%d", "en": "On plot %d/%d"},
+	"animals_empty": {"ru": "Пока нет животных", "en": "No animals yet"},
+	"animals_equip_best": {"ru": "Разместить лучших", "en": "Place the best"},
+	"animals_sell_extras": {"ru": "Продать лишних", "en": "Sell extras"},
+	"animals_no_extras": {"ru": "Лишних нет", "en": "No extras"},
+	"animals_equipped": {"ru": "Лучшие размещены", "en": "Best animals placed"},
+	"animal_take": {"ru": "Взять", "en": "Take"},
+	"animal_sell": {"ru": "Продать", "en": "Sell"},
+	"animal_placed": {"ru": "В загоне", "en": "In pen"},
+	"sold_toast": {"ru": "Продано: +%s", "en": "Sold: +%s"},
+	"sell_title": {"ru": "Лавка", "en": "Shop stall"},
+	"sell_stand_label": {"ru": "Продать", "en": "Sell"},
+	"sell_empty": {"ru": "В рюкзаке пусто", "en": "Backpack is empty"},
+	"sell_all": {"ru": "Продать всё (%s)", "en": "Sell all (%s)"},
+	"sell_confirm_text": {"ru": "В рюкзаке есть редкие звери. Продать всё за %s?", "en": "There are rare animals in your backpack. Sell everything for %s?"},
+	"sell_confirm_yes": {"ru": "Продать", "en": "Sell"},
+	"sell_confirm_no": {"ru": "Отмена", "en": "Cancel"},
+
 
 	# Зоны
 	"zone_forest": {"ru": "Лес", "en": "Forest"},

@@ -273,6 +273,14 @@ func animal_by_uid(uid: int) -> Dictionary:
 	return {} if i == -1 else (_animals()[i] as Dictionary).duplicate(true)
 
 
+## Копии всех зверей (размещённых и в рюкзаке) в порядке получения.
+func all_animals() -> Array:
+	var result: Array = []
+	for a in _animals():
+		result.append((a as Dictionary).duplicate(true))
+	return result
+
+
 func backpack_animals() -> Array:
 	var result: Array = []
 	for a in _animals():
@@ -330,6 +338,7 @@ func sell(uid: int) -> float:
 
 
 ## Ставит в слоты лучших по доходу, остальных снимает.
+## Новому размещённому зверю даёт точку в загоне (иначе у него не было бы сохранённых координат).
 func equip_best() -> void:
 	var list: Array = _animals().duplicate()   # копия массива, словари те же
 	list.sort_custom(func(x: Dictionary, y: Dictionary) -> bool:
@@ -346,27 +355,80 @@ func equip_best() -> void:
 		if int(a["placed"]) != want:
 			a["placed"] = want
 			changed = true
+		if want == 1 and not _valid_saved_pos(a.get("pos", [])):
+			a["pos"] = _next_free_position()
+			changed = true
 	if changed:
 		_income_dirty = true
 		inventory_changed.emit()
 		Save.save_data()
 
 
-## Продаёт всех неразмещённых ранга 1-5 без мутаций и размера, возвращает сумму.
+## Продаёт всех неразмещённых ранга 1-4 без мутаций и размера, возвращает сумму.
 func sell_extras() -> float:
 	var animals: Array = _animals()
 	var total: float = 0.0
 	var i: int = animals.size() - 1
 	while i >= 0:
 		var a: Dictionary = animals[i]
-		if int(a["placed"]) == 0 and AnimalData.rank_of(String(a["animal_id"])) <= 5 \
-				and _variant_of(a) == VariantData.NONE and _size_of(a) == 0:
+		if _is_extra(a):
 			total += _price_of(a)
 			animals.remove_at(i)
 		i -= 1
 	if total > 0.0:
 		Save.data["money"] = _f("money") + total
 		_income_dirty = true
+		money_changed.emit(_f("money"))
+		inventory_changed.emit()
+		Save.save_data()
+	return total
+
+
+## Сколько принесёт sell_extras (без продажи), для подписи кнопки.
+func extras_value() -> float:
+	var total: float = 0.0
+	for a in _animals():
+		if _is_extra(a):
+			total += _price_of(a)
+	return total
+
+
+## Редкий зверь: ранг 7-8, любая мутация или размер 2 и выше. Для подтверждения массовой продажи.
+func is_rare_animal(a: Dictionary) -> bool:
+	return AnimalData.rank_of(String(a.get("animal_id", ""))) >= GameConfig.RARE_RANK_MIN \
+			or _variant_of(a) != VariantData.NONE or _size_of(a) >= GameConfig.RARE_SIZE_MIN
+
+
+## Есть ли среди неразмещённых редкие.
+func backpack_has_rare() -> bool:
+	for a in _animals():
+		if int(a.get("placed", 0)) == 0 and is_rare_animal(a):
+			return true
+	return false
+
+
+## Сколько принесёт продажа всего рюкзака (неразмещённых), без продажи.
+func backpack_value() -> float:
+	var total: float = 0.0
+	for a in _animals():
+		if int(a.get("placed", 0)) == 0:
+			total += _price_of(a)
+	return total
+
+
+## Продаёт всех неразмещённых зверей (загон не трогает), возвращает сумму.
+func sell_backpack() -> float:
+	var animals: Array = _animals()
+	var total: float = 0.0
+	var i: int = animals.size() - 1
+	while i >= 0:
+		var a: Dictionary = animals[i]
+		if int(a.get("placed", 0)) == 0:
+			total += _price_of(a)
+			animals.remove_at(i)
+		i -= 1
+	if total > 0.0:
+		Save.data["money"] = _f("money") + total
 		money_changed.emit(_f("money"))
 		inventory_changed.emit()
 		Save.save_data()
@@ -561,6 +623,13 @@ func _index_of(uid: int) -> int:
 
 func _price_of(a: Dictionary) -> float:
 	return Economy.sell_price(String(a["animal_id"]), _variant_of(a), _size_of(a))
+
+
+# «Лишний»: не размещён, ранг не выше SELL_EXTRAS_MAX_RANK, без мутации и без размера.
+func _is_extra(a: Dictionary) -> bool:
+	return int(a.get("placed", 0)) == 0 \
+			and AnimalData.rank_of(String(a["animal_id"])) <= GameConfig.SELL_EXTRAS_MAX_RANK \
+			and _variant_of(a) == VariantData.NONE and _size_of(a) == 0
 
 
 # Индекс самого дешёвого неразмещённого зверя или -1.

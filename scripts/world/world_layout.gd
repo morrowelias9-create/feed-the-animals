@@ -47,6 +47,11 @@ const BAR_Z: float = 18.0
 const SIGN_X: float = 7.0
 const SIGN_Z: float = 18.0
 
+# Лавка продажи (T12a): слева от загона игрока, на дворе перед участком. Зона входа 3x3 м вокруг точки.
+const SELL_STAND_X: float = -17.0
+const SELL_STAND_Z: float = 18.0
+const SELL_ZONE_SIZE: float = 3.0
+
 # Арки с названиями зон и их подписи
 const ARCH_BEAM_Y: float = 6.0
 const ARCH_BEAM_H: float = 5.0
@@ -116,6 +121,17 @@ static func bar_position() -> Vector3:
 
 static func sign_position() -> Vector3:
 	return Vector3(SIGN_X, 0.0, SIGN_Z)
+
+
+## Центр лавки продажи (T12a).
+static func sell_stand_position() -> Vector3:
+	return Vector3(SELL_STAND_X, 0.0, SELL_STAND_Z)
+
+
+## Зона входа лавки 3x3 м: x и z мира.
+static func sell_zone_rect() -> Rect2:
+	var half: float = SELL_ZONE_SIZE / 2.0
+	return Rect2(Vector2(SELL_STAND_X - half, SELL_STAND_Z - half), Vector2(SELL_ZONE_SIZE, SELL_ZONE_SIZE))
 
 
 ## Высота пола коридора (обрыв вниз от пола двора).

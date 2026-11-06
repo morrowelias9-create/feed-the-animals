@@ -11,6 +11,9 @@ const SELL_MULT: float = 30.0        # цена продажи = доход * SE
 const INV_LIMIT: int = 60            # лимит зверей (стоящих и нет)
 const INDEX_REWARD_BASE: float = 5000.0   # награда за полную зону = база * множитель зоны
 const RANK_STEP: float = 1.5         # доход ранга r = база зоны * RANK_STEP^(r-1)
+const SELL_EXTRAS_MAX_RANK: int = 4  # «Продать лишних» берёт неразмещённых ранга 1-4 без мутации и размера (T12)
+const RARE_RANK_MIN: int = 7         # редкий зверь для подтверждения продажи: ранг 7-8 (T12a)
+const RARE_SIZE_MIN: int = 2         # или размер 2 и выше (T12a); любая мутация тоже делает зверя редким
 
 # Мутация размера
 const SIZE_STEP: float = 1.5         # SIZE_STEP^(SIZE_POW * k)

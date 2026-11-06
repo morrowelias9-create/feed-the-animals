@@ -15,6 +15,10 @@ var _throw_controller: ThrowController
 var _slot_manager: SlotManager
 var _carry_controller: CarryController
 var _hotbar: Hotbar
+var _window_layer: CanvasLayer
+var _animals_window: AnimalsWindow
+var _sell_window: SellWindow
+var _sell_stand: SellStand
 
 
 func _ready() -> void:
@@ -115,6 +119,55 @@ func _setup_throw() -> void:
 	_hotbar.mouse_filter = Control.MOUSE_FILTER_PASS
 	_hud.add_child(_hotbar)
 	_hotbar.animal_selected.connect(_carry_controller.take)
+	_setup_windows()
+
+
+# Окна (T12, T12a) в своём слое поверх HUD и лавка продажи в мире.
+func _setup_windows() -> void:
+	_window_layer = CanvasLayer.new()
+	_window_layer.name = "WindowLayer"
+	_window_layer.layer = 20
+	add_child(_window_layer)
+
+	_animals_window = AnimalsWindow.new()
+	_animals_window.name = "AnimalsWindow"
+	_window_layer.add_child(_animals_window)
+	_animals_window.take_requested.connect(_carry_controller.take)
+
+	_sell_window = SellWindow.new()
+	_sell_window.name = "SellWindow"
+	_window_layer.add_child(_sell_window)
+
+	for window in [_animals_window, _sell_window]:
+		(window as WindowBase).opened.connect(_on_window_opened)
+		(window as WindowBase).closed.connect(_on_window_closed)
+	_hud.animals_pressed.connect(_on_animals_pressed)
+
+	_sell_stand = SellStand.new()
+	_sell_stand.name = "SellStand"
+	_sell_stand.player = _player
+	_sell_stand.throw_controller = _throw_controller
+	_sell_stand.carry_controller = _carry_controller
+	_sell_stand.window = _sell_window
+	_world.add_child(_sell_stand)
+
+
+# Кнопка «Животные»: не во время броска, не с зверем в руках и не поверх другого окна.
+func _on_animals_pressed() -> void:
+	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open():
+		return
+	_animals_window.open()
+
+
+# Пока окно открыто, игрок стоит на месте и ввод по миру не работает.
+func _on_window_opened() -> void:
+	_router.enabled = false
+	_player.enabled = false
+
+
+func _on_window_closed() -> void:
+	_router.enabled = true
+	_player.enabled = true
 
 
 func _build_ui() -> void:
