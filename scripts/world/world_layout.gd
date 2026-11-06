@@ -54,9 +54,12 @@ const BUY_PAD_RADIUS: float = 1.2
 const PEN_WALK_MARGIN: float = 0.5       # отступ от ограды при ходьбе
 const PEN_INNER_MARGIN: float = 0.6      # отступ от боковых и задней оград внутри загона
 
-# Табличка расширения (перед загоном)
+# Табличка расширения (на передней ограде своего загона, справа от проёма)
 const SIGN_X: float = 7.0
-const SIGN_Z: float = 18.0
+const SIGN_Z: float = PLOT_Z_FRONT
+const SIGN_ZONE_SIZE: float = 3.0
+const SIGN_PAD_RADIUS: float = 1.2
+const SIGN_PAD_DISTANCE: float = 4.0
 
 # Лавка продажи (T12a): слева от загона игрока, на дворе перед участком. Зона входа 3x3 м вокруг точки.
 const SELL_STAND_X: float = -17.0
@@ -177,6 +180,22 @@ static func in_player_pen(point: Vector3, level: int = 0) -> bool:
 
 static func sign_position() -> Vector3:
 	return Vector3(SIGN_X, 0.0, SIGN_Z)
+
+
+## Зона покупки 3x3 м перед табличкой: со стороны двора, не заходя в загон.
+## Диск стоит в 4 м от ограды, чтобы подписи кнопки не закрывали саму табличку.
+static func sign_zone_rect() -> Rect2:
+	var center_z: float = SIGN_Z - SIGN_PAD_DISTANCE
+	return Rect2(
+		Vector2(SIGN_X - SIGN_ZONE_SIZE / 2.0, center_z - SIGN_ZONE_SIZE / 2.0),
+		Vector2(SIGN_ZONE_SIZE, SIGN_ZONE_SIZE)
+	)
+
+
+## Видимая кнопка-диск на полу в центре зоны таблички (как у турника, T15a).
+static func sign_pad_position() -> Vector3:
+	var c: Vector2 = sign_zone_rect().get_center()
+	return Vector3(c.x, 0.0, c.y)
 
 
 ## Центр лавки продажи (T12a).

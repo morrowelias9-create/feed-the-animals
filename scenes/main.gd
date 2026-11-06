@@ -20,6 +20,7 @@ var _food_window: FoodWindow
 var _food_tent: FoodTent
 var _bar_controller: BarController
 var _buy_pad: BuyPad
+var _expand_sign: ExpandSign
 
 
 func _ready() -> void:
@@ -48,6 +49,10 @@ func _build_world() -> void:
 	_player = Player.new()
 	_player.name = "Player"
 	world.add_child(_player)
+	_expand_sign = ExpandSign.new()
+	_expand_sign.name = "ExpandSign"
+	_expand_sign.player = _player
+	world.add_child(_expand_sign)
 	_camera_rig = CameraRig.new()
 	_camera_rig.name = "CameraRig"
 	world.add_child(_camera_rig)
@@ -91,7 +96,8 @@ func _setup_throw() -> void:
 	_throw_controller.camera_rig = _camera_rig
 	_throw_controller.hud = _hud
 	_throw_controller._meter = _hud.throw_meter
-	_router.action_pressed.connect(_throw_controller.action_pressed)
+	_router.action_pressed.connect(_on_action_pressed)
+	_expand_sign.throw_controller = _throw_controller
 	# Загон игрока (T11): звери в местах, замки на закрытых, «+$N» над зверями.
 	_slot_manager = SlotManager.new()
 	_slot_manager.name = "SlotManager"
@@ -113,6 +119,7 @@ func _setup_throw() -> void:
 	_carry_controller.router = _router
 	_carry_controller.throw_controller = _throw_controller
 	_world.add_child(_carry_controller)
+	_expand_sign.carry_controller = _carry_controller
 	_throw_controller.carry_controller = _carry_controller
 	_throw_controller.reveal_completed.connect(_carry_controller.on_reveal_finished)
 
@@ -188,6 +195,13 @@ func _setup_training() -> void:
 	_buy_pad.player = _player
 	_buy_pad.throw_controller = _throw_controller
 	_world.add_child(_buy_pad)
+
+
+# Сначала проверяем действие у таблички; иначе передаём его обычному броску.
+func _on_action_pressed() -> void:
+	if _expand_sign != null and _expand_sign.try_activate():
+		return
+	_throw_controller.action_pressed()
 
 
 # Кнопка «Животные»: не во время броска, не с зверем в руках и не поверх другого окна.

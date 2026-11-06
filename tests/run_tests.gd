@@ -60,6 +60,8 @@ func _run_all() -> void:
 	_test_sell_logic()
 	print("== T14, T15, T15a: турники и палатка")
 	_test_bars()
+	print("== T16: расширение участка")
+	_test_slot_expansion()
 
 	_restore_save(backup)
 	print("")
@@ -718,3 +720,37 @@ func _test_bars() -> void:
 	_check("двор: игрок не выходит за стены и за линию z = 0", yard.x <= WorldLayout.YARD_HALF_W and yard.z >= 0.0)
 	_check("in_player_pen: центр загона да, двор перед ним нет",
 		WorldLayout.in_player_pen(Vector3(0.0, 0.0, 35.0), 0) and not WorldLayout.in_player_pen(Vector3(0.0, 0.0, 20.0), 0))
+
+
+func _test_slot_expansion() -> void:
+	var sign_pos: Vector3 = WorldLayout.sign_position()
+	var zone: Rect2 = WorldLayout.sign_zone_rect()
+	var pen: Rect2 = WorldLayout.pen_rect_for_level(0)
+	_check("табличка стоит на передней ограде своего участка",
+		_near(sign_pos.z, WorldLayout.PLOT_Z_FRONT) and sign_pos.x > WorldLayout.PEN_GATE_W / 2.0
+		and pen.position.x < sign_pos.x and sign_pos.x < pen.end.x)
+	_check("зона таблички 3x3 м во дворе перед оградой, не в загоне",
+		_near(zone.size.x, 3.0) and _near(zone.size.y, 3.0)
+		and zone.end.y <= WorldLayout.PLOT_Z_FRONT and zone.position.y < WorldLayout.PLOT_Z_FRONT)
+	var pad: Vector3 = WorldLayout.sign_pad_position()
+	var pad_rect := Rect2(
+		Vector2(pad.x - WorldLayout.SIGN_PAD_RADIUS, pad.z - WorldLayout.SIGN_PAD_RADIUS),
+		Vector2(WorldLayout.SIGN_PAD_RADIUS * 2.0, WorldLayout.SIGN_PAD_RADIUS * 2.0)
+	)
+	_check("кнопка-диск стоит в центре зоны таблички и помещается в неё",
+		_near(pad.x, zone.get_center().x) and _near(pad.z, zone.get_center().y)
+		and zone.encloses(pad_rect) and WorldLayout.player_bounds().intersects(pad_rect))
+	_check("зона таблички не пересекается с турником, лавкой и палаткой",
+		not zone.intersects(WorldLayout.bar_zone_rect()) and not zone.intersects(WorldLayout.sell_zone_rect())
+		and not zone.intersects(WorldLayout.food_zone_rect()))
+
+	_fresh()
+	_game.add_money(1.0e15)
+	var bought: int = 0
+	while bought < 10 and _game.buy_slots():
+		bought += 1
+	_check("расширений ровно 6: слотов 16, уровень 6", bought == 6
+		and _game.total_slots() == WorldLayout.SLOT_COUNT and _game.slots_level() == 6)
+	_check("на максимуме buy_slots возвращает false и не списывает деньги",
+		not _game.buy_slots() and _game.slots_level() == 6)
+

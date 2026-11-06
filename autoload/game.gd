@@ -539,6 +539,9 @@ func buy_bar() -> bool:
 ## Покупает следующее расширение участка.
 func buy_slots() -> bool:
 	var level: int = _i("slots_level")
+	# T16: фактический максимум загона — 16 мест, даже если в таблице цен есть будущие уровни.
+	if total_slots() + UpgradeData.SLOTS_PER_LEVEL > WorldLayout.SLOT_COUNT:
+		return false
 	if level >= UpgradeData.SLOT_PRICES.size():
 		return false
 	if not _take(UpgradeData.SLOT_PRICES[level]):

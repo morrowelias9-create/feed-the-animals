@@ -155,6 +155,11 @@ const T := {
 	"food_selected_toast": {"ru": "Выбрано: %s", "en": "Selected: %s"},
 	"food_no_money": {"ru": "Не хватает денег", "en": "Not enough money"},
 
+	# Табличка расширения участка (T16)
+	"expand_capacity": {"ru": "%d > %d", "en": "%d > %d", "tr": "%d > %d"},
+	"expand_max": {"ru": "МАКС", "en": "MAX", "tr": "MAKS"},
+	"expand_pad_caption": {"ru": "Расширить участок", "en": "Expand plot", "tr": "Alanı genişlet"},
+
 	# Мутации размера
 	"size_1": {"ru": "Крупный", "en": "Big"},
 	"size_2": {"ru": "Большой", "en": "Large"},
