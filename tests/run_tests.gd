@@ -62,6 +62,8 @@ func _run_all() -> void:
 	_test_bars()
 	print("== T16: расширение участка")
 	_test_slot_expansion()
+	print("== T17: смена вида зон")
+	_test_zone_look()
 
 	_restore_save(backup)
 	print("")
@@ -753,4 +755,33 @@ func _test_slot_expansion() -> void:
 		and _game.total_slots() == WorldLayout.SLOT_COUNT and _game.slots_level() == 6)
 	_check("на максимуме buy_slots возвращает false и не списывает деньги",
 		not _game.buy_slots() and _game.slots_level() == 6)
+
+
+# ---------- T17 ----------
+
+func _test_zone_look() -> void:
+	var world: Node3D = Node3D.new()
+	var wb: WorldBuilder = WorldBuilder.new()
+	wb.build(world)
+	var we: WorldEnvironment = world.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	_check("T17: в мире есть WorldEnvironment с окружением", we != null and we.environment != null)
+	if we != null and we.environment != null:
+		var forest_sky: Color = Color.html(String(ZoneData.ZONES[0]["sky"]))
+		var savanna_sky: Color = Color.html(String(ZoneData.ZONES[1]["sky"]))
+		var ocean_sky: Color = Color.html(String(ZoneData.ZONES[4]["sky"]))
+		wb.set_look(0, 0, 0.0)
+		_check("T17: у Леса своё небо", we.environment.background_color.is_equal_approx(forest_sky))
+		wb.set_look(0, 1, 0.5)
+		_check("T17: небо плавно смешивается между соседними зонами",
+			we.environment.background_color.is_equal_approx(forest_sky.lerp(savanna_sky, 0.5)))
+		wb.set_look(4, 4, 0.0)
+		_check("T17: у Океана своё небо", we.environment.background_color.is_equal_approx(ocean_sky))
+	var ocean_floor: MeshInstance3D = world.get_node_or_null("WorldGeometry/Corridor4") as MeshInstance3D
+	var water: StandardMaterial3D = null
+	if ocean_floor != null:
+		water = ocean_floor.material_override as StandardMaterial3D
+	_check("T17: пол Океана это вода простым материалом без текстуры",
+		water != null and water.albedo_texture == null
+		and water.albedo_color.is_equal_approx(Color.html(String(ZoneData.ZONES[4]["ground"]))))
+	world.free()
 

@@ -5,6 +5,7 @@ var _world_builder: WorldBuilder
 var _world: Node3D
 var _player: Player
 var _camera_rig: CameraRig
+var _zone_look: ZoneLook
 var _router: InputRouter
 var _hud: Hud
 var _throw_controller: ThrowController
@@ -59,6 +60,12 @@ func _build_world() -> void:
 	_player.camera_rig = _camera_rig
 	_camera_rig.set_follow_target(_player)
 	_camera_rig.snap_to_target()
+	# Смена неба, тумана и света по зоне под камерой (T17).
+	_zone_look = ZoneLook.new()
+	_zone_look.name = "ZoneLook"
+	_zone_look.camera_rig = _camera_rig
+	_zone_look.world_builder = _world_builder
+	world.add_child(_zone_look)
 	_build_input()
 
 

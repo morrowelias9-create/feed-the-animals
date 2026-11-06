@@ -11,6 +11,8 @@ const TEX_TILE_M: float = 8.0           # текстура покрывает 8 
 var _mats: Dictionary = {}
 var _textures: Dictionary = {}
 var _env: Environment
+var _sun: DirectionalLight3D
+var _looks: Array[Dictionary] = []      # зона -> небо, туман и свет (Color), без разбора строк в кадре
 var _arch_labels: Dictionary = {}       # зона -> Label3D
 var _geo: Node3D
 var scenery: SceneryBuilder             # декор биомов, хранится для тестов и отладки
@@ -36,18 +38,41 @@ func build(parent: Node3D) -> void:
 		loc.connect("language_changed", cb)
 
 
-## Небо и туман между зонами: t от 0 (зона from_zone) до 1 (зона to_zone).
+## Небо, туман и цвет света между зонами: t от 0 (зона from_zone) до 1 (зона to_zone).
 func set_look(from_zone: int, to_zone: int, t: float) -> void:
 	if _env == null:
 		return
-	var a: Dictionary = ZoneData.ZONES[clampi(from_zone, 0, ZoneData.count() - 1)]
-	var b: Dictionary = ZoneData.ZONES[clampi(to_zone, 0, ZoneData.count() - 1)]
+	var a: Dictionary = _look_of(from_zone)
+	var b: Dictionary = _look_of(to_zone)
 	var k: float = clampf(t, 0.0, 1.0)
-	var sky: Color = Color.html(String(a["sky"])).lerp(Color.html(String(b["sky"])), k)
-	var fog: Color = Color.html(String(a["fog"])).lerp(Color.html(String(b["fog"])), k)
+	var a_sky: Color = a["sky"]
+	var b_sky: Color = b["sky"]
+	var a_fog: Color = a["fog"]
+	var b_fog: Color = b["fog"]
+	var a_light: Color = a["light"]
+	var b_light: Color = b["light"]
+	var sky: Color = a_sky.lerp(b_sky, k)
+	var fog: Color = a_fog.lerp(b_fog, k)
+	var light: Color = a_light.lerp(b_light, k)
 	_env.background_color = sky
 	_env.fog_light_color = fog
-	_env.ambient_light_color = sky.lerp(Color.WHITE, 0.6)
+	_env.ambient_light_color = light
+	if _sun != null:
+		_sun.light_color = light
+
+
+# Цвета вида зоны: строки "#RRGGBB" разбираются один раз, затем берутся из кэша.
+func _look_of(zone: int) -> Dictionary:
+	var idx: int = clampi(zone, 0, ZoneData.count() - 1)
+	while _looks.size() <= idx:
+		var data: Dictionary = ZoneData.ZONES[_looks.size()]
+		var sky: Color = Color.html(String(data["sky"]))
+		_looks.append({
+			"sky": sky,
+			"fog": Color.html(String(data["fog"])),
+			"light": sky.lerp(Color.WHITE, 0.6),
+		})
+	return _looks[idx]
 
 
 # ---------- Части мира ----------
@@ -79,9 +104,14 @@ func _build_corridor(parent: Node3D) -> void:
 		if i + 1 < ZoneData.count():
 			z1 = WorldLayout.floor_start_z(i + 1)
 		var length: float = absf(z1 - z0)
-		var tint: Color = Color.html(String(ZoneData.ZONES[i]["ground"]))
+		var data: Dictionary = ZoneData.ZONES[i]
+		var tint: Color = Color.html(String(data["ground"]))
+		# Океан (T17): бирюзовая «вода» простым материалом, без клетчатой земли.
+		var mat: Material = _tex_mat("ground", tint)
+		if String(data["id"]) == "ocean":
+			mat = _flat_mat(String(data["ground"]))
 		_plane(parent, Vector2(w, length), Vector3(0.0, -WorldLayout.DROP_H, (z0 + z1) / 2.0),
-			_tex_mat("ground", tint), "Corridor%d" % i)
+			mat, "Corridor%d" % i)
 
 
 func _build_walls(parent: Node3D) -> void:
@@ -217,6 +247,7 @@ func _build_light_and_env(parent: Node3D) -> void:
 	sun.light_energy = 1.1
 	sun.rotation_degrees = Vector3(-55.0, -30.0, 0.0)
 	parent.add_child(sun)
+	_sun = sun
 
 	_env = Environment.new()
 	_env.background_mode = Environment.BG_COLOR
