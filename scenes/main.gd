@@ -235,3 +235,42 @@ func _on_window_closed() -> void:
 	_router.enabled = true
 	_player.enabled = true
 
+
+# ---------- Временный тур по биомам (F2) ----------
+# Удалить перед релизом.
+
+var _tour_active: bool = false
+var _tour_zone: int = 0
+var _tour_t: float = 0.0
+const TOUR_ZONE_TIME: float = 3.0
+const TOUR_CAM_HEIGHT: float = 8.0
+const TOUR_CAM_DIST: float = 25.0
+
+func _process(delta: float) -> void:
+	# F2 — запуск тура по 5 биомам за ~15 сек.
+	if Input.is_key_pressed(KEY_F2) and not _tour_active:
+		_tour_active = true
+		_tour_zone = 0
+		_tour_t = 0.0
+		_camera_rig.set_scripted(true)
+		_router.enabled = false
+		_player.enabled = false
+		print("DEBUG: биом-тур запущен (F2)")
+	if _tour_active:
+		_tour_t += delta
+		if _tour_zone < ZoneData.count():
+			var z_start: float = WorldLayout.floor_start_z(_tour_zone)
+			var pos: Vector3 = Vector3(0.0, TOUR_CAM_HEIGHT, z_start + TOUR_CAM_DIST)
+			var target: Vector3 = Vector3(0.0, 0.0, z_start)
+			_camera_rig.set_pose(pos, target, CameraRig.FOV, 0.0)
+		if _tour_t >= TOUR_ZONE_TIME:
+			_tour_t = 0.0
+			_tour_zone += 1
+			if _tour_zone >= ZoneData.count():
+				_tour_active = false
+				_camera_rig.set_scripted(false)
+				_camera_rig.return_to_player(CameraRig.RETURN_DEFAULT)
+				_router.enabled = true
+				_player.enabled = true
+				print("DEBUG: биом-тур завершён, камера вернулась к игроку")
+
