@@ -78,18 +78,65 @@ func _flush_cloud() -> void:
 func _read_local() -> Dictionary:
 	if not FileAccess.file_exists(PATH):
 		return {}
-	var parsed = JSON.parse_string(FileAccess.get_file_as_string(PATH))
+	var text: String = FileAccess.get_file_as_string(PATH)
+	if text.strip_edges().is_empty():
+		return {}
+	# JSON.new().parse() в отличие от JSON.parse_string() не пишет ошибку в «Вывод» на битом файле.
+	var json := JSON.new()
+	if json.parse(text) != OK:
+		return {}
+	var parsed: Variant = json.data
 	return parsed if parsed is Dictionary else {}
 
 
 func _merge(local: Dictionary, cloud: Dictionary) -> Dictionary:
-	var newer := local
-	if cloud.get("_ts", 0) > local.get("_ts", 0):
-		newer = cloud
+	var newer: Dictionary = cloud if _stamp(cloud) > _stamp(local) else local
 	var result: Dictionary = DEFAULTS.duplicate(true)
 	result.merge(newer, true)
-	# JSON отдаёт все числа как float - возвращаем int там, где в дефолтах int
+	# JSON отдаёт все числа как float: приводим типы по DEFAULTS. Неподходящее значение
+	# (битое или чужого типа) заменяем дефолтом, чтобы игра стартовала с нуля, а не падала.
 	for key in DEFAULTS:
-		if typeof(DEFAULTS[key]) == TYPE_INT:
-			result[key] = int(result[key])
+		if typeof(result[key]) != typeof(DEFAULTS[key]):
+			result[key] = _coerce(DEFAULTS[key], result[key])
 	return result
+
+
+# Время сохранения из поля _ts; у повреждённого значения считаем 0.
+func _stamp(source: Dictionary) -> int:
+	var raw: Variant = source.get("_ts", 0)
+	if typeof(raw) == TYPE_INT or typeof(raw) == TYPE_FLOAT:
+		return int(raw)
+	if typeof(raw) == TYPE_STRING and (raw as String).is_valid_int():
+		return (raw as String).to_int()
+	return 0
+
+
+# Приводит значение из JSON к типу дефолта; неподходящее значение заменяет дефолтом.
+func _coerce(default_value: Variant, value: Variant) -> Variant:
+	match typeof(default_value):
+		TYPE_INT:
+			if typeof(value) == TYPE_INT:
+				return value
+			if typeof(value) == TYPE_FLOAT:
+				var f: float = float(value)
+				return default_value if is_nan(f) or is_inf(f) else int(f)
+			if typeof(value) == TYPE_STRING and (value as String).is_valid_int():
+				return (value as String).to_int()
+		TYPE_FLOAT:
+			if typeof(value) == TYPE_INT:
+				return float(value)
+			if typeof(value) == TYPE_FLOAT:
+				var g: float = float(value)
+				return default_value if is_nan(g) or is_inf(g) else g
+			if typeof(value) == TYPE_STRING and (value as String).is_valid_float():
+				return (value as String).to_float()
+		TYPE_BOOL:
+			if typeof(value) == TYPE_BOOL:
+				return value
+		TYPE_ARRAY:
+			if typeof(value) == TYPE_ARRAY:
+				return value
+		TYPE_DICTIONARY:
+			if typeof(value) == TYPE_DICTIONARY:
+				return value
+	return default_value
