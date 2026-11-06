@@ -23,6 +23,7 @@ var _money_signal_t: float = 0.0
 var _autosave_t: float = 0.0
 var _boost_was_active: bool = false
 var _loaded: bool = false   # до Game.start() не тикаем и не сохраняем: Save.data ещё не загружен
+var offline_pending: float = 0.0   # T21: сумма накопленного оффлайн-дохода, ожидающая получения
 
 
 func _process(delta: float) -> void:
@@ -44,6 +45,22 @@ func start() -> void:
 	_loaded = true
 	_income_dirty = true
 	_touch_last_seen()
+	_calc_offline_income()
+
+
+# T21: считает оффлайн-доход и кладёт в offline_pending, если он больше нуля.
+func _calc_offline_income() -> void:
+	var now: int = int(Time.get_unix_time_from_system())
+	var last: int = _i("last_seen")
+	var away_s: float = float(now - last)
+	if away_s <= 0.0:
+		return
+	var income: float = income_per_sec()
+	if income <= 0.0:
+		return
+	var gain: float = Economy.offline_gain(away_s, income)
+	if gain > 0.0:
+		offline_pending = gain
 
 
 # ---------- Чтение состояния ----------
@@ -577,6 +594,19 @@ func claim_zone_reward(zone: int) -> float:
 	money_changed.emit(_f("money"))
 	Save.save_data()
 	return reward
+
+
+## T21: получает накопленный оффлайн-доход с множителем mult (1 или 2).
+## Если offline_pending > 0, начисляет деньги, обнуляет pending и сохраняет.
+func claim_offline(mult: float = 1.0) -> float:
+	if offline_pending <= 0.0:
+		return 0.0
+	var gain: float = offline_pending * mult
+	Save.data["money"] = _f("money") + gain
+	money_changed.emit(_f("money"))
+	offline_pending = 0.0
+	Save.save_data()
+	return gain
 
 
 # ---------- Внутреннее ----------

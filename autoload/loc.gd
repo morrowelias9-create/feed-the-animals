@@ -189,6 +189,13 @@ const T := {
 	"index_tab": {"ru": "%d / 8", "en": "%d / 8"},
 	"index_claim": {"ru": "Забрать %s", "en": "Claim %s"},
 	"index_claimed": {"ru": "Получено: +%s", "en": "Claimed: +%s"},
+
+	# Окно оффлайн-дохода (T21)
+	"offline_title": {"ru": "Оффлайн-доход", "en": "Offline Income"},
+	"offline_text": {"ru": "Вы отсутствовали %d мин", "en": "You were away for %d min", "tr": "%d dakika yoktunuz"},
+	"offline_amount": {"ru": "Доход: %s", "en": "Income: %s"},
+	"offline_claim": {"ru": "Забрать", "en": "Claim"},
+	"offline_double": {"ru": "x2 за рекламу", "en": "x2 for ad"},
 }
 
 var lang := "en"

@@ -24,6 +24,7 @@ var _buy_pad: BuyPad
 var _expand_sign: ExpandSign
 var _index_window: IndexWindow
 var _tutorial: TutorialController
+var _offline_window: OfflineWindow
 
 
 func _ready() -> void:
@@ -32,6 +33,9 @@ func _ready() -> void:
 	await Ya.initialize()
 	await Save.load_all()
 	Game.start()
+	# T21: создаём слой окон и проверяем оффлайн-доход.
+	_setup_window_layer()
+	_setup_offline_window()
 	_build_world()
 	# Расширение участка (T16): забор перестраивается после покупки мест.
 	if not Game.slots_changed.is_connected(_world_builder.refresh_pen_geometry):
@@ -40,6 +44,26 @@ func _ready() -> void:
 	_setup_throw()
 	Ya.loading_ready()
 	Ya.gameplay_start()
+
+
+# Создаёт общий CanvasLayer для окон (T12, T12a, T18, T21).
+func _setup_window_layer() -> void:
+	_window_layer = CanvasLayer.new()
+	_window_layer.name = "WindowLayer"
+	_window_layer.layer = 20
+	add_child(_window_layer)
+
+
+# T21: создаёт окно оффлайн-дохода и показывает его, если есть накопленная сумма.
+func _setup_offline_window() -> void:
+	_offline_window = OfflineWindow.new()
+	_offline_window.name = "OfflineWindow"
+	_window_layer.add_child(_offline_window)
+	if Game.offline_pending > 0.0:
+		_offline_window.open()
+	else:
+		_offline_window.queue_free()
+		_offline_window = null
 
 
 func _build_world() -> void:
@@ -142,13 +166,9 @@ func _setup_throw() -> void:
 	_setup_windows()
 
 
-# Окна (T12, T12a, T18) в своём слое поверх HUD и лавка продажи в мире.
+# Окна (T12, T12a, T18, T21) в своём слое поверх HUD и лавка продажи в мире.
 func _setup_windows() -> void:
-	_window_layer = CanvasLayer.new()
-	_window_layer.name = "WindowLayer"
-	_window_layer.layer = 20
-	add_child(_window_layer)
-
+	# _window_layer уже создан в _setup_window_layer() (до T21).
 	_animals_window = AnimalsWindow.new()
 	_animals_window.name = "AnimalsWindow"
 	_window_layer.add_child(_animals_window)
