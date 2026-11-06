@@ -196,6 +196,9 @@ const T := {
 	"offline_amount": {"ru": "Доход: %s", "en": "Income: %s"},
 	"offline_claim": {"ru": "Забрать", "en": "Claim"},
 	"offline_double": {"ru": "x2 за рекламу", "en": "x2 for ad"},
+
+	# Буст x2 за рекламу (T22)
+	"boost_btn": {"ru": "x2 за рекламу", "en": "x2 for ad"},
 }
 
 var lang := "en"

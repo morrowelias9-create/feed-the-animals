@@ -609,6 +609,21 @@ func claim_offline(mult: float = 1.0) -> float:
 	return gain
 
 
+## T22: активирует буст x2 на BOOST_S секунд.
+## boost_until = max(now, boost_until) + BOOST_S, но не больше now + BOOST_MAX_S.
+## Эмитит boost_changed для обновления UI.
+func activate_boost() -> void:
+	var now: int = int(Time.get_unix_time_from_system())
+	var current_until: int = _i("boost_until")
+	var new_until: int = maxi(now, current_until) + GameConfig.BOOST_S
+	var max_allowed: int = now + GameConfig.BOOST_MAX_S
+	if new_until > max_allowed:
+		new_until = max_allowed
+	Save.data["boost_until"] = new_until
+	boost_changed.emit()
+	Save.save_data()
+
+
 # ---------- Внутреннее ----------
 
 # Списывает деньги и сообщает об изменении, но не сохраняет (сохраняет вызывающий).
@@ -623,6 +638,14 @@ func _take(x: float) -> bool:
 
 func _boost_active() -> bool:
 	return Time.get_unix_time_from_system() < float(_i("boost_until"))
+
+
+## T22: возвращает оставшееся время буста в секундах (0, если неактивно).
+func boost_remaining() -> int:
+	var now: int = int(Time.get_unix_time_from_system())
+	var until: int = _i("boost_until")
+	var rem: int = until - now
+	return maxi(rem, 0)
 
 
 func _touch_last_seen() -> void:

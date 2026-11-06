@@ -9,6 +9,7 @@ signal animals_pressed
 signal bonus_pressed               # T14: тап по пузырю-бонусу на турнике
 
 const BONUS_SIZE: float = 96.0
+const BOOST_BTN_SIZE: float = 96.0
 
 var _full: bool = true
 var _throw_meter_enabled: bool = true
@@ -22,8 +23,12 @@ var _buttons: Dictionary = {}
 var throw_meter: ThrowMeter
 var xp_bar: XpBar                       # T14: шкала «Уровень N x/y», видна только на тренировке
 var _bonus: Button                      # T14: пузырь-бонус 96x96 в экранных координатах
+var _boost_button: Button               # T22: кнопка буста x2 за рекламу
+var _boost_timer: Label                 # T22: таймер буста "x2 MM:SS"
 var _training: bool = false
 var _bonus_shown: bool = false
+var _boost_active: bool = false
+var _boost_pulse_tween: Tween
 var _index_pulse_tween: Tween
 var _index_has_reward: bool = false
 var _hint_pulse_tween: Tween            # T19: пульс подсказки внизу (шаг обучения 1)
@@ -34,6 +39,7 @@ func _ready() -> void:
 	_build_texts()
 	_build_stats()
 	_build_buttons()
+	_build_boost()                      # T22
 	_build_throw_meter()
 	_build_training()
 	_refresh()
@@ -41,6 +47,8 @@ func _ready() -> void:
 		Game.money_changed.connect(_on_money_changed)
 	if not Game.strength_changed.is_connected(_on_strength_changed):
 		Game.strength_changed.connect(_on_strength_changed)
+	if not Game.boost_changed.is_connected(_on_boost_changed):
+		Game.boost_changed.connect(_on_boost_changed)
 	Loc.language_changed.connect(_on_language_changed)
 
 
@@ -131,6 +139,67 @@ func _on_language_changed() -> void:
 	shop_button.text = Loc.t("shop")
 	var animals_button: Button = _buttons["animals"]
 	animals_button.text = Loc.t("animals")
+	# T22: кнопка буста и таймер
+	if _boost_button != null:
+		_boost_button.text = Loc.t("boost_btn")
+	_update_boost_display()
+
+
+# T22: обработчик изменения буста
+func _on_boost_changed() -> void:
+	_update_boost_display()
+
+
+func _update_boost_display() -> void:
+	var active: bool = Game._boost_active()
+	if active == _boost_active:
+		return
+	_boost_active = active
+	if active:
+		# Буст активен: показываем таймер, прячем кнопку
+		_boost_button.visible = false
+		_boost_timer.visible = _full
+		# Обновляем таймер каждый кадр
+		if not is_processing_internal():
+			set_process_internal(true)
+	else:
+		# Буст неактивен: показываем кнопку с пульсацией, прячем таймер
+		_boost_button.visible = _full
+		_boost_timer.visible = false
+		set_process_internal(false)
+		# Запускаем пульсацию кнопки
+		_start_boost_pulse()
+
+
+func _start_boost_pulse() -> void:
+	if _boost_pulse_tween != null and _boost_pulse_tween.is_valid():
+		_boost_pulse_tween.kill()
+	_boost_button.scale = Vector2.ONE
+	_boost_button.pivot_offset = _boost_button.size / 2.0
+	var tween: Tween = _boost_button.create_tween()
+	tween.set_loops()
+	var grow: PropertyTweener = tween.tween_property(_boost_button, "scale", Vector2(1.15, 1.15), 0.5)
+	grow.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	var shrink: PropertyTweener = tween.tween_property(_boost_button, "scale", Vector2.ONE, 0.5)
+	shrink.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_boost_pulse_tween = tween
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_INTERNAL_PROCESS:
+		_update_boost_timer()
+
+
+func _update_boost_timer() -> void:
+	if not _boost_active:
+		return
+	var rem: int = Game.boost_remaining()
+	if rem <= 0:
+		_on_boost_changed()
+		return
+	var minutes: int = rem / 60
+	var seconds: int = rem % 60
+	_boost_timer.text = "x2 %02d:%02d" % [minutes, seconds]
 
 
 func _build_texts() -> void:
@@ -160,6 +229,62 @@ func _build_stats() -> void:
 	_income.position = Vector2(20.0, 701.0)
 	_income.size = Vector2(360.0, 26.0)
 	add_child(_income)
+
+	# T22: кнопка буста x2 и таймер под доходом
+	_build_boost()
+
+
+# T22: создаёт кнопку буста и таймер под строкой дохода
+func _build_boost() -> void:
+	# Кнопка "x2 за рекламу"
+	_boost_button = Button.new()
+	_boost_button.name = "BoostButton"
+	_boost_button.custom_minimum_size = Vector2(BOOST_BTN_SIZE, BOOST_BTN_SIZE)
+	_boost_button.size = Vector2(BOOST_BTN_SIZE, BOOST_BTN_SIZE)
+	_boost_button.focus_mode = Control.FOCUS_NONE
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = Color("#4A90D9")
+	style.set_border_width_all(4)
+	style.border_color = Color("#1A4A7A")
+	style.set_corner_radius_all(int(BOOST_BTN_SIZE / 4.0))
+	for st in ["normal", "hover", "pressed", "focus"]:
+		_boost_button.add_theme_stylebox_override(st, style)
+	_boost_button.add_theme_font_size_override("font_size", 28)
+	for color_name in ["font_color", "font_hover_color", "font_pressed_color"]:
+		_boost_button.add_theme_color_override(color_name, UiStyle.COLOR_TEXT)
+	_boost_button.add_theme_color_override("font_outline_color", UiStyle.COLOR_OUTLINE)
+	_boost_button.add_theme_constant_override("outline_size", 4)
+	_boost_button.text = Loc.t("boost_btn")
+	_boost_button.position = Vector2(20.0, 735.0)
+	_boost_button.pressed.connect(_on_boost_pressed)
+	add_child(_boost_button)
+
+	# Таймер буста "x2 MM:SS"
+	_boost_timer = Label.new()
+	_boost_timer.name = "BoostTimer"
+	_boost_timer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_boost_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_boost_timer.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_boost_timer.add_theme_font_size_override("font_size", 30)
+	_boost_timer.add_theme_color_override("font_color", UiStyle.COLOR_MONEY)
+	_boost_timer.add_theme_color_override("font_outline_color", UiStyle.COLOR_OUTLINE)
+	_boost_timer.add_theme_constant_override("outline_size", 4)
+	_boost_timer.position = Vector2(20.0, 735.0)
+	_boost_timer.size = Vector2(300.0, BOOST_BTN_SIZE)
+	_boost_timer.visible = false
+	add_child(_boost_timer)
+
+	# Изначально: если буст не активен — кнопка видна с пульсацией
+	var active: bool = Game._boost_active()
+	_boost_active = active
+	if active:
+		_boost_button.visible = false
+		_boost_timer.visible = _full
+		set_process_internal(true)
+	else:
+		_boost_button.visible = _full
+		_boost_timer.visible = false
+		_start_boost_pulse()
 
 
 func _build_buttons() -> void:
@@ -267,6 +392,7 @@ func _refresh() -> void:
 	_money.text = NumFmt.money(Game.money())
 	_income.text = NumFmt.money(Game.income_per_sec()) + "/s"
 	_update_index_button_pulse()
+	_update_boost_display()
 	_update_visibility()
 
 
@@ -316,6 +442,11 @@ func _update_visibility() -> void:
 		xp_bar.visible = _training and _full
 	if _bonus != null:
 		_bonus.visible = _bonus_shown and _full
+	# T22: буст кнопка и таймер
+	if _boost_button != null:
+		_boost_button.visible = _full and not _boost_active
+	if _boost_timer != null:
+		_boost_timer.visible = _full and _boost_active
 
 
 func _on_index_pressed() -> void:
@@ -328,3 +459,8 @@ func _on_shop_pressed() -> void:
 
 func _on_animals_pressed() -> void:
 	animals_pressed.emit()
+
+
+# T22: нажатие кнопки буста — показываем rewarded рекламу
+func _on_boost_pressed() -> void:
+	Ya.show_rewarded(Callable(Game, "activate_boost"))
