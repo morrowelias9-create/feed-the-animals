@@ -26,6 +26,8 @@ var _training: bool = false
 var _bonus_shown: bool = false
 var _index_pulse_tween: Tween
 var _index_has_reward: bool = false
+var _hint_pulse_tween: Tween            # T19: пульс подсказки внизу (шаг обучения 1)
+var _shop_pulse_tween: Tween            # T19: пульс кнопки «Магазин» (шаг обучения 2)
 
 
 func _ready() -> void:
@@ -48,6 +50,34 @@ func set_goal(text: String) -> void:
 
 func set_hint(text: String) -> void:
 	_hint.text = text
+
+
+## Пульсация подсказки внизу «Нажмите, чтобы бросить!» (обучение, шаг 1).
+func set_hint_pulse(active: bool) -> void:
+	_hint_pulse_tween = _set_pulse(_hint, _hint_pulse_tween, active)
+
+
+## Пульсация кнопки «Магазин» (обучение, шаг 2: хватает денег на яблоко).
+func set_shop_pulse(active: bool) -> void:
+	var shop_button: Button = _buttons["shop"]
+	_shop_pulse_tween = _set_pulse(shop_button, _shop_pulse_tween, active)
+
+
+# Включает или выключает бесконечную пульсацию масштаба узла; возвращает новый Tween (или null).
+func _set_pulse(node: Control, old_tween: Tween, active: bool) -> Tween:
+	if old_tween != null and old_tween.is_valid():
+		old_tween.kill()
+	node.scale = Vector2.ONE
+	if not active:
+		return null
+	node.pivot_offset = node.size / 2.0
+	var tween: Tween = node.create_tween()
+	tween.set_loops()
+	var grow: PropertyTweener = tween.tween_property(node, "scale", Vector2(1.15, 1.15), 0.5)
+	grow.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	var shrink: PropertyTweener = tween.tween_property(node, "scale", Vector2.ONE, 0.5)
+	shrink.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	return tween
 
 
 func set_mode(full: bool) -> void:

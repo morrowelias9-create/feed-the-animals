@@ -23,6 +23,7 @@ var _bar_controller: BarController
 var _buy_pad: BuyPad
 var _expand_sign: ExpandSign
 var _index_window: IndexWindow
+var _tutorial: TutorialController
 
 
 func _ready() -> void:
@@ -211,6 +212,13 @@ func _setup_training() -> void:
 	_buy_pad.throw_controller = _throw_controller
 	_world.add_child(_buy_pad)
 
+	# Обучение (T19): цель в HUD, стрелки на полу и пульс кнопок по шагам из R6.
+	_tutorial = TutorialController.new()
+	_tutorial.name = "TutorialController"
+	_tutorial.player = _player
+	_tutorial.hud = _hud
+	_world.add_child(_tutorial)
+
 
 # Сначала проверяем действие у таблички; иначе передаём его обычному броску.
 func _on_action_pressed() -> void:
@@ -288,4 +296,3 @@ func _process(delta: float) -> void:
 				_router.enabled = true
 				_player.enabled = true
 				print("DEBUG: биом-тур завершён, камера вернулась к игроку")
-
