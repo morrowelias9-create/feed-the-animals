@@ -22,6 +22,7 @@ var _food_tent: FoodTent
 var _bar_controller: BarController
 var _buy_pad: BuyPad
 var _expand_sign: ExpandSign
+var _index_window: IndexWindow
 
 
 func _ready() -> void:
@@ -140,7 +141,7 @@ func _setup_throw() -> void:
 	_setup_windows()
 
 
-# Окна (T12, T12a) в своём слое поверх HUD и лавка продажи в мире.
+# Окна (T12, T12a, T18) в своём слое поверх HUD и лавка продажи в мире.
 func _setup_windows() -> void:
 	_window_layer = CanvasLayer.new()
 	_window_layer.name = "WindowLayer"
@@ -161,11 +162,18 @@ func _setup_windows() -> void:
 	_food_window.name = "FoodWindow"
 	_window_layer.add_child(_food_window)
 
-	for window in [_animals_window, _sell_window, _food_window]:
+	# Индекс зверей (T18)
+	_index_window = IndexWindow.new()
+	_index_window.name = "IndexWindow"
+	_window_layer.add_child(_index_window)
+	_index_window.zone_reward_claimed.connect(_hud._refresh)
+
+	for window in [_animals_window, _sell_window, _food_window, _index_window]:
 		(window as WindowBase).opened.connect(_on_window_opened)
 		(window as WindowBase).closed.connect(_on_window_closed)
 	_hud.animals_pressed.connect(_on_animals_pressed)
 	_hud.shop_pressed.connect(_on_shop_pressed)
+	_hud.index_pressed.connect(_on_index_pressed)
 
 	_sell_stand = SellStand.new()
 	_sell_stand.name = "SellStand"
@@ -223,6 +231,13 @@ func _on_shop_pressed() -> void:
 	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open() or _animals_window.is_open():
 		return
 	_food_window.open()
+
+
+# Кнопка «Индекс» (T18): не во время броска, не с зверем в руках и не поверх другого окна.
+func _on_index_pressed() -> void:
+	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open() or _animals_window.is_open() or _food_window.is_open():
+		return
+	_index_window.open()
 
 
 # Пока окно открыто, игрок стоит на месте и ввод по миру не работает.

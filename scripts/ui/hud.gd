@@ -24,6 +24,8 @@ var xp_bar: XpBar                       # T14: шкала «Уровень N x/y
 var _bonus: Button                      # T14: пузырь-бонус 96x96 в экранных координатах
 var _training: bool = false
 var _bonus_shown: bool = false
+var _index_pulse_tween: Tween
+var _index_has_reward: bool = false
 
 
 func _ready() -> void:
@@ -234,7 +236,31 @@ func _refresh() -> void:
 	_strength.text = str(Game.strength())
 	_money.text = NumFmt.money(Game.money())
 	_income.text = NumFmt.money(Game.income_per_sec()) + "/s"
+	_update_index_button_pulse()
 	_update_visibility()
+
+
+## Проверяет, есть ли неполученные награды за зоны, и запускает/останавливает пульсацию кнопки «Индекс».
+func _update_index_button_pulse() -> void:
+	var has_reward: bool = IndexWindow.has_unclaimed_rewards()
+	if has_reward == _index_has_reward:
+		return
+	_index_has_reward = has_reward
+	var index_button: Button = _buttons["index"]
+	if index_button == null:
+		return
+	if _index_pulse_tween != null and _index_pulse_tween.is_valid():
+		_index_pulse_tween.kill()
+	if has_reward:
+		# Пульсация: масштаб 1.0 -> 1.15 -> 1.0
+		_index_pulse_tween = index_button.create_tween()
+		_index_pulse_tween.set_loops()
+		var scale_up = _index_pulse_tween.tween_property(index_button, "scale", Vector2(1.15, 1.15), 0.6)
+		scale_up.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		var scale_down = _index_pulse_tween.tween_property(index_button, "scale", Vector2(1.0, 1.0), 0.6)
+		scale_down.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	else:
+		index_button.scale = Vector2(1.0, 1.0)
 
 
 func _build_throw_meter() -> void:

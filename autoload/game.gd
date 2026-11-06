@@ -138,6 +138,15 @@ func is_zone_complete(zone: int) -> bool:
 	return true
 
 
+## Получена ли награда за полностью собранную зону.
+func is_zone_reward_claimed(zone: int) -> bool:
+	var claimed: Array = _arr("claimed_zones")
+	for c in claimed:
+		if int(c) == zone:
+			return true
+	return false
+
+
 # ---------- Деньги и время ----------
 
 func add_money(x: float) -> void:

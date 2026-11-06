@@ -177,6 +177,13 @@ const T := {
 	"rarity_3": {"ru": "Эпический", "en": "Epic"},
 	"rarity_4": {"ru": "Легендарный", "en": "Legendary"},
 	"gold": {"ru": "золото", "en": "Gold"},
+
+	# Окно «Индекс» (T18)
+	"index_title": {"ru": "Индекс", "en": "Index"},
+	"index_header": {"ru": "Найдено %s / %s (%s%%)", "en": "Found %s / %s (%s%%)"},
+	"index_tab": {"ru": "%d / 8", "en": "%d / 8"},
+	"index_claim": {"ru": "Забрать %s", "en": "Claim %s"},
+	"index_claimed": {"ru": "Получено: +%s", "en": "Claimed: +%s"},
 }
 
 var lang := "en"
