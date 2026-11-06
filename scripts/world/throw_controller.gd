@@ -62,6 +62,18 @@ func _ready() -> void:
 	_reveal.name = "RevealController"
 	add_child(_reveal)
 	_reveal.throw_controller = self
+	# T23: путь А — межстраничная реклама после тапа «продолжить» в конце кинематики.
+	_reveal.result_dismissed.connect(_on_reveal_result_dismissed)
+	# T23: сброс таймера пути Б на каждом завершении кинематики (путь А мог сработать).
+	reveal_completed.connect(func(): Game.reset_backup_ad_timer())
+
+
+## T23: путь А — показать межстраничную рекламу после тапа «продолжить» в конце кинематики.
+func _on_reveal_result_dismissed() -> void:
+	if Game.can_show_interstitial():
+		Ya.show_interstitial()
+		Game.record_interstitial_shown()
+		Game.reset_backup_ad_timer()
 
 
 ## Событие короткого нажатия (действие) из InputRouter: в AIMING это бросок, в REVEAL пропуск или выход.

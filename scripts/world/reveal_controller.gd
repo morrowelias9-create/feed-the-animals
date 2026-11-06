@@ -5,6 +5,7 @@ extends Node3D
 ## Зверь выбирается в start(), добавляется игроку в начале фазы C. Тап в A или B прыгает сразу к C.
 
 signal finished
+signal result_dismissed  # T23: тап «продолжить» в фазе итога (путь А межстраничной рекламы)
 
 enum Phase { NONE, EYES, SIDE, RESULT, EXIT }
 
@@ -137,6 +138,8 @@ func tap() -> void:
 		Phase.RESULT:
 			if not _ramp_done and not _skip_final:
 				_skip_to_final()
+			# T23: путь А — тап «продолжить» в конце кинематики.
+			result_dismissed.emit()
 			_enter_exit()
 
 

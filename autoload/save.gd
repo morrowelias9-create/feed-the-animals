@@ -27,6 +27,10 @@ const DEFAULTS := {
 	"boost_until": 0,
 	"tutorial_step": 0,
 	"sound_on": true,
+	"no_ads": false,                   # T24a: покупка «без рекламы»
+	"last_interstitial_time": 0,       # T23: время последней межстраничной рекламы (unix time)
+	"last_rewarded_time": 0,           # T23: время последней rewarded-рекламы (unix time)
+	"session_start_time": 0,           # T23: время старта текущей сессии (unix time)
 	"_ts": 0,
 }
 

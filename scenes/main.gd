@@ -25,6 +25,7 @@ var _expand_sign: ExpandSign
 var _index_window: IndexWindow
 var _tutorial: TutorialController
 var _offline_window: OfflineWindow
+var _ad_warning: AdWarning
 
 
 func _ready() -> void:
@@ -166,6 +167,36 @@ func _setup_throw() -> void:
 	_setup_windows()
 
 
+# T23: настройка обработчиков межстраничной рекламы.
+func _setup_ad_handlers() -> void:
+	# Путь Б: сигнал от Game для показа предупреждения.
+	Game.backup_ad_warning_needed.connect(_on_backup_ad_warning_needed)
+	# Сброс таймера пути Б когда межстраничная реклама завершилась (показана или нет).
+	Ya.ad_finished.connect(_on_ya_ad_finished)
+	# Создаём AdWarning (скрыт по умолчанию).
+	_ad_warning = AdWarning.new()
+	_ad_warning.name = "AdWarning"
+	add_child(_ad_warning)
+	_ad_warning.finished.connect(_on_ad_warning_finished)
+
+
+func _on_backup_ad_warning_needed() -> void:
+	if _ad_warning != null:
+		_ad_warning.start()
+
+
+func _on_ad_warning_finished() -> void:
+	# После предупреждения показываем межстраничную рекламу.
+	if Game.can_show_interstitial():
+		Ya.show_interstitial()
+		Game.record_interstitial_shown()
+
+
+func _on_ya_ad_finished(kind: String, shown: bool) -> void:
+	if kind == "interstitial":
+		Game.reset_backup_ad_timer()
+
+
 # Окна (T12, T12a, T18, T21) в своём слое поверх HUD и лавка продажи в мире.
 func _setup_windows() -> void:
 	# _window_layer уже создан в _setup_window_layer() (до T21).
@@ -290,6 +321,16 @@ const TOUR_CAM_HEIGHT: float = 8.0
 const TOUR_CAM_DIST: float = 25.0
 
 func _process(delta: float) -> void:
+	# T23: обновляем таймеры межстраничной рекламы.
+	Game.update_ad_timers(delta)
+	# T23: проверяем путь Б (резервная реклама).
+	# Проверяем только если нет открытых окон (router enabled) и игрок в допустимом состоянии.
+	if _router.enabled:
+		# Окно закрыто, router включён.
+		if Game.check_backup_ad(_throw_controller, _bar_controller, false):
+			# Путь Б запущен, предупреждение показано.
+			pass
+	
 	# F2 — запуск тура по 5 биомам за ~15 сек.
 	if Input.is_key_pressed(KEY_F2) and not _tour_active:
 		_tour_active = true

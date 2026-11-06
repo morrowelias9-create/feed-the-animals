@@ -14,6 +14,8 @@ signal xp_changed                # опыт силы изменился (шка�
 signal animal_received(animal: Dictionary)   # {uid, animal_id, variant, placed}, у сразу проданного ещё sold = 1
 signal boost_changed
 signal notice(key: String, args: Array)      # короткие сообщения игроку
+# T23: нужен для показа предупреждения перед межстраничной рекламой (путь Б).
+signal backup_ad_warning_needed
 
 const MONEY_SIGNAL_INTERVAL: float = 0.1     # как часто tick сообщает об изменении денег
 
@@ -46,6 +48,11 @@ func start() -> void:
 	_income_dirty = true
 	_touch_last_seen()
 	_calc_offline_income()
+	# T23: инициализируем время старта сессии для рекламы.
+	var now: int = int(Time.get_unix_time_from_system())
+	if Save.data["session_start_time"] == 0:
+		Save.data["session_start_time"] = now
+		Save.save_data()
 
 
 # T21: считает оффлайн-доход и кладёт в offline_pending, если он больше нуля.
@@ -620,6 +627,8 @@ func activate_boost() -> void:
 	if new_until > max_allowed:
 		new_until = max_allowed
 	Save.data["boost_until"] = new_until
+	# T23: запоминаем время rewarded для правил рекламы.
+	Save.data["last_rewarded_time"] = now
 	boost_changed.emit()
 	Save.save_data()
 
@@ -775,3 +784,117 @@ func _cheapest_unplaced_index() -> int:
 				best_price = p
 				best = i
 	return best
+
+
+# ============ T23: Политика межстраничной рекламы ============
+
+## Проверяет, можно ли показать межстраничную рекламу прямо сейчас (путь А или Б).
+## Условия R7 редакция 3: прошло AD_FIRST_S от старта сессии, прошло AD_INTERVAL_S от прошлой рекламы,
+## прошло AD_AFTER_REWARDED_S от rewarded, нет покупки no_ads, не в запрещённых состояниях.
+func can_show_interstitial() -> bool:
+	if not _loaded:
+		return false
+	# Купившим no_ads межстраничной рекламы нет.
+	if _b("no_ads"):
+		return false
+	var now: int = int(Time.get_unix_time_from_system())
+	var session_start: int = _i("session_start_time")
+	var last_interstitial: int = _i("last_interstitial_time")
+	var last_rewarded: int = _i("last_rewarded_time")
+	# С начала сессии прошло не меньше AD_FIRST_S.
+	if now - session_start < GameConfig.AD_FIRST_S:
+		return false
+	# С прошлой межстраничной рекламы прошло не меньше AD_INTERVAL_S.
+	if now - last_interstitial < GameConfig.AD_INTERVAL_S:
+		return false
+	# После rewarded прошло не меньше AD_AFTER_REWARDED_S.
+	if now - last_rewarded < GameConfig.AD_AFTER_REWARDED_S:
+		return false
+	return true
+
+
+## Фиксирует время показа межстраничной рекламы.
+func record_interstitial_shown() -> void:
+	if not _loaded:
+		return
+	var now: int = int(Time.get_unix_time_from_system())
+	Save.data["last_interstitial_time"] = now
+	Save.save_data()
+
+
+## Возвращает true, если игрок в состоянии, допускающем путь Б (FREE или на турнике, без открытых окон).
+## Проверяется извне через ThrowController и BarController.
+func is_state_allowed_for_backup_ad(throw_controller: ThrowController = null, bar_controller: Node = null) -> bool:
+	if throw_controller != null:
+		# Не в AIMING, THROWING, FLIGHT, REVEAL.
+		var state: String = throw_controller.state
+		if state in [ThrowController.STATE_AIMING, ThrowController.STATE_THROWING, ThrowController.STATE_FLIGHT, ThrowController.STATE_REVEAL]:
+			return false
+	# На турнике проверяется отдельно через BarController (там своё состояние).
+	# Окна проверяются через InputRouter.enabled == false (когда окно открыто, роутер отключён).
+	return true
+
+
+# Внутренний хелпер для bool полей.
+func _b(key: String) -> bool:
+	return bool(Save.data.get(key, false))
+
+
+# ============ T23: Путь Б — резервная межстраничная реклама ============
+
+var _backup_ad_timer: float = 0.0
+var _backup_ad_pending: bool = false
+
+
+## Вызывать каждый кадр из main.gd для обновления таймеров рекламы.
+func update_ad_timers(delta: float) -> void:
+	if not _loaded:
+		return
+	# Накапливаем время с последнего reveal_completed (когда путь А мог сработать).
+	_backup_ad_timer += delta
+	if _backup_ad_timer >= GameConfig.AD_BACKUP_S:
+		_backup_ad_pending = true
+
+
+## Сбрасывает таймер пути Б (вызывать когда путь А сработал или khi реклама показана).
+func reset_backup_ad_timer() -> void:
+	_backup_ad_timer = 0.0
+	_backup_ad_pending = false
+
+
+## Проверяет, нужно ли запустить путь Б, и запускает предупреждение.
+## throw_controller: для проверки состояния броска (должен быть FREE).
+## bar_controller: для проверки, что игрок на турнике (BarController.is_training()).
+## windows_open: true, если какое-то окно открыто (InputRouter.enabled == false).
+## Возвращает true, если путь Б запущен (предупреждение показано).
+func check_backup_ad(throw_controller: ThrowController, bar_controller: Node, windows_open: bool) -> bool:
+	if not _loaded:
+		return false
+	if not _backup_ad_pending:
+		return false
+	if windows_open:
+		return false
+	# Состояние броска должно быть FREE.
+	var throw_state: String = ThrowController.STATE_FREE
+	if throw_controller != null:
+		throw_state = throw_controller.state
+		if throw_state != ThrowController.STATE_FREE:
+			return false
+	# На турнике: BarController.is_training() должно быть true.
+	# Если не на турнике и не в FREE — не показываем.
+	# Но по условию: "FREE или на турнике".
+	var on_bar: bool = false
+	if bar_controller != null and bar_controller.has_method("is_training"):
+		on_bar = bar_controller.is_training()
+	if throw_state != ThrowController.STATE_FREE and not on_bar:
+		return false
+	# Все условия соблюдены, показываем предупреждение.
+	_backup_ad_pending = false
+	_backup_ad_timer = 0.0
+	_show_backup_ad_warning()
+	return true
+
+
+func _show_backup_ad_warning() -> void:
+	# Эмитим сигнал, который main.gd слушает.
+	backup_ad_warning_needed.emit()
