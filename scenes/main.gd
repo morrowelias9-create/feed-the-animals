@@ -323,6 +323,8 @@ const TOUR_CAM_DIST: float = 25.0
 func _process(delta: float) -> void:
 	# T23: обновляем таймеры межстраничной рекламы.
 	Game.update_ad_timers(delta)
+	# T24: обновляем таймер лидерборда.
+	Game._tick_leaderboard(delta)
 	# T23: проверяем путь Б (резервная реклама).
 	# Проверяем только если нет открытых окон (router enabled) и игрок в допустимом состоянии.
 	if _router.enabled:

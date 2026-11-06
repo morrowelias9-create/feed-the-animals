@@ -268,8 +268,13 @@ func _land() -> void:
 	_landed_t = 0.0
 	# Счёт и рекорд броска (шаг T09, справочник R5).
 	Save.data["throws"] = int(Save.data.get("throws", 0)) + 1
-	Save.data["best_throw"] = maxi(int(Save.data.get("best_throw", 0)), int(dist))
+	var old_best: int = int(Save.data.get("best_throw", 0))
+	var new_best: int = maxi(old_best, int(dist))
+	Save.data["best_throw"] = new_best
 	Save.save_data()
+	# T24: если установлен новый рекорд — отправляем в лидерборд (с троттлингом 5 с).
+	if new_best > old_best:
+		Game.submit_best_throw(new_best)
 	_set_toast(true, dist)
 	_spawn_land_fx(position)
 	landed.emit(dist, zone, perfect, position)

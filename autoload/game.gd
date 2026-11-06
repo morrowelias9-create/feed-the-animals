@@ -839,6 +839,37 @@ func is_state_allowed_for_backup_ad(throw_controller: ThrowController = null, ba
 func _b(key: String) -> bool:
 	return bool(Save.data.get(key, false))
 
+# ============ T24: Лидерборд «Лучший бросок» ============
+
+var _leaderboard_timer: float = 0.0
+var _leaderboard_pending: int = 0
+
+## Вызывать при новом рекорде броска. Накапливает значение и отправляет не чаще раза в 5 секунд.
+func submit_best_throw(score: int) -> void:
+	if not _loaded:
+		return
+	if score <= 0:
+		return
+	# Накапливаем лучшее значение для отправки.
+	if score > _leaderboard_pending:
+		_leaderboard_pending = score
+	# Если таймер не запущен, отправляем сразу и стартуем таймер.
+	if _leaderboard_timer <= 0.0:
+		_flush_leaderboard()
+		_leaderboard_timer = 5.0
+
+## Внутренний таймер: вызывать каждый кадр из main.gd.
+func _tick_leaderboard(delta: float) -> void:
+	if _leaderboard_timer > 0.0:
+		_leaderboard_timer -= delta
+		if _leaderboard_timer <= 0.0 and _leaderboard_pending > 0:
+			_flush_leaderboard()
+
+func _flush_leaderboard() -> void:
+	if _leaderboard_pending > 0:
+		Ya.submit_score("best_throw", _leaderboard_pending)
+		_leaderboard_pending = 0
+
 
 # ============ T23: Путь Б — резервная межстраничная реклама ============
 

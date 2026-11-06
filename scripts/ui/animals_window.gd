@@ -4,6 +4,7 @@ extends WindowBase
 ## (иконка, название цветом редкости, мутация и размер, доход, «Взять», «Продать $N»),
 ## внизу «Разместить лучших» и «Продать лишних».
 ## «Взять» закрывает окно и отдаёт зверя в руки через сигнал `take_requested` (его ловит CarryController.take).
+## T24: показывает «Рекорд: N м» под счётчиком зверей.
 
 signal take_requested(uid: int)
 
@@ -11,6 +12,7 @@ const LIST_MIN_H: float = 120.0
 const BOTTOM_H: float = 64.0
 
 var _count_label: Label
+var _record_label: Label          # T24: рекорд лучшего броска
 var _scroll: ScrollContainer
 var _list: VBoxContainer
 var _empty_label: Label
@@ -25,6 +27,10 @@ func _init() -> void:
 func _build_body() -> void:
 	_count_label = UiStyle.outline_label("", 30, 5, UiStyle.COLOR_TEXT)
 	body.add_child(_count_label)
+
+	# T24: рекорд лучшего броска
+	_record_label = UiStyle.outline_label("", 24, 4, AnimalRow.COLOR_SUB)
+	body.add_child(_record_label)
 
 	_scroll = ScrollContainer.new()
 	_scroll.name = "Scroll"
@@ -61,6 +67,8 @@ func _build_body() -> void:
 		Game.inventory_changed.connect(_on_game_changed)
 	if not Game.slots_changed.is_connected(_on_game_changed):
 		Game.slots_changed.connect(_on_game_changed)
+	# T24: обновляем текст рекорда при смене языка
+	Loc.language_changed.connect(_on_language_changed)
 
 
 ## Перестраивает список. Прокрутка сохраняется, чтобы после продажи список не прыгал вверх.
@@ -81,6 +89,13 @@ func refresh() -> void:
 		_list.add_child(row)
 
 	_count_label.text = Loc.t("animals_on_plot") % [Game.placed_count(), Game.total_slots()]
+	# T24: обновляем рекорд лучшего броска
+	var best_throw: int = int(Save.data.get("best_throw", 0))
+	if best_throw > 0:
+		_record_label.text = Loc.t("best_throw_label") % best_throw
+		_record_label.visible = true
+	else:
+		_record_label.visible = false
 	_empty_label.text = Loc.t("animals_empty")
 	_empty_label.visible = animals.is_empty()
 	_scroll.visible = not animals.is_empty()
@@ -128,3 +143,10 @@ func _on_sell_extras() -> void:
 		show_toast(Loc.t("sold_toast") % NumFmt.money(got))
 	else:
 		show_toast(Loc.t("animals_no_extras"))
+
+# T24: обновляем текст рекорда при смене языка
+func _on_language_changed() -> void:
+	if _record_label != null and _record_label.visible:
+		var best_throw: int = int(Save.data.get("best_throw", 0))
+		if best_throw > 0:
+			_record_label.text = Loc.t("best_throw_label") % best_throw
