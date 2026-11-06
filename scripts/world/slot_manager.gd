@@ -94,7 +94,8 @@ func refresh() -> void:
 		if view == null:
 			continue
 		var saved: Array = a.get("pos", [])
-		if saved.size() >= 2:
+		# Гуляющего зверя не трогаем: иначе, когда другой зверь дошёл до цели и сохранился, он прыгнул бы на старое место.
+		if saved.size() >= 2 and not view.is_running():
 			view.position = Vector3(float(saved[0]), 0.0, float(saved[1]))
 	_initialized = true
 

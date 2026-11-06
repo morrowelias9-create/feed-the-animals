@@ -9,7 +9,8 @@ signal strength_changed(value: int)
 signal inventory_changed          # список зверей или их размещение изменились
 signal slots_changed
 signal food_changed               # куплена или выбрана еда
-signal bar_changed
+signal bar_changed               # куплен турник
+signal xp_changed                # опыт силы изменился (шкала тренировки, T14)
 signal animal_received(animal: Dictionary)   # {uid, animal_id, variant, placed}, у сразу проданного ещё sold = 1
 signal boost_changed
 signal notice(key: String, args: Array)      # короткие сообщения игроку
@@ -53,6 +54,44 @@ func money() -> float:
 
 func strength() -> int:
 	return _i("strength")
+
+
+## Накопленный опыт до следующего уровня силы.
+func strength_xp() -> float:
+	return _f("strength_xp")
+
+
+## Уровень расширения загона (0-8): нужен ходьбе игрока внутри загона.
+func slots_level() -> int:
+	return _i("slots_level")
+
+
+## Индекс лучшего купленного турника (он один стоит в мире), -1 если турников нет.
+func best_bar() -> int:
+	return bars_owned() - 1
+
+
+## Сколько турников куплено (0-10). В мире стоит только лучший, он заменяет прежний на том же месте.
+func bars_owned() -> int:
+	return clampi(_i("bars_owned"), 0, UpgradeData.BARS.size())
+
+
+## Цена следующего турника, -1 если куплены все.
+func next_bar_price() -> float:
+	var next: int = bars_owned()
+	if next >= UpgradeData.BARS.size():
+		return -1.0
+	return float(UpgradeData.BARS[next]["price"])
+
+
+## Последняя купленная еда (индекс 0-14).
+func food_unlocked() -> int:
+	return _i("food_unlocked")
+
+
+## Выбранная еда (индекс 0-14).
+func food_selected() -> int:
+	return _i("food_selected")
 
 
 func total_slots() -> int:
@@ -139,6 +178,31 @@ func tick(delta: float) -> void:
 func add_xp(x: float) -> void:
 	if is_nan(x) or x <= 0.0:
 		return
+	_apply_xp(x)
+	Save.save_data()
+
+
+## Повторения на турнике (T14): count повторений турника bar_index дают BARS[i].xp * count опыта,
+## счётчик reps растёт. Турник должен быть куплен. Возвращает полученный опыт (0, если нельзя).
+## Сохраняет только при повышении силы: повторения идут каждые 0.5 с, их хватит записать автосохранением
+## или вызовом save_progress() в конце тренировки.
+func train_reps(bar_index: int, count: int = 1) -> float:
+	if count <= 0 or bar_index < 0 or bar_index >= bars_owned():
+		return 0.0
+	var gained: float = float(UpgradeData.BARS[bar_index]["xp"]) * float(count)
+	Save.data["reps"] = _i("reps") + count
+	if _apply_xp(gained):
+		Save.save_data()
+	return gained
+
+
+## Записать прогресс сейчас (конец тренировки).
+func save_progress() -> void:
+	Save.save_data()
+
+
+# Начисляет опыт без сохранения. true, если сила выросла.
+func _apply_xp(x: float) -> bool:
 	var xp: float = _f("strength_xp") + x
 	var s: int = _i("strength")
 	var leveled: bool = false
@@ -155,7 +219,8 @@ func add_xp(x: float) -> void:
 	Save.data["strength"] = s
 	if leveled:
 		strength_changed.emit(s)
-	Save.save_data()
+	xp_changed.emit()
+	return leveled
 
 
 # ---------- Звери ----------
@@ -458,14 +523,14 @@ func select_food(tier: int) -> void:
 	Save.save_data()
 
 
-## Покупает следующий турник.
+## Покупает следующий турник по порядку (места 0-9). Первый стоит $1 (BARS[0]), на старте турников нет.
 func buy_bar() -> bool:
-	var next: int = _i("bar_tier") + 1
+	var next: int = bars_owned()
 	if next >= UpgradeData.BARS.size():
 		return false
 	if not _take(float(UpgradeData.BARS[next]["price"])):
 		return false
-	Save.data["bar_tier"] = next
+	Save.data["bars_owned"] = next + 1
 	bar_changed.emit()
 	Save.save_data()
 	return true

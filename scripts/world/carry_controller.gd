@@ -1,6 +1,7 @@
 class_name CarryController
 extends Node3D
 ## Перенос пойманного зверя, маркер свободного размещения и возврат в рюкзак.
+## Маркер и кнопка «Поставить» работают только пока игрок стоит внутри своего загона; снаружи подсказка зовёт зайти.
 
 const MARKER_RADIUS := 0.8
 const HELD_HEIGHT := 0.55
@@ -19,6 +20,7 @@ var _marker: MeshInstance3D
 var _put_button: Button
 var _back_button: Button
 var _message: Label
+var _inside: bool = false              # игрок сейчас в своём загоне
 
 
 func _ready() -> void:
@@ -66,11 +68,10 @@ func take(uid: int) -> void:
 		if player.avatar != null:
 			player.avatar.set_carrying(true)
 	_attach_held(animal)
-	_marker.visible = true
 	_put_button.visible = true
 	_back_button.visible = true
 	_message.visible = true
-	_message.text = Loc.t("carry_hint")
+	_set_inside(_player_in_pen(), true)
 	if hud != null:
 		hud.set_mode(false)
 		hud.set_throw_meter_enabled(false)
@@ -101,6 +102,9 @@ func put_away() -> void:
 
 func place_at_cursor() -> bool:
 	if not is_carrying():
+		return false
+	if not _player_in_pen():
+		_show_message(Loc.t("carry_enter_pen"))
 		return false
 	if Game.placed_count() >= Game.total_slots():
 		_show_message("Загон полон")
@@ -136,9 +140,24 @@ func place_at_cursor() -> bool:
 func _process(_delta: float) -> void:
 	if not is_carrying():
 		return
-	var point := _target_point()
-	_marker.position = point + Vector3.UP * 0.04
+	_set_inside(_player_in_pen())
+	if _inside:
+		_marker.position = _target_point() + Vector3.UP * 0.04
 
+
+# Игрок стоит внутри своего загона (за передней оградой).
+func _player_in_pen() -> bool:
+	return player != null and WorldLayout.in_player_pen(player.position, Game.slots_level())
+
+
+# Маркер и «Поставить» доступны только в загоне; текст подсказки меняется вместе с этим.
+func _set_inside(value: bool, force: bool = false) -> void:
+	if value == _inside and not force:
+		return
+	_inside = value
+	_marker.visible = value
+	_put_button.disabled = not value
+	_message.text = Loc.t("carry_hint") if value else Loc.t("carry_enter_pen")
 
 
 func _target_point() -> Vector3:

@@ -9,12 +9,17 @@ var _router: InputRouter
 var _hud: Hud
 var _throw_controller: ThrowController
 var _slot_manager: SlotManager
+var _pen_wander: PenWander
 var _carry_controller: CarryController
 var _hotbar: Hotbar
 var _window_layer: CanvasLayer
 var _animals_window: AnimalsWindow
 var _sell_window: SellWindow
 var _sell_stand: SellStand
+var _food_window: FoodWindow
+var _food_tent: FoodTent
+var _bar_controller: BarController
+var _buy_pad: BuyPad
 
 
 func _ready() -> void:
@@ -93,6 +98,12 @@ func _setup_throw() -> void:
 	_slot_manager.throw_controller = _throw_controller
 	_world.add_child(_slot_manager)
 
+	# Прогулки зверей по загону (T11c): без этого узла звери стоят на месте.
+	_pen_wander = PenWander.new()
+	_pen_wander.name = "PenWander"
+	_pen_wander.manager = _slot_manager
+	_world.add_child(_pen_wander)
+
 	_carry_controller = CarryController.new()
 	_carry_controller.name = "CarryController"
 	_carry_controller.player = _player
@@ -131,10 +142,16 @@ func _setup_windows() -> void:
 	_sell_window.name = "SellWindow"
 	_window_layer.add_child(_sell_window)
 
-	for window in [_animals_window, _sell_window]:
+	# Палатка еды (T15): окно с карточками еды, пока нет магазина за яны кнопка «Магазин» открывает его же.
+	_food_window = FoodWindow.new()
+	_food_window.name = "FoodWindow"
+	_window_layer.add_child(_food_window)
+
+	for window in [_animals_window, _sell_window, _food_window]:
 		(window as WindowBase).opened.connect(_on_window_opened)
 		(window as WindowBase).closed.connect(_on_window_closed)
 	_hud.animals_pressed.connect(_on_animals_pressed)
+	_hud.shop_pressed.connect(_on_shop_pressed)
 
 	_sell_stand = SellStand.new()
 	_sell_stand.name = "SellStand"
@@ -144,12 +161,47 @@ func _setup_windows() -> void:
 	_sell_stand.window = _sell_window
 	_world.add_child(_sell_stand)
 
+	_food_tent = FoodTent.new()
+	_food_tent.name = "FoodTent"
+	_food_tent.player = _player
+	_food_tent.throw_controller = _throw_controller
+	_food_tent.carry_controller = _carry_controller
+	_food_tent.window = _food_window
+	_world.add_child(_food_tent)
+	_setup_training()
+
+
+# Турники и тренировка (T14), диск покупки турников на полу (T15a).
+func _setup_training() -> void:
+	_bar_controller = BarController.new()
+	_bar_controller.name = "BarController"
+	_bar_controller.player = _player
+	_bar_controller.camera_rig = _camera_rig
+	_bar_controller.hud = _hud
+	_bar_controller.router = _router
+	_bar_controller.throw_controller = _throw_controller
+	_bar_controller.carry_controller = _carry_controller
+	_world.add_child(_bar_controller)
+
+	_buy_pad = BuyPad.new()
+	_buy_pad.name = "BuyPad"
+	_buy_pad.player = _player
+	_buy_pad.throw_controller = _throw_controller
+	_world.add_child(_buy_pad)
+
 
 # Кнопка «Животные»: не во время броска, не с зверем в руках и не поверх другого окна.
 func _on_animals_pressed() -> void:
-	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open():
+	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open() or _food_window.is_open():
 		return
 	_animals_window.open()
+
+
+# Кнопка «Магазин»: до T24a открывает окно еды (T15), с теми же условиями, что у «Животных».
+func _on_shop_pressed() -> void:
+	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open() or _animals_window.is_open():
+		return
+	_food_window.open()
 
 
 # Пока окно открыто, игрок стоит на месте и ввод по миру не работает.

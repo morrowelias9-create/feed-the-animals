@@ -6,6 +6,9 @@ extends Control
 signal index_pressed
 signal shop_pressed
 signal animals_pressed
+signal bonus_pressed               # T14: тап по пузырю-бонусу на турнике
+
+const BONUS_SIZE: float = 96.0
 
 var _full: bool = true
 var _throw_meter_enabled: bool = true
@@ -17,6 +20,10 @@ var _money: Label
 var _income: Label
 var _buttons: Dictionary = {}
 var throw_meter: ThrowMeter
+var xp_bar: XpBar                       # T14: шкала «Уровень N x/y», видна только на тренировке
+var _bonus: Button                      # T14: пузырь-бонус 96x96 в экранных координатах
+var _training: bool = false
+var _bonus_shown: bool = false
 
 
 func _ready() -> void:
@@ -24,6 +31,7 @@ func _ready() -> void:
 	_build_stats()
 	_build_buttons()
 	_build_throw_meter()
+	_build_training()
 	_refresh()
 	if not Game.money_changed.is_connected(_on_money_changed):
 		Game.money_changed.connect(_on_money_changed)
@@ -143,6 +151,85 @@ func _build_buttons() -> void:
 	_buttons["animals"] = animals_button
 
 
+# ---------- Тренировка на турнике (T14) ----------
+
+## Включает и выключает шкалу опыта; при выключении пузырь тоже прячется.
+func set_training(active: bool) -> void:
+	_training = active
+	if not active:
+		_bonus_shown = false
+	_update_visibility()
+
+
+## Показывает пузырь-бонус с «+N» повторений.
+func show_bonus(reps: int) -> void:
+	_bonus.text = "+%d" % reps
+	_bonus_shown = true
+	_update_visibility()
+
+
+func hide_bonus() -> void:
+	_bonus_shown = false
+	_update_visibility()
+
+
+## Ставит центр пузыря в точку экрана (не выходит за края).
+func move_bonus(screen_pos: Vector2) -> void:
+	var half: Vector2 = Vector2(BONUS_SIZE, BONUS_SIZE) * 0.5
+	var view: Vector2 = get_viewport_rect().size
+	_bonus.global_position = screen_pos.clamp(half, view - half) - half
+
+
+func bonus_center() -> Vector2:
+	return _bonus.global_position + Vector2(BONUS_SIZE, BONUS_SIZE) * 0.5
+
+
+## Всплывающее «+N» в точке экрана: поднимается и гаснет.
+func popup_at(text: String, screen_pos: Vector2, color: Color = UiStyle.COLOR_STRENGTH) -> void:
+	var label: Label = UiStyle.outline_label(text, 44, 7, color)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(label)
+	label.size = Vector2(160.0, 50.0)
+	label.global_position = screen_pos - label.size * 0.5
+	var tween: Tween = label.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(label, "position:y", label.position.y - 70.0, 0.9)
+	tween.tween_property(label, "modulate:a", 0.0, 0.6).set_delay(0.3)
+	tween.chain().tween_callback(label.queue_free)
+
+
+func _build_training() -> void:
+	xp_bar = XpBar.new()
+	xp_bar.name = "XpBar"
+	xp_bar.visible = false
+	add_child(xp_bar)
+
+	_bonus = Button.new()
+	_bonus.name = "BonusBubble"
+	_bonus.custom_minimum_size = Vector2(BONUS_SIZE, BONUS_SIZE)
+	_bonus.size = Vector2(BONUS_SIZE, BONUS_SIZE)
+	_bonus.focus_mode = Control.FOCUS_NONE
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = Color("#FFC83D")
+	style.set_border_width_all(6)
+	style.border_color = Color("#7A4A00")
+	style.set_corner_radius_all(int(BONUS_SIZE / 2.0))
+	for state in ["normal", "hover", "pressed", "focus"]:
+		_bonus.add_theme_stylebox_override(state, style)
+	_bonus.add_theme_font_size_override("font_size", 40)
+	for color_name in ["font_color", "font_hover_color", "font_pressed_color"]:
+		_bonus.add_theme_color_override(color_name, UiStyle.COLOR_TEXT)
+	_bonus.add_theme_color_override("font_outline_color", UiStyle.COLOR_OUTLINE)
+	_bonus.add_theme_constant_override("outline_size", 6)
+	_bonus.visible = false
+	_bonus.pressed.connect(_on_bonus_pressed)
+	add_child(_bonus)
+
+
+func _on_bonus_pressed() -> void:
+	bonus_pressed.emit()
+
+
 func _refresh() -> void:
 	_strength.text = str(Game.strength())
 	_money.text = NumFmt.money(Game.money())
@@ -169,6 +256,10 @@ func _update_visibility() -> void:
 	for key in _buttons:
 		var button: Button = _buttons[key]
 		button.visible = _full
+	if xp_bar != null:
+		xp_bar.visible = _training and _full
+	if _bonus != null:
+		_bonus.visible = _bonus_shown and _full
 
 
 func _on_index_pressed() -> void:

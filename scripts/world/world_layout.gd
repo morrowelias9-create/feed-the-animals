@@ -41,9 +41,20 @@ const SLOT_COUNT: int = 16
 const SLOT_COL_X: Array[float] = [-2.75, 2.75, -8.25, 8.25]   # от центра участка
 const SLOT_ROW_Z: Array[float] = [28.5, 33.5, 38.5, 43.5]
 
-# Турник и табличка расширения (перед загоном)
+# Турник (T14): одно место перед своим загоном, новый турник заменяет старый на этом же месте.
+# Зона тренировки 6x6 м. Диск покупки (T15a) всегда в одной точке рядом с турником.
 const BAR_X: float = -7.0
 const BAR_Z: float = 18.0
+const BAR_ZONE_SIZE: float = 6.0
+const BUY_PAD_X: float = -7.0
+const BUY_PAD_Z: float = 12.5
+const BUY_PAD_RADIUS: float = 1.2
+
+# Проход в свой загон (игрок ходит внутри, как и звери): только через проём в передней ограде.
+const PEN_WALK_MARGIN: float = 0.5       # отступ от ограды при ходьбе
+const PEN_INNER_MARGIN: float = 0.6      # отступ от боковых и задней оград внутри загона
+
+# Табличка расширения (перед загоном)
 const SIGN_X: float = 7.0
 const SIGN_Z: float = 18.0
 
@@ -51,6 +62,11 @@ const SIGN_Z: float = 18.0
 const SELL_STAND_X: float = -17.0
 const SELL_STAND_Z: float = 18.0
 const SELL_ZONE_SIZE: float = 3.0
+
+# Палатка еды (T15): зеркально лавке, справа от загона игрока. Зона входа 3x3 м вокруг точки.
+const FOOD_TENT_X: float = 17.0
+const FOOD_TENT_Z: float = 18.0
+const FOOD_ZONE_SIZE: float = 3.0
 
 # Арки с названиями зон и их подписи
 const ARCH_BEAM_Y: float = 6.0
@@ -115,8 +131,48 @@ static func slot_position(i: int) -> Vector3:
 	return Vector3(plot_center_x(PLAYER_PLOT) + SLOT_COL_X[idx % 4], 0.0, SLOT_ROW_Z[floori(idx / 4.0)])
 
 
+## Место турника (одно, перед своим загоном).
 static func bar_position() -> Vector3:
 	return Vector3(BAR_X, 0.0, BAR_Z)
+
+
+## Зона тренировки: квадрат 6x6 м вокруг места турника (x и z мира).
+static func bar_zone_rect() -> Rect2:
+	var half: float = BAR_ZONE_SIZE / 2.0
+	return Rect2(Vector2(BAR_X - half, BAR_Z - half), Vector2(BAR_ZONE_SIZE, BAR_ZONE_SIZE))
+
+
+## Центр диска покупки турника (T15a): всегда на одном месте.
+static func buy_pad_position() -> Vector3:
+	return Vector3(BUY_PAD_X, 0.0, BUY_PAD_Z)
+
+
+## Следующая позиция игрока с учётом границ: двор перед загонами и свой загон внутри.
+## В загон ведёт только проём в передней ограде; внутри игрок держится в пределах ограды (level это slots_level).
+static func clamp_player(prev: Vector3, next: Vector3, level: int = 0) -> Vector3:
+	var pos: Vector3 = Vector3(next.x, 0.0, next.z)
+	var half_x: float = YARD_HALF_W - PLAYER_MARGIN
+	pos.x = clampf(pos.x, -half_x, half_x)
+	pos.z = maxf(pos.z, PLAYER_Z_MIN)
+	var pen: Rect2 = pen_rect_for_level(level)
+	var gate_half: float = PEN_GATE_W / 2.0 - PEN_WALK_MARGIN
+	var z_out: float = PLOT_Z_FRONT - PEN_WALK_MARGIN
+	var z_in: float = PLOT_Z_FRONT + PEN_WALK_MARGIN
+	var in_gate: bool = absf(pos.x - pen.get_center().x) <= gate_half
+	var entering: bool = prev.z <= z_out and pos.z > z_out
+	var leaving: bool = prev.z >= z_in and pos.z < z_in
+	var in_band: bool = pos.z > z_out and pos.z < z_in
+	if (entering or leaving or in_band) and not in_gate:
+		pos.z = z_out if prev.z < PLOT_Z_FRONT else z_in
+	if pos.z >= z_in:
+		pos.x = clampf(pos.x, pen.position.x + PEN_INNER_MARGIN, pen.end.x - PEN_INNER_MARGIN)
+		pos.z = minf(pos.z, pen.end.y - PEN_INNER_MARGIN)
+	return pos
+
+
+## Внутри ли точка своего загона (x и z мира): для маркера размещения зверя.
+static func in_player_pen(point: Vector3, level: int = 0) -> bool:
+	return pen_rect_for_level(level).has_point(Vector2(point.x, point.z))
 
 
 static func sign_position() -> Vector3:
@@ -132,6 +188,17 @@ static func sell_stand_position() -> Vector3:
 static func sell_zone_rect() -> Rect2:
 	var half: float = SELL_ZONE_SIZE / 2.0
 	return Rect2(Vector2(SELL_STAND_X - half, SELL_STAND_Z - half), Vector2(SELL_ZONE_SIZE, SELL_ZONE_SIZE))
+
+
+## Центр палатки еды (T15).
+static func food_tent_position() -> Vector3:
+	return Vector3(FOOD_TENT_X, 0.0, FOOD_TENT_Z)
+
+
+## Зона входа палатки 3x3 м: x и z мира.
+static func food_zone_rect() -> Rect2:
+	var half: float = FOOD_ZONE_SIZE / 2.0
+	return Rect2(Vector2(FOOD_TENT_X - half, FOOD_TENT_Z - half), Vector2(FOOD_ZONE_SIZE, FOOD_ZONE_SIZE))
 
 
 ## Высота пола коридора (обрыв вниз от пола двора).

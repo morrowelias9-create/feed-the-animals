@@ -1,6 +1,6 @@
 class_name Player
 extends Node3D
-## Игрок без физики: ходит по участку, смотрит по направлению движения, не выходит за границы.
+## Игрок без физики: ходит по двору и по своему загону, смотрит по направлению движения, не выходит за границы.
 ## Ввод приходит из InputRouter: клавиатура или джойстик.
 
 const SPEED: float = 7.0
@@ -52,10 +52,6 @@ func _face(direction: Vector3, delta: float) -> void:
 	rotation.y = _facing
 
 
+# Двор перед загонами и свой загон внутри (вход только через проём в ограде, WorldLayout.clamp_player).
 func _move(direction: Vector3, step: float) -> void:
-	var bounds: Rect2 = WorldLayout.player_bounds()
-	var next: Vector3 = position + direction * step
-	next.x = clampf(next.x, bounds.position.x, bounds.end.x)
-	next.z = clampf(next.z, bounds.position.y, bounds.end.y)
-	next.y = 0.0
-	position = next
+	position = WorldLayout.clamp_player(position, position + direction * step, Game.slots_level())

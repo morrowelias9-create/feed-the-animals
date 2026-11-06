@@ -18,6 +18,7 @@ var _size_m: float = 1.2
 var _signs_visible: bool = true
 var _behavior: String = "idle"
 var _target: Vector3 = Vector3.ZERO
+var _run_from: Vector3 = Vector3.ZERO   # откуда зверь пошёл: ход идёт по прямой с равной скоростью
 var _run_t: float = 0.0
 var _run_dur: float = 0.0
 var _wander_bob_t: float = 0.0
@@ -88,6 +89,7 @@ func run_to(target: Vector3, duration: float) -> void:
 	if _behavior != "run_to":
 		_behavior = "run_to"
 		_target = target
+		_run_from = global_position
 		_run_t = 0.0
 		_run_dur = duration
 
@@ -100,7 +102,7 @@ func _process(delta: float) -> void:
 	if _behavior == "run_to":
 		_run_t += delta
 		var k: float = clampf(_run_t / maxf(_run_dur, 0.001), 0.0, 1.0)
-		global_position = global_position.lerp(_target, k)
+		global_position = _run_from.lerp(_target, k)   # равномерный шаг, а не догоняющий (раньше зверь «пролетал» конец пути)
 		var d: Vector3 = _target - global_position
 		if d.length() > 0.001:
 			var target_yaw := atan2(-d.x, -d.z)

@@ -49,5 +49,12 @@ const REVEAL_SIZE_POP_S: float = 0.25   # «вспухает» (масштаб x
 const SIZE_GROWTH: float = 0.15         # амплитуда вспухания: масштаб x(1 + SIZE_GROWTH) и обратно
 
 # Тренировка и эффекты
-const BAR_REP_INTERVAL: float = 0.25 # минимальный интервал между повторениями, секунд
+const BAR_REP_INTERVAL: float = 0.25 # минимальный интервал между повторениями, секунд (старое, не используется с T14)
+const BAR_REP_S: float = 0.5         # T14: повторения на турнике идут сами раз в столько секунд
+const BAR_BONUS_REPS: int = 3        # T14: сколько повторений даёт тап по пузырю-бонусу
+const BAR_BONUS_MIN_S: float = 4.0   # T14: бонус появляется через 4-6 секунд после начала и после прошлого
+const BAR_BONUS_MAX_S: float = 6.0
+const BAR_BONUS_LIFE_S: float = 2.5  # T14: пузырь исчезает через столько секунд
+const BAR_IDLE_INPUT: float = 0.1    # T14: тренировка идёт, пока игрок не двигает джойстик (длина вектора ввода меньше)
+const BAR_CENTER_SPEED: float = 5.0  # T14: м/с, с которой игрок встаёт точно под перекладину
 const FX_ENABLED: bool = true        # частицы и вспышки

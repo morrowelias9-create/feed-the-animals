@@ -36,6 +36,7 @@ const T := {
 	"carry_hint": {"ru": "Выбери место и нажми «Поставить»", "en": "Choose a spot and press “Place”"},
 	"carry_place": {"ru": "Поставить", "en": "Place"},
 	"carry_back": {"ru": "В рюкзак", "en": "Backpack"},
+	"carry_enter_pen": {"ru": "Зайди в загон, чтобы поставить зверя", "en": "Enter the pen to place the animal"},
 
 	# Окно «Животные» (T12) и лавка (T12a)
 	"animals_title": {"ru": "Животные", "en": "Animals"},
@@ -137,6 +138,22 @@ const T := {
 	"bar_ice": {"ru": "Ледяной турник", "en": "Ice bar"},
 	"bar_star": {"ru": "Звёздный турник", "en": "Star bar"},
 	"bar_blue": {"ru": "Синий турник", "en": "Blue bar"},
+	"bar_label": {"ru": "%s\n+%d опыта", "en": "%s\n+%d XP"},
+	"bar_buy_caption": {"ru": "Купить: %s (+%d)", "en": "Buy: %s (+%d)"},
+	"xp_level": {"ru": "Уровень %d  %d/%d", "en": "Level %d  %d/%d"},
+
+	# Палатка еды (T15)
+	"food_title": {"ru": "Палатка еды", "en": "Food tent"},
+	"food_tent_label": {"ru": "Еда", "en": "Food"},
+	"food_zone": {"ru": "Зона %d", "en": "Zone %d"},
+	"food_aims": {"ru": "Целится в: ранг %d зоны %d", "en": "Aims at: rank %d of zone %d"},
+	"food_buy": {"ru": "Купить", "en": "Buy"},
+	"food_select": {"ru": "Выбрать", "en": "Select"},
+	"food_selected": {"ru": "Выбрано", "en": "Selected"},
+	"food_unknown": {"ru": "???", "en": "???"},
+	"food_bought_toast": {"ru": "Куплено: %s", "en": "Bought: %s"},
+	"food_selected_toast": {"ru": "Выбрано: %s", "en": "Selected: %s"},
+	"food_no_money": {"ru": "Не хватает денег", "en": "Not enough money"},
 
 	# Мутации размера
 	"size_1": {"ru": "Крупный", "en": "Big"},

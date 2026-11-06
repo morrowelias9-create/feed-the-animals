@@ -58,6 +58,8 @@ func _run_all() -> void:
 	_test_slot_manager()
 	print("== T12: окно «Животные» и лавка (логика Game)")
 	_test_sell_logic()
+	print("== T14, T15, T15a: турники и палатка")
+	_test_bars()
 
 	_restore_save(backup)
 	print("")
@@ -417,7 +419,7 @@ func _test_game_money() -> void:
 	_check("spend без денег даёт false", not _game.spend(1.0))
 	_check("buy_food без денег: false, ничего не изменилось",
 		not _game.buy_food(1) and int(_save.data["food_unlocked"]) == 0 and _near(_game.money(), 0.0))
-	_check("buy_bar без денег: false", not _game.buy_bar() and int(_save.data["bar_tier"]) == 0)
+	_check("buy_bar без денег: false", not _game.buy_bar() and int(_save.data["bars_owned"]) == 0)
 	_check("buy_slots без денег: false", not _game.buy_slots() and int(_save.data["slots_level"]) == 0)
 	_game.add_money(-5.0)
 	_check("add_money с отрицательным числом игнорируется", _near(_game.money(), 0.0))
@@ -434,8 +436,8 @@ func _test_game_money() -> void:
 	_check("spend(60) списывает", _game.spend(60.0) and _near(_game.money(), 910.0))
 	_check("buy_slots за 600: слотов становится 6", _game.buy_slots() and _near(_game.money(), 310.0)
 		and _game.total_slots() == 6)
-	_check("buy_bar за 60: турник стальной, деньги 250", _game.buy_bar() and _near(_game.money(), 250.0)
-		and int(_save.data["bar_tier"]) == 1)
+	_check("buy_bar за 1: первый турник куплен, деньги 309", _game.buy_bar() and _near(_game.money(), 309.0)
+		and int(_save.data["bars_owned"]) == 1)
 
 
 func _test_game_animals() -> void:
@@ -633,3 +635,86 @@ func _test_sell_logic() -> void:
 	var placed_lion: Dictionary = _find(int(lion["uid"]))
 	_check("equip_best ставит льва и даёт ему точку в загоне",
 		int(placed_lion["placed"]) == 1 and (placed_lion["pos"] as Array).size() == 2)
+
+
+# ---------- T14, T15, T15a ----------
+
+func _test_bars() -> void:
+	_fresh()
+	_check("Save.DEFAULTS содержит bars_owned и reps", _save.DEFAULTS.has("bars_owned") and _save.DEFAULTS.has("reps"))
+	_check("старт: турников нет, цена первого $1",
+		_game.bars_owned() == 0 and _near(_game.next_bar_price(), 1.0) and _near(float(UpgradeData.BARS[0]["price"]), 1.0))
+	_check("train_reps без турника: 0 опыта, ничего не меняется",
+		_near(_game.train_reps(0, 1), 0.0) and _near(_game.strength_xp(), 0.0) and int(_save.data["reps"]) == 0)
+	_check("buy_bar без денег: false", not _game.buy_bar() and _game.bars_owned() == 0)
+	_game.add_money(1.0)
+	_check("первый турник за $1: деньги 0, куплено 1", _game.buy_bar() and _near(_game.money(), 0.0) and _game.bars_owned() == 1)
+	_check("второй турник стоит 60, без денег false", not _game.buy_bar() and _near(_game.next_bar_price(), 60.0))
+	var gained: float = _game.train_reps(0, 3)
+	_check("3 повторения первого турника: +3 опыта, reps 3",
+		_near(gained, 3.0) and _near(_game.strength_xp(), 3.0) and int(_save.data["reps"]) == 3)
+	_check("турник 1 не куплен: train_reps(1) даёт 0", _near(_game.train_reps(1, 1), 0.0))
+	_game.add_money(60.0)
+	_check("второй турник куплен, даёт x2 опыта", _game.buy_bar() and _game.bars_owned() == 2 and _near(_game.train_reps(1, 1), 2.0))
+	var strength0: int = _game.strength()
+	var guard: int = 0
+	while _game.strength() == strength0 and guard < 100:
+		_game.train_reps(1, 1)
+		guard += 1
+	_check("повторения повышают силу, лишний опыт переносится",
+		_game.strength() == strength0 + 1 and _game.strength_xp() < Economy.xp_needed(strength0 + 1) and _game.strength_xp() >= 0.0)
+
+	_fresh()
+	_game.add_money(1.0e13)
+	var bought: int = 0
+	while bought < 20 and _game.buy_bar():
+		bought += 1
+	_check("куплено ровно 10 турников, одиннадцатый нельзя, цена -1",
+		bought == 10 and _game.bars_owned() == 10 and not _game.buy_bar() and _game.next_bar_price() < 0.0)
+	_check("последний турник даёт 512 опыта за повторение", _near(_game.train_reps(9, 1), 512.0))
+
+	_check("лучший турник при всех купленных: индекс 9", _game.best_bar() == 9)
+	_fresh()
+	_check("best_bar без турников -1", _game.best_bar() == -1)
+
+	var bar_zone: Rect2 = WorldLayout.bar_zone_rect()
+	var pad: Vector3 = WorldLayout.buy_pad_position()
+	var pad_rect: Rect2 = Rect2(Vector2(pad.x - WorldLayout.BUY_PAD_RADIUS, pad.z - WorldLayout.BUY_PAD_RADIUS),
+		Vector2(2.0 * WorldLayout.BUY_PAD_RADIUS, 2.0 * WorldLayout.BUY_PAD_RADIUS))
+	_check("турник один, перед своим загоном внутри двора",
+		WorldLayout.player_bounds().encloses(bar_zone) and bar_zone.get_center().x > WorldLayout.plot_rect(WorldLayout.PLAYER_PLOT).position.x - 5.0
+		and bar_zone.get_center().x < WorldLayout.plot_rect(WorldLayout.PLAYER_PLOT).end.x)
+	_check("зона турника не пересекается с лавкой и палаткой",
+		not bar_zone.intersects(WorldLayout.sell_zone_rect()) and not bar_zone.intersects(WorldLayout.food_zone_rect()))
+	_check("диск покупки у турника: вне его зоны, не в лавке и не в палатке",
+		not pad_rect.intersects(bar_zone) and not pad_rect.intersects(WorldLayout.sell_zone_rect())
+		and not pad_rect.intersects(WorldLayout.food_zone_rect()) and WorldLayout.player_bounds().encloses(pad_rect))
+	_check("палатка еды зеркальна лавке",
+		_near(WorldLayout.food_tent_position().x, -WorldLayout.sell_stand_position().x))
+	var colors_ok: bool = true
+	for b in UpgradeData.BARS:
+		if not b.has("color") or not b.has("name_key"):
+			colors_ok = false
+	_check("у каждого турника есть цвет и ключ названия", colors_ok)
+
+	# Ходьба по двору и по своему загону (вход только через проём).
+	var pen: Rect2 = WorldLayout.pen_rect_for_level(0)
+	var cx: float = pen.get_center().x
+	var in_gate: Vector3 = WorldLayout.clamp_player(Vector3(cx, 0.0, 20.0), Vector3(cx, 0.0, 30.0), 0)
+	_check("через проём можно зайти в загон", _near(in_gate.z, 30.0) and _near(in_gate.x, cx))
+	var by_fence: Vector3 = WorldLayout.clamp_player(Vector3(-30.0, 0.0, 25.0), Vector3(-30.0, 0.0, 27.0), 0)
+	_check("мимо проёма в загон не пройти (стоит у ограды)", by_fence.z < WorldLayout.PLOT_Z_FRONT)
+	var side_gate: Vector3 = WorldLayout.clamp_player(Vector3(8.0, 0.0, 25.0), Vector3(8.0, 0.0, 28.0), 0)
+	_check("у боковой части передней ограды тоже не пройти", side_gate.z < WorldLayout.PLOT_Z_FRONT)
+	var leave_fence: Vector3 = WorldLayout.clamp_player(Vector3(8.0, 0.0, 28.0), Vector3(8.0, 0.0, 20.0), 0)
+	_check("из загона наружу только через проём", leave_fence.z > WorldLayout.PLOT_Z_FRONT)
+	var leave_gate: Vector3 = WorldLayout.clamp_player(Vector3(cx, 0.0, 28.0), Vector3(cx, 0.0, 20.0), 0)
+	_check("из загона через проём можно выйти", _near(leave_gate.z, 20.0))
+	var side: Vector3 = WorldLayout.clamp_player(Vector3(0.0, 0.0, 30.0), Vector3(50.0, 0.0, 30.0), 0)
+	_check("внутри загона игрок не выходит за боковую ограду", side.x <= pen.end.x - WorldLayout.PEN_INNER_MARGIN + 0.0001 and side.x > 0.0)
+	var back: Vector3 = WorldLayout.clamp_player(Vector3(0.0, 0.0, 40.0), Vector3(0.0, 0.0, 200.0), 0)
+	_check("внутри загона игрок не выходит за заднюю ограду", back.z <= pen.end.y - WorldLayout.PEN_INNER_MARGIN + 0.0001)
+	var yard: Vector3 = WorldLayout.clamp_player(Vector3(0.0, 0.0, 10.0), Vector3(500.0, 0.0, -50.0), 0)
+	_check("двор: игрок не выходит за стены и за линию z = 0", yard.x <= WorldLayout.YARD_HALF_W and yard.z >= 0.0)
+	_check("in_player_pen: центр загона да, двор перед ним нет",
+		WorldLayout.in_player_pen(Vector3(0.0, 0.0, 35.0), 0) and not WorldLayout.in_player_pen(Vector3(0.0, 0.0, 20.0), 0))

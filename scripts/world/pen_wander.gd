@@ -2,8 +2,10 @@ class_name PenWander
 extends Node
 ## Автономные прогулки размещённых зверей. Переиспользует существующие AnimalView.
 
-const WAIT_MIN := 3.0
-const WAIT_MAX := 7.0
+const WAIT_MIN := 2.0
+const WAIT_MAX := 5.0
+const HOP_MIN := 2.0               # зверь делает короткие шаги по загону, а не бегает через весь
+const HOP_MAX := 5.0
 const SPEED_MIN := 1.0
 const SPEED_MAX := 1.6
 const EDGE_MARGIN := 1.5
@@ -49,7 +51,7 @@ func _process(delta: float) -> void:
 		return
 	for a in Game.placed_animals():
 		var uid := int(a["uid"])
-		var view := manager.view_of(uid)
+		var view: AnimalView = manager.view_of(uid)
 		if view == null:
 			continue
 		if _targets.has(uid):
@@ -67,11 +69,22 @@ func _process(delta: float) -> void:
 		_wait[uid] = float(_wait.get(uid, WAIT_MIN)) - delta
 		if float(_wait[uid]) <= 0.0:
 			var rect := WorldLayout.pen_rect_for_level(int(Save.data.get("slots_level", 0)), EDGE_MARGIN)
-			var target := Vector3(
-				_rng.randf_range(rect.position.x, rect.end.x),
-				0.0,
-				_rng.randf_range(rect.position.y, rect.end.y)
-			)
+			var target: Vector3 = _hop_target(view.position, rect)
 			_targets[uid] = target
 			var duration := maxf(view.position.distance_to(target) / _rng.randf_range(SPEED_MIN, SPEED_MAX), 0.1)
 			view.run_to(target, duration)
+
+
+# Точка в 2-5 м от зверя в случайную сторону, внутри загона. Если упёрся в ограду, идёт в противоположную сторону.
+func _hop_target(from: Vector3, rect: Rect2) -> Vector3:
+	var angle: float = _rng.randf_range(0.0, TAU)
+	var dir: Vector3 = Vector3(cos(angle), 0.0, sin(angle))
+	var step: float = _rng.randf_range(HOP_MIN, HOP_MAX)
+	var target: Vector3 = _clamp_to(from + dir * step, rect)
+	if from.distance_to(target) < 1.0:
+		target = _clamp_to(from - dir * step, rect)
+	return target
+
+
+func _clamp_to(point: Vector3, rect: Rect2) -> Vector3:
+	return Vector3(clampf(point.x, rect.position.x, rect.end.x), 0.0, clampf(point.z, rect.position.y, rect.end.y))

@@ -10,7 +10,8 @@ const DEFAULTS := {
 	"money": 0.0,
 	"strength": 1,
 	"strength_xp": 0.0,
-	"bar_tier": 0,
+	"bar_tier": 0,            # устарело с T14 (поле не удаляем без миграции), вместо него bars_owned
+	"bars_owned": 0,          # T14: сколько турников куплено (0-10), место i занимает i-й турник
 	"food_unlocked": 0,
 	"food_selected": 0,
 	"slots_level": 0,
