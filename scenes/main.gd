@@ -136,7 +136,7 @@ func _setup_throw() -> void:
 	_hotbar.name = "Hotbar"
 	_carry_controller.hotbar = _hotbar
 	_hotbar.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_hotbar.mouse_filter = Control.MOUSE_FILTER_PASS
+	_hotbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud.add_child(_hotbar)
 	_hotbar.animal_selected.connect(_carry_controller.take)
 	_setup_windows()

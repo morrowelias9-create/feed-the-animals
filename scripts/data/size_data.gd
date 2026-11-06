@@ -3,14 +3,6 @@ extends RefCounted
 ## Мутация размера (справочник R3/R4, редакция 3): k = 0 обычный, 1..10 ступени роста.
 ## Доход растёт как SIZE_STEP^(SIZE_POW * k), визуальный масштаб мягче.
 
-const NAMES_RU: Array[String] = [
-	"", "Крупный", "Большой", "Огромный", "Громадный", "Гигант", "Титан", "Колосс", "Исполин",
-]
-const NAMES_EN: Array[String] = [
-	"", "Big", "Large", "Huge", "Massive", "Giant", "Titan", "Colossus", "Behemoth",
-]
-
-
 static func clamp_size(size: int) -> int:
 	return clampi(size, 0, GameConfig.SIZE_MAX)
 
@@ -23,18 +15,18 @@ static func name_key(size: int) -> String:
 	return "size_%d" % mini(k, 8)
 
 
+## Локализованное название ступени (текст лежит в Loc.T: size_1...size_8). Loc берётся из дерева:
+## в тестах с `-s` имя Loc как идентификатор недоступно. Для 0 пустая строка.
 static func name(size: int) -> String:
-	var k: int = clamp_size(size)
-	if k <= 0:
+	var key: String = name_key(size)
+	if key == "":
 		return ""
-	var index: int = mini(k, NAMES_RU.size() - 1)
-	var lang: String = "ru"
 	var loop: MainLoop = Engine.get_main_loop()
 	if loop is SceneTree:
 		var loc: Node = (loop as SceneTree).root.get_node_or_null("Loc")
 		if loc != null:
-			lang = String(loc.get("lang"))
-	return NAMES_EN[index] if lang == "en" else NAMES_RU[index]
+			return String(loc.call("t", key))
+	return key
 
 
 static func income_mult(size: int) -> float:

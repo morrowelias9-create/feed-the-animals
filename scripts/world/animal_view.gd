@@ -34,6 +34,10 @@ var _float_step: int = 0
 func _ready() -> void:
 	_ensure_labels()
 	_update_labels()
+	# Подписи над зверем обновляются при смене языка на лету (Loc берём из дерева, см. _loc).
+	var loc: Node = _loc()
+	if loc != null and not loc.is_connected("language_changed", _update_labels):
+		loc.connect("language_changed", _update_labels)
 
 
 ## Модель, подписи и эффекты: что за зверь, какой вариант, редкость и доход.
@@ -203,9 +207,14 @@ func _update_float(delta: float) -> void:
 
 ## Перевод через автозагрузку Loc из дерева: в тестах с `-s` имя Loc как идентификатор недоступно.
 func _t(key: String) -> String:
+	var loc: Node = _loc()
+	if loc != null:
+		return String(loc.call("t", key))
+	return key
+
+
+func _loc() -> Node:
 	var loop: MainLoop = Engine.get_main_loop()
 	if loop is SceneTree:
-		var loc: Node = (loop as SceneTree).root.get_node_or_null("Loc")
-		if loc != null:
-			return String(loc.call("t", key))
-	return key
+		return (loop as SceneTree).root.get_node_or_null("Loc")
+	return null

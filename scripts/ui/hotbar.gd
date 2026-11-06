@@ -12,10 +12,14 @@ var _uids: Array[int] = []
 
 
 func _ready() -> void:
-	mouse_filter = Control.MOUSE_FILTER_PASS
+	# Корень растянут на весь экран и лежит поверх кнопок HUD: он не должен забирать клики (иначе «Индекс»,
+	# «Магазин» и «Животные» не нажимаются). Иконки зверей внутри остаются нажимаемыми.
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build()
 	if not Game.inventory_changed.is_connected(refresh):
 		Game.inventory_changed.connect(refresh)
+	if not Loc.language_changed.is_connected(refresh):
+		Loc.language_changed.connect(refresh)
 	refresh()
 
 
@@ -51,8 +55,9 @@ func refresh() -> void:
 		if i < _uids.size():
 			var a := Game.animal_by_uid(_uids[i])
 			var id := String(a.get("animal_id", "?"))
-			b.text = id.left(1).to_upper()
-			b.tooltip_text = Loc.t("animal_" + id)
+			var animal_name: String = Loc.t("animal_" + id)
+			b.text = animal_name.left(1).to_upper()
+			b.tooltip_text = animal_name
 			b.modulate = Color.from_hsv(float(abs(id.hash()) % 1000) / 1000.0, 0.55, 1.0)
 			b.visible = true
 		else:

@@ -110,7 +110,7 @@ func _update_tabs() -> void:
 			if found.has(String(a["id"])):
 				zone_found += 1
 		var btn: Button = _tab_buttons[zone_idx]
-		btn.text = Loc.t("index_tab") % [zone_found, 8]
+		btn.text = Loc.t("index_tab") % zone_found
 		# Подсветка текущей вкладки
 		btn.disabled = (zone_idx == _current_zone)
 
@@ -186,65 +186,12 @@ func _build_zone_grid(zone_idx: int) -> void:
 		grid.add_child(card)
 
 func _refresh_zone_grid(zone_idx: int) -> void:
+	# Карточек всего 8: проще пересобрать их целиком, чем править детей по индексам.
 	var grid: GridContainer = _grid_containers[zone_idx]
-	var found: Array = Game._arr("found")
-
-	for i in grid.get_child_count():
-		var card: Control = grid.get_child(i)
-		if not card is PanelContainer:
-			continue
-		var card_vbox: VBoxContainer = card.get_child(0)
-		if card_vbox.get_child_count() < 2:
-			continue
-		var icon: Control = card_vbox.get_child(0)
-		var name_label: Label = card_vbox.get_child(1)
-		# Ранг определяется по порядку в сетке
-		var rank: int = i + 1
-		var animal: Dictionary = AnimalData.at_rank(zone_idx, rank)
-		if animal.is_empty():
-			continue
-		var animal_id: String = String(animal["id"])
-		var is_found: bool = found.has(animal_id)
-
-		if is_found:
-			name_label.text = Loc.t("animal_" + animal_id)
-			name_label.add_theme_color_override("font_color", AnimalData.rarity_color(AnimalData.rarity_of(animal_id)))
-			# Обновляем иконку
-			icon.queue_free()
-			var new_icon: Control = _make_card_icon(animal_id, true)
-			new_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-			card_vbox.add_child(new_icon)
-			new_icon.move_child(new_icon, 0)
-			# Редкость
-			if card_vbox.get_child_count() >= 3:
-				var rarity_label: Label = card_vbox.get_child(2)
-				rarity_label.text = Loc.t("rarity_%d" % AnimalData.rarity_of(animal_id))
-				rarity_label.add_theme_color_override("font_color", AnimalData.rarity_color(AnimalData.rarity_of(animal_id)))
-		else:
-			name_label.text = "???"
-			name_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65))
-			icon.queue_free()
-			var new_icon: Control = _make_card_icon(animal_id, false)
-			new_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-			card_vbox.add_child(new_icon)
-			new_icon.move_child(new_icon, 0)
-			# Убираем редкость если была
-			if card_vbox.get_child_count() >= 3:
-				var rarity_label: Label = card_vbox.get_child(2)
-				rarity_label.queue_free()
-
-		# Обновляем рамку карточки
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.12, 0.12, 0.13)
-		style.set_corner_radius_all(14)
-		style.set_border_width_all(2)
-		if is_found:
-			var rarity_color: Color = AnimalData.rarity_color(AnimalData.rarity_of(animal_id))
-			style.border_color = rarity_color.darkened(0.3)
-		else:
-			style.border_color = Color(0.3, 0.3, 0.35)
-		style.set_content_margin_all(10.0)
-		card.add_theme_stylebox_override("panel", style)
+	for child in grid.get_children():
+		grid.remove_child(child)
+		child.queue_free()
+	_build_zone_grid(zone_idx)
 
 func _make_card_icon(animal_id: String, is_found: bool) -> Control:
 	var icon_size: float = 70.0
