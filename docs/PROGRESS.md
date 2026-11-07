@@ -133,6 +133,11 @@
 - [ ] **T24e** Рецепты зверей: остальные зоны
   - коммит: `T24e: звери Саванны` (далее Пустыни, Джунглей, Океана, по зоне)
   - зафиксировано: нет
+    - [x] T24e-1: `T24e: звери Саванны`
+    - [x] T24e-2: `T24e: звери Пустыни`
+    - [x] T24e-3: `T24e: звери Джунглей`
+    - [x] T24e-4: `T24e: звери Океана`
+  - зафиксировано: да
 - [ ] **T24f** Анимация по частям для зверя в центре внимания
   - коммит: `T24f: анимация частей для зверя в центре внимания`
   - зафиксировано: нет
@@ -265,3 +270,5 @@ T24b: реализован асинхронный мультиплеер (сос
 T24d (исправление): устранены дыры в моделях зверей. Причина: в `scripts/world/animal_builder.gd` у `BOX_FACES` был неконсистентный порядок вершин граней (не все грани обходились CCW от снаружи), из-за чего фаска `_solid_polys()` не создавала полоски на многих рёбрах. Поправлен `BOX_FACES` на единый CCW-порядок для всех 6 граней; `_emit()` через `CLOCKWISE_FRONT=true` переворачивает в CW (Godot). Проверено: `test.py` 350/0, `check.py` 0/0, headless `--editor --quit` без ошибок. Не проверено: телефон, веб.
 
 T24c: реализованы удалённые флаги (Remote Config). В `web/shell.html` добавлен `getFlags` в YaBridge (вызов `ysdk.flags.getFlags`). В `autoload/ya.gd` — `get_flags(defaults)` с заглушкой для редактора (возвращает defaults). В `autoload/game.gd` добавлены поля `remote_ad_interval_s`, `remote_ad_first_s`, `remote_boost_s` и метод `_load_remote_config()`, вызываемый в `start()` до `_loaded = true`. Константы `AD_INTERVAL_S`, `AD_FIRST_S`, `BOOST_S` заменены на remote-поля в `can_show_interstitial()` и `activate_boost()`. `Game.start()` стал корутиной, в `main.gd` вызов через `await`. Проверено: `test.py` 350/0, `check.py` 0/0, headless `--editor --quit` чисто. Не проверено: реальный SDK Яндекса, консоль, телефон, веб.
+
+T24e-4 (Океан): добавлены рецепты для 8 зверей Океана в `scripts/data/recipes/ocean.gd` — seahorse (swim), crab (waddle), jellyfish (swim, head_not_front), turtle (waddle), mantis_shrimp (trot), dolphin (swim), shark (swim), orca (swim). Все 8 рецептов проходят валидацию, треугольники в лимитах, детерминизм, посадка на землю, направление -Z (для jellyfish — head_not_front), 5 вариантов. Итог: `test.py` 350/0, `check.py` 0/0, headless `--editor --quit` чисто. Не проверено: телефон, веб, зрительный осмотр в зоопарке.
