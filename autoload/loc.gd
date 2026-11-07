@@ -205,6 +205,56 @@ const T := {
 
 	# Лидерборд «Лучший бросок» (T24)
 	"best_throw_label": {"ru": "Рекорд: %d м", "en": "Best: %d m", "tr": "Rekor: %d m"},
+
+	# Магазин за яны (T24a). Названия и описания товаров запасные: в игре показываются тексты из каталога SDK.
+	"shop_loading": {"ru": "Загрузка...", "en": "Loading..."},
+	"shop_unavailable": {"ru": "Магазин недоступен", "en": "Shop unavailable"},
+	"shop_buy": {"ru": "Купить", "en": "Buy"},
+	"shop_owned": {"ru": "Куплено", "en": "Owned"},
+	"shop_processing": {"ru": "Оформляем покупку...", "en": "Processing purchase..."},
+	"shop_bought_toast": {"ru": "Покупка получена!", "en": "Purchase complete!"},
+	"shop_failed_toast": {"ru": "Покупка не удалась", "en": "Purchase failed"},
+	"shop_no_ads": {"ru": "Без рекламы", "en": "No ads"},
+	"shop_no_ads_desc": {
+		"ru": "Без полноэкранной рекламы и предупреждений о ней. Реклама за награду остаётся по вашему желанию.",
+		"en": "No full-screen ads or ad warnings. Reward ads stay optional.",
+	},
+	"shop_cash_x2": {"ru": "Доход x2", "en": "Income x2"},
+	"shop_cash_x2_desc": {
+		"ru": "Все звери приносят в 2 раза больше денег. Навсегда.",
+		"en": "All animals earn 2x more money. Forever.",
+	},
+	"shop_train_x2": {"ru": "Опыт x2", "en": "Training x2"},
+	"shop_train_x2_desc": {
+		"ru": "Турники дают в 2 раза больше опыта. Навсегда.",
+		"en": "Pull-up bars give 2x more XP. Forever.",
+	},
+	"shop_starter": {"ru": "Стартовый набор", "en": "Starter pack"},
+	"shop_starter_desc": {
+		"ru": "Следующая еда, следующий турник и деньги за 10 минут дохода. Один раз.",
+		"en": "Next food, next bar and 10 minutes of income. One time only.",
+	},
+	"shop_money_s": {"ru": "Деньги: 10 минут", "en": "Cash: 10 min"},
+	"shop_money_s_desc": {
+		"ru": "Сразу столько денег, сколько звери приносят за 10 минут (минимум $100).",
+		"en": "Instantly get what your animals earn in 10 minutes (at least $100).",
+	},
+	"shop_money_m": {"ru": "Деньги: 60 минут", "en": "Cash: 60 min"},
+	"shop_money_m_desc": {
+		"ru": "Сразу столько денег, сколько звери приносят за 60 минут (минимум $100).",
+		"en": "Instantly get what your animals earn in 60 minutes (at least $100).",
+	},
+	"shop_money_l": {"ru": "Деньги: 5 часов", "en": "Cash: 5 hours"},
+	"shop_money_l_desc": {
+		"ru": "Сразу столько денег, сколько звери приносят за 5 часов (минимум $100).",
+		"en": "Instantly get what your animals earn in 5 hours (at least $100).",
+	},
+	"shop_lucky_5": {"ru": "5 счастливых бросков", "en": "5 Lucky throws"},
+	"shop_lucky_25": {"ru": "25 счастливых бросков", "en": "25 Lucky throws"},
+	"shop_lucky_desc": {
+		"ru": "Размер и мутация зверя бросаются 10 раз, берётся лучший результат.",
+		"en": "Size and mutation are rolled 10 times and the best result is kept.",
+	},
 }
 
 var lang := "en"

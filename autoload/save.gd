@@ -28,6 +28,11 @@ const DEFAULTS := {
 	"tutorial_step": 0,
 	"sound_on": true,
 	"no_ads": false,                   # T24a: покупка «без рекламы»
+	"cash_x2": false,                  # T24a: покупка «доход x2 навсегда»
+	"train_x2": false,                 # T24a: покупка «опыт с турников x2 навсегда»
+	"starter_claimed": false,          # T24a: стартовый набор получен (один на аккаунт)
+	"lucky_throws": 0,                 # T24a: сколько «Счастливых бросков» куплено (механика броска позже)
+	"processed_tokens": [],            # T24a: токены уже начисленных покупок, пока их не закрыл consume
 	"last_interstitial_time": 0,       # T23: время последней межстраничной рекламы (unix time)
 	"last_rewarded_time": 0,           # T23: время последней rewarded-рекламы (unix time)
 	"session_start_time": 0,           # T23: время старта текущей сессии (unix time)

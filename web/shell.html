@@ -24,7 +24,7 @@
 	<script>
 	// Мост между Godot и Яндекс SDK. Ответы уходят в GDScript одним колбэком handler(eventName, jsonString).
 	window.YaBridge = (function () {
-		let ysdk = null, player = null, handler = null;
+		let ysdk = null, player = null, payments = null, handler = null;
 
 		const err = (e) => String((e && e.message) || e);
 		const emit = (name, data) => {
@@ -34,6 +34,20 @@
 		const getPlayer = () => player
 			? Promise.resolve(player)
 			: ysdk.getPlayer({ scopes: false }).then((p) => (player = p));
+		// Покупки (SDK «Инап-покупки»): getPayments() кидает ошибку, если покупки недоступны.
+		const getPayments = () => payments
+			? Promise.resolve(payments)
+			: ysdk.getPayments().then((p) => (payments = p));
+		// Любой платёжный запрос отвечает одним событием 'pay' с номером запроса req: {req, ok, ...данные} или {req, ok: false, error}.
+		const pay = (req, work) => {
+			getPayments().then(work).then(
+				(data) => emit('pay', Object.assign({ req: req, ok: true }, data)),
+				(e) => emit('pay', { req: req, ok: false, error: err(e) }));
+		};
+		const currencyIcon = (item) => {
+			try { return item.getPriceCurrencyImage('small') || ''; } catch (e) { return ''; }
+		};
+		const toPurchase = (p) => ({ product_id: p.productID, token: p.purchaseToken });
 
 		document.addEventListener('visibilitychange', () => emit('visibility', { hidden: document.hidden }));
 
@@ -83,6 +97,29 @@
 
 			setScore(board, score) {
 				ysdk.getLeaderboards().then((lb) => lb.setScore(board, score)).catch((e) => console.warn('setScore failed', e));
+			},
+
+			// --- Инап-покупки (T24a). Цена и иконка валюты берутся только из SDK. ---
+			getCatalog(req) {
+				pay(req, (p) => p.getCatalog().then((list) => ({
+					items: list.map((it) => ({
+						id: it.id, title: it.title, description: it.description, image: it.imageURI,
+						price: it.price, price_value: it.priceValue, currency: it.priceCurrencyCode,
+						currency_icon: currencyIcon(it),
+					})),
+				})));
+			},
+
+			purchase(req, id) {
+				pay(req, (p) => p.purchase({ id: id }).then(toPurchase));
+			},
+
+			getPurchases(req) {
+				pay(req, (p) => p.getPurchases().then((list) => ({ items: list.map(toPurchase) })));
+			},
+
+			consumePurchase(req, token) {
+				pay(req, (p) => p.consumePurchase(token).then(() => ({})));
 			},
 		};
 	})();

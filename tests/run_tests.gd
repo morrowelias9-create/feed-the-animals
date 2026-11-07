@@ -64,6 +64,10 @@ func _run_all() -> void:
 	_test_slot_expansion()
 	print("== T17: смена вида зон")
 	_test_zone_look()
+	print("== T24a: покупки за яны")
+	_test_shop_data()
+	_test_shop_logic()
+	_test_shop_game()
 
 	_restore_save(backup)
 	print("")
@@ -785,3 +789,179 @@ func _test_zone_look() -> void:
 		and water.albedo_color.is_equal_approx(Color.html(String(ZoneData.ZONES[4]["ground"]))))
 	world.free()
 
+
+
+# ---------- T24a ----------
+
+func _test_shop_data() -> void:
+	var expected_ids: Array = ["no_ads", "cash_x2", "train_x2", "starter", "money_s", "money_m", "money_l", "lucky_5", "lucky_25"]
+	var ids: Array = []
+	for product in ShopData.PRODUCTS:
+		ids.append(String(product["id"]))
+	_check("T24a: в ShopData девять товаров R9 в порядке справочника", ids == expected_ids)
+	_check("T24a: постоянные товары не расходуются",
+		not ShopData.is_consumable("no_ads") and not ShopData.is_consumable("cash_x2")
+		and not ShopData.is_consumable("train_x2") and not ShopData.is_consumable("starter"))
+	_check("T24a: money_* и lucky_* расходуемые",
+		ShopData.is_consumable("money_s") and ShopData.is_consumable("money_m") and ShopData.is_consumable("money_l")
+		and ShopData.is_consumable("lucky_5") and ShopData.is_consumable("lucky_25"))
+	_check("T24a: неизвестный id не товар и не расходуется",
+		not ShopData.is_known("gems") and not ShopData.is_consumable("gems") and ShopData.by_id("gems").is_empty()
+		and ShopData.order_of("gems") == -1 and ShopData.order_of("starter") == 3)
+	var loc: Node = root.get_node_or_null("Loc")
+	var texts_ok: bool = loc != null
+	if loc != null:
+		for product in ShopData.PRODUCTS:
+			var name_entry: Dictionary = loc.T.get(String(product["name_key"]), {})
+			var desc_entry: Dictionary = loc.T.get(String(product["desc_key"]), {})
+			texts_ok = texts_ok and name_entry.has("ru") and name_entry.has("en") and desc_entry.has("ru") and desc_entry.has("en")
+	_check("T24a: у каждого товара есть название и описание на ru и en в Loc.T", texts_ok)
+	var keys_ok: bool = true
+	for key in ["cash_x2", "train_x2", "starter_claimed", "lucky_throws", "processed_tokens", "no_ads"]:
+		keys_ok = keys_ok and _save.DEFAULTS.has(key)
+	_check("T24a: поля покупок есть в Save.DEFAULTS", keys_ok)
+	_check("T24a: множители из R9 равны 2", ShopData.CASH_MULT == 2 and ShopData.TRAIN_MULT == 2)
+
+
+func _test_shop_logic() -> void:
+	_check("T24a: деньги за минуты: доход x время", _near(ShopLogic.money_for_minutes(2.0, 60.0), 7200.0))
+	_check("T24a: деньги за минуты не меньше $100 (доход 0 и малый)",
+		_near(ShopLogic.money_for_minutes(0.0, 10.0), 100.0) and _near(ShopLogic.money_for_minutes(0.1, 10.0), 100.0))
+	_check("T24a: деньги за минуты: отрицательный и NaN доход дают минимум",
+		_near(ShopLogic.money_for_minutes(-5.0, 10.0), 100.0) and _near(ShopLogic.money_for_minutes(NAN, 10.0), 100.0))
+
+	var d: Dictionary = _save.DEFAULTS.duplicate(true)
+	var unknown: Dictionary = ShopLogic.grant(d, "gems", 5.0)
+	_check("T24a: неизвестный товар не выдаётся и ничего не меняет",
+		not bool(unknown["known"]) and not bool(unknown["changed"]) and d == _save.DEFAULTS)
+
+	var r1: Dictionary = ShopLogic.grant(d, "no_ads", 0.0)
+	_check("T24a: no_ads включает флаг", bool(r1["known"]) and bool(r1["changed"]) and bool(d["no_ads"]) and ShopLogic.is_owned(d, "no_ads"))
+	var r2: Dictionary = ShopLogic.grant(d, "no_ads", 0.0)
+	_check("T24a: повторный no_ads ничего не меняет", bool(r2["known"]) and not bool(r2["changed"]))
+	ShopLogic.grant(d, "cash_x2", 0.0)
+	ShopLogic.grant(d, "train_x2", 0.0)
+	_check("T24a: cash_x2 и train_x2 включают свои флаги", bool(d["cash_x2"]) and bool(d["train_x2"]))
+	_check("T24a: is_owned: расходуемый и неизвестный всегда false",
+		not ShopLogic.is_owned(d, "money_s") and not ShopLogic.is_owned(d, "gems"))
+
+	# Стартовый набор: еда, турник и 10 минут дохода, один раз.
+	var s: Dictionary = _save.DEFAULTS.duplicate(true)
+	var starter: Dictionary = ShopLogic.grant(s, "starter", 10.0)
+	_check("T24a: starter: следующая еда, следующий турник и 10 минут дохода",
+		bool(starter["food"]) and bool(starter["bar"]) and int(s["food_unlocked"]) == 1 and int(s["bars_owned"]) == 1
+		and _near(float(s["money"]), 6000.0) and _near(float(starter["money"]), 6000.0) and bool(s["starter_claimed"]))
+	var again: Dictionary = ShopLogic.grant(s, "starter", 10.0)
+	_check("T24a: starter второй раз не выдаёт бонусы",
+		not bool(again["changed"]) and int(s["food_unlocked"]) == 1 and int(s["bars_owned"]) == 1 and _near(float(s["money"]), 6000.0))
+	var maxed: Dictionary = _save.DEFAULTS.duplicate(true)
+	maxed["food_unlocked"] = FoodData.count() - 1
+	maxed["bars_owned"] = UpgradeData.BARS.size()
+	var maxed_result: Dictionary = ShopLogic.grant(maxed, "starter", 0.0)
+	_check("T24a: starter при всей купленной еде и всех турниках даёт только деньги (минимум $100)",
+		not bool(maxed_result["food"]) and not bool(maxed_result["bar"])
+		and int(maxed["food_unlocked"]) == FoodData.count() - 1 and int(maxed["bars_owned"]) == UpgradeData.BARS.size()
+		and _near(float(maxed["money"]), 100.0))
+
+	# Расходуемые: можно покупать снова и снова.
+	var m: Dictionary = _save.DEFAULTS.duplicate(true)
+	ShopLogic.grant(m, "money_s", 1.0)
+	ShopLogic.grant(m, "money_s", 1.0)
+	_check("T24a: money_s выдаётся при каждой покупке (2 x 600)", _near(float(m["money"]), 1200.0))
+	ShopLogic.grant(m, "money_l", 2.0)
+	_check("T24a: money_l = 300 минут дохода (2 x 18000)", _near(float(m["money"]), 1200.0 + 36000.0))
+	ShopLogic.grant(m, "lucky_5", 0.0)
+	ShopLogic.grant(m, "lucky_25", 0.0)
+	_check("T24a: lucky_5 и lucky_25 начисляют 30 бросков", int(m["lucky_throws"]) == 30)
+
+	# Токены: защита от двойной выдачи.
+	var t: Dictionary = _save.DEFAULTS.duplicate(true)
+	_check("T24a: токен неизвестен, пока не запомнен; пустой токен не запоминается",
+		not ShopLogic.is_token_processed(t, "a") and not ShopLogic.is_token_processed(t, ""))
+	ShopLogic.remember_token(t, "a")
+	ShopLogic.remember_token(t, "a")
+	ShopLogic.remember_token(t, "")
+	_check("T24a: запомненный токен найден, дубль и пустой не добавляются",
+		ShopLogic.is_token_processed(t, "a") and (t["processed_tokens"] as Array).size() == 1)
+	for i in ShopLogic.TOKEN_LOG_MAX + 10:
+		ShopLogic.remember_token(t, "tok%d" % i)
+	_check("T24a: журнал токенов не длиннее TOKEN_LOG_MAX, старые вытесняются",
+		(t["processed_tokens"] as Array).size() == ShopLogic.TOKEN_LOG_MAX
+		and not ShopLogic.is_token_processed(t, "a") and ShopLogic.is_token_processed(t, "tok%d" % (ShopLogic.TOKEN_LOG_MAX + 9)))
+
+
+func _test_shop_game() -> void:
+	# Доход x2 навсегда и буст перемножаются.
+	_fresh()
+	_game.add_animal("frog", 0)
+	_check("T24a: базовый доход одной лягушки 1.0", _near(_game.income_per_sec(), 1.0))
+	_game.grant_purchase("cash_x2")
+	_check("T24a: cash_x2 удваивает доход", _near(_game.income_per_sec(), 2.0))
+	_game.activate_boost()
+	_check("T24a: cash_x2 и буст за рекламу перемножаются (x4)", _near(_game.income_per_sec(), 4.0))
+
+	# Опыт с турников x2.
+	_fresh()
+	_game.add_money(1.0)
+	_game.buy_bar()
+	_check("T24a: без train_x2 три повторения дают 3 опыта", _near(_game.train_reps(0, 3), 3.0))
+	_game.grant_purchase("train_x2")
+	_check("T24a: train_x2 удваивает опыт с турников", _near(_game.train_reps(0, 3), 6.0))
+
+	# Деньги, сигналы, токены и сохранение.
+	_fresh()
+	_game.add_animal("frog", 0)
+	var seen: Array = []
+	_game.money_changed.connect(func(_v: float) -> void: seen.append("money"), CONNECT_ONE_SHOT)
+	var money_before: float = _game.money()
+	var granted: Dictionary = _game.grant_purchase("money_m", "tok_money_m")
+	_check("T24a: money_m даёт 60 минут дохода (3600) и сообщает об изменении денег",
+		bool(granted["known"]) and _near(_game.money() - money_before, 3600.0) and seen.has("money"))
+	_check("T24a: токен покупки запомнен в сохранении", ShopLogic.is_token_processed(_save.data, "tok_money_m"))
+
+	_fresh()
+	_game.add_animal("frog", 0)
+	var food_seen: Array = []
+	var bar_seen: Array = []
+	_game.food_changed.connect(func() -> void: food_seen.append(1), CONNECT_ONE_SHOT)
+	_game.bar_changed.connect(func() -> void: bar_seen.append(1), CONNECT_ONE_SHOT)
+	_game.grant_purchase("starter", "tok_starter")
+	_check("T24a: starter через Game: еда 1, турник 1, 600 денег, сигналы food_changed и bar_changed",
+		_game.food_unlocked() == 1 and _game.bars_owned() == 1 and _near(_game.money(), 600.0)
+		and food_seen.size() == 1 and bar_seen.size() == 1)
+	var after_first: float = _game.money()
+	_game.grant_purchase("starter", "tok_starter_2")
+	_check("T24a: повторный starter через Game ничего не добавляет", _near(_game.money(), after_first) and _game.food_unlocked() == 1)
+
+	_fresh()
+	_game.grant_purchase("lucky_5", "tok_l5")
+	_game.grant_purchase("lucky_25", "tok_l25")
+	_check("T24a: Game.lucky_throws считает купленные броски", _game.lucky_throws() == 30)
+
+	# Постоянные покупки переживают перезапуск: читаем то, что Game записал в user://save.json.
+	_fresh()
+	_game.grant_purchase("no_ads")
+	_game.grant_purchase("cash_x2")
+	_game.grant_purchase("train_x2")
+	_game.grant_purchase("starter", "tok_persist")
+	var restarted: Dictionary = _save._merge(_save._read_local(), {})
+	_check("T24a: после перезапуска постоянные покупки на месте",
+		bool(restarted["no_ads"]) and bool(restarted["cash_x2"]) and bool(restarted["train_x2"])
+		and bool(restarted["starter_claimed"]) and int(restarted["bars_owned"]) == 1)
+	_check("T24a: после перезапуска токены и счётчик бросков сохранили тип",
+		restarted["processed_tokens"] is Array and (restarted["processed_tokens"] as Array).has("tok_persist")
+		and typeof(restarted["lucky_throws"]) == TYPE_INT)
+
+	# no_ads отключает и предупреждение о рекламе (R9), и саму рекламу.
+	_fresh()
+	_game.reset_backup_ad_timer()
+	_game.update_ad_timers(GameConfig.AD_BACKUP_S + 1.0)
+	_game.grant_purchase("no_ads")
+	_check("T24a: с no_ads предупреждение о рекламе не запускается", not _game.check_backup_ad(null, null, false))
+	_check("T24a: с no_ads межстраничная реклама запрещена", not _game.can_show_interstitial())
+	_fresh()
+	_game.reset_backup_ad_timer()
+	_game.update_ad_timers(GameConfig.AD_BACKUP_S + 1.0)
+	_check("T24a: без no_ads предупреждение запускается (проверка, что причина именно в покупке)",
+		_game.check_backup_ad(null, null, false))
+	_game.reset_backup_ad_timer()

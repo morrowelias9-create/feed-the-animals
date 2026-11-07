@@ -18,6 +18,7 @@ var _animals_window: AnimalsWindow
 var _sell_window: SellWindow
 var _sell_stand: SellStand
 var _food_window: FoodWindow
+var _premium_window: PremiumWindow
 var _food_tent: FoodTent
 var _bar_controller: BarController
 var _buy_pad: BuyPad
@@ -45,6 +46,13 @@ func _ready() -> void:
 	_setup_throw()
 	Ya.loading_ready()
 	Ya.gameplay_start()
+	# T24a: незакрытые покупки за яны (требование Яндекса 1.13.1). Без await: старт игры не ждёт сеть.
+	_restore_purchases()
+
+
+# T24a: постоянные покупки включаются, необработанные расходуемые начисляются и закрываются.
+func _restore_purchases() -> void:
+	await PurchaseFlow.restore()
 
 
 # Создаёт общий CanvasLayer для окон (T12, T12a, T18, T21).
@@ -209,10 +217,15 @@ func _setup_windows() -> void:
 	_sell_window.name = "SellWindow"
 	_window_layer.add_child(_sell_window)
 
-	# Палатка еды (T15): окно с карточками еды, пока нет магазина за яны кнопка «Магазин» открывает его же.
+	# Палатка еды (T15): окно с карточками еды, открывается входом в зону палатки.
 	_food_window = FoodWindow.new()
 	_food_window.name = "FoodWindow"
 	_window_layer.add_child(_food_window)
+
+	# Магазин за яны (T24a): открывается кнопкой HUD «Магазин».
+	_premium_window = PremiumWindow.new()
+	_premium_window.name = "PremiumWindow"
+	_window_layer.add_child(_premium_window)
 
 	# Индекс зверей (T18)
 	_index_window = IndexWindow.new()
@@ -220,7 +233,7 @@ func _setup_windows() -> void:
 	_window_layer.add_child(_index_window)
 	_index_window.zone_reward_claimed.connect(_hud._refresh)
 
-	for window in [_animals_window, _sell_window, _food_window, _index_window]:
+	for window in [_animals_window, _sell_window, _food_window, _index_window, _premium_window]:
 		(window as WindowBase).opened.connect(_on_window_opened)
 		(window as WindowBase).closed.connect(_on_window_closed)
 	_hud.animals_pressed.connect(_on_animals_pressed)
@@ -280,21 +293,24 @@ func _on_action_pressed() -> void:
 
 # Кнопка «Животные»: не во время броска, не с зверем в руках и не поверх другого окна.
 func _on_animals_pressed() -> void:
-	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open() or _food_window.is_open():
+	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open() or _food_window.is_open() \
+			or _premium_window.is_open():
 		return
 	_animals_window.open()
 
 
-# Кнопка «Магазин»: до T24a открывает окно еды (T15), с теми же условиями, что у «Животных».
+# Кнопка «Магазин» (T24a): магазин за яны, с теми же условиями, что у «Животных». Еда покупается в палатке (T15).
 func _on_shop_pressed() -> void:
-	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open() or _animals_window.is_open():
+	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open() or _animals_window.is_open() \
+			or _food_window.is_open():
 		return
-	_food_window.open()
+	_premium_window.open()
 
 
 # Кнопка «Индекс» (T18): не во время броска, не с зверем в руках и не поверх другого окна.
 func _on_index_pressed() -> void:
-	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open() or _animals_window.is_open() or _food_window.is_open():
+	if _throw_controller.is_busy() or _carry_controller.is_carrying() or _sell_window.is_open() or _animals_window.is_open() \
+			or _food_window.is_open() or _premium_window.is_open():
 		return
 	_index_window.open()
 

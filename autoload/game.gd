@@ -148,9 +148,13 @@ func income_per_sec() -> float:
 			if int(a["placed"]) == 1:
 				_base_income += Economy.income(String(a["animal_id"]), _variant_of(a), _size_of(a))
 		_income_dirty = false
+	var income: float = _base_income
+	# T24a: покупка «доход x2 навсегда» и буст за рекламу перемножаются.
+	if _b("cash_x2"):
+		income *= float(ShopData.CASH_MULT)
 	if _boost_active():
-		return _base_income * float(GameConfig.BOOST_MULT)
-	return _base_income
+		income *= float(GameConfig.BOOST_MULT)
+	return income
 
 
 ## Все ли звери зоны найдены.
@@ -223,6 +227,9 @@ func train_reps(bar_index: int, count: int = 1) -> float:
 	if count <= 0 or bar_index < 0 or bar_index >= bars_owned():
 		return 0.0
 	var gained: float = float(UpgradeData.BARS[bar_index]["xp"]) * float(count)
+	# T24a: покупка «опыт с турников x2 навсегда».
+	if _b("train_x2"):
+		gained *= float(ShopData.TRAIN_MULT)
 	Save.data["reps"] = _i("reps") + count
 	if _apply_xp(gained):
 		Save.save_data()
@@ -616,6 +623,33 @@ func claim_offline(mult: float = 1.0) -> float:
 	return gain
 
 
+## T24a: выдаёт купленный за яны товар (id из R9) и сохраняет. `token` — токен покупки: его запоминаем,
+## чтобы расходуемая покупка, которую не успели закрыть, не начислилась второй раз.
+## Возвращает результат ShopLogic.grant: {known, changed, money, food, bar, lucky}.
+func grant_purchase(product_id: String, token: String = "") -> Dictionary:
+	var result: Dictionary = ShopLogic.grant(Save.data, product_id, income_per_sec())
+	if not bool(result["known"]):
+		return result
+	ShopLogic.remember_token(Save.data, token)
+	if bool(result["changed"]):
+		if float(result["money"]) > 0.0:
+			money_changed.emit(_f("money"))
+		if bool(result["food"]):
+			food_changed.emit()
+		if bool(result["bar"]):
+			bar_changed.emit()
+		_income_dirty = true
+		Save.save_data()
+	elif token != "":
+		Save.save_data()
+	return result
+
+
+## T24a: сколько «Счастливых бросков» куплено (сама механика броска появится позже).
+func lucky_throws() -> int:
+	return _i("lucky_throws")
+
+
 ## T22: активирует буст x2 на BOOST_S секунд.
 ## boost_until = max(now, boost_until) + BOOST_S, но не больше now + BOOST_MAX_S.
 ## Эмитит boost_changed для обновления UI.
@@ -900,6 +934,9 @@ func reset_backup_ad_timer() -> void:
 ## Возвращает true, если путь Б запущен (предупреждение показано).
 func check_backup_ad(throw_controller: ThrowController, bar_controller: Node, windows_open: bool) -> bool:
 	if not _loaded:
+		return false
+	# T24a: купившим no_ads нет и предупреждений о рекламе (R9).
+	if _b("no_ads"):
 		return false
 	if not _backup_ad_pending:
 		return false
