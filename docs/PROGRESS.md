@@ -127,6 +127,9 @@
 - [x] **T24d** Рецепты зверей: инфраструктура, Лес, зоопарк
   - коммит: `T24d: рецепты зверей, Лес, зоопарк`
   - зафиксировано: да
+- [x] **T24c** Удалённые флаги
+  - коммит: `T24c: удалённые флаги (Remote Config)`
+  - зафиксировано: да
 - [ ] **T24e** Рецепты зверей: остальные зоны
   - коммит: `T24e: звери Саванны` (далее Пустыни, Джунглей, Океана, по зоне)
   - зафиксировано: нет
@@ -260,3 +263,5 @@ T24a: сделаны `ShopData` (9 товаров R9), `ShopLogic` (выдача
 T24b: реализован асинхронный мультиплеер (соседи). В `Ya`: `mp_init(count, meta)` (4 сессии, strength ±30%, zone_max), `mp_commit(payload)` (снимок загона каждые 20с `{t:"pen", a:[[id,variant,size]...≤10]}`, бросок `{t:"throw", d:м, f:еда}`), `mp_push(meta1=strength, meta2=zone_max)` после 3 мин и при уходе в фон. В `Game`: `mp_tick(delta)` (снимки/пуш), `mp_on_focus_out/in`, `mp_record_throw`. `neighbor_view.gd`: имя игрока над участком («Игрок» если пусто), звери из снимка гуляют (PenWander), аватар бросает еду на событии `throw`, еда летит по коридору визуально. Нет сессии — табличка «Свободный участок». В `main.gd`: ожидание `mp_sessions_loaded`, построение 4 соседей (участки 0,1,3,4), обработка транзакций/финиша. В `loc.gd` ключ `neighbor_free_plot`. Проверено: игра запускается без ошибок, `check.py` 0/2, `test.py` 258/0, headless `--editor --quit` чисто. Не проверено: реальный SDK Яндекса, тест на 2 аккаунтах, телефон/веб.
 
 T24d (исправление): устранены дыры в моделях зверей. Причина: в `scripts/world/animal_builder.gd` у `BOX_FACES` был неконсистентный порядок вершин граней (не все грани обходились CCW от снаружи), из-за чего фаска `_solid_polys()` не создавала полоски на многих рёбрах. Поправлен `BOX_FACES` на единый CCW-порядок для всех 6 граней; `_emit()` через `CLOCKWISE_FRONT=true` переворачивает в CW (Godot). Проверено: `test.py` 350/0, `check.py` 0/0, headless `--editor --quit` без ошибок. Не проверено: телефон, веб.
+
+T24c: реализованы удалённые флаги (Remote Config). В `web/shell.html` добавлен `getFlags` в YaBridge (вызов `ysdk.flags.getFlags`). В `autoload/ya.gd` — `get_flags(defaults)` с заглушкой для редактора (возвращает defaults). В `autoload/game.gd` добавлены поля `remote_ad_interval_s`, `remote_ad_first_s`, `remote_boost_s` и метод `_load_remote_config()`, вызываемый в `start()` до `_loaded = true`. Константы `AD_INTERVAL_S`, `AD_FIRST_S`, `BOOST_S` заменены на remote-поля в `can_show_interstitial()` и `activate_boost()`. `Game.start()` стал корутиной, в `main.gd` вызов через `await`. Проверено: `test.py` 350/0, `check.py` 0/0, headless `--editor --quit` чисто. Не проверено: реальный SDK Яндекса, консоль, телефон, веб.

@@ -37,7 +37,7 @@ func _ready() -> void:
 	# Если собрать HUD и загон до загрузки, они читают пустые данные и ждут первого сигнала.
 	await Ya.initialize()
 	await Save.load_all()
-	Game.start()
+	await Game.start()
 	# T21: создаём слой окон и проверяем оффлайн-доход.
 	_setup_window_layer()
 	_setup_offline_window()

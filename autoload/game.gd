@@ -31,6 +31,11 @@ var _boost_was_active: bool = false
 var _loaded: bool = false   # до Game.start() не тикаем и не сохраняем: Save.data ещё не загружен
 var offline_pending: float = 0.0   # T21: сумма накопленного оффлайн-дохода, ожидающая получения
 
+# T24c: удалённые флаги (Remote Config). Значения по умолчанию из GameConfig.
+var remote_ad_interval_s: float = GameConfig.AD_INTERVAL_S
+var remote_ad_first_s: float = GameConfig.AD_FIRST_S
+var remote_boost_s: int = GameConfig.BOOST_S
+
 
 func _process(delta: float) -> void:
 	if not _loaded:
@@ -48,6 +53,7 @@ func _process(delta: float) -> void:
 func start() -> void:
 	_migrate_animals()
 	_migrate_variants()
+	await _load_remote_config()
 	_loaded = true
 	_income_dirty = true
 	_touch_last_seen()
@@ -57,6 +63,20 @@ func start() -> void:
 	if Save.data["session_start_time"] == 0:
 		Save.data["session_start_time"] = now
 		Save.save_data()
+
+
+# T24c: загружает удалённые флаги (Remote Config) через Ya.get_flags().
+# Вызывается до _loaded = true, чтобы настройки были доступны сразу.
+func _load_remote_config() -> void:
+	var defaults: Dictionary = {
+		"ad_interval_s": GameConfig.AD_INTERVAL_S,
+		"ad_first_s": GameConfig.AD_FIRST_S,
+		"boost_s": GameConfig.BOOST_S,
+	}
+	var flags: Dictionary = await Ya.get_flags(defaults)
+	remote_ad_interval_s = float(flags.get("ad_interval_s", GameConfig.AD_INTERVAL_S))
+	remote_ad_first_s = float(flags.get("ad_first_s", GameConfig.AD_FIRST_S))
+	remote_boost_s = int(flags.get("boost_s", GameConfig.BOOST_S))
 
 
 # T21: считает оффлайн-доход и кладёт в offline_pending, если он больше нуля.
@@ -660,7 +680,7 @@ func lucky_throws() -> int:
 func activate_boost() -> void:
 	var now: int = int(Time.get_unix_time_from_system())
 	var current_until: int = _i("boost_until")
-	var new_until: int = maxi(now, current_until) + GameConfig.BOOST_S
+	var new_until: int = maxi(now, current_until) + remote_boost_s
 	var max_allowed: int = now + GameConfig.BOOST_MAX_S
 	if new_until > max_allowed:
 		new_until = max_allowed
@@ -840,10 +860,10 @@ func can_show_interstitial() -> bool:
 	var last_interstitial: int = _i("last_interstitial_time")
 	var last_rewarded: int = _i("last_rewarded_time")
 	# С начала сессии прошло не меньше AD_FIRST_S.
-	if now - session_start < GameConfig.AD_FIRST_S:
+	if now - session_start < remote_ad_first_s:
 		return false
 	# С прошлой межстраничной рекламы прошло не меньше AD_INTERVAL_S.
-	if now - last_interstitial < GameConfig.AD_INTERVAL_S:
+	if now - last_interstitial < remote_ad_interval_s:
 		return false
 	# После rewarded прошло не меньше AD_AFTER_REWARDED_S.
 	if now - last_rewarded < GameConfig.AD_AFTER_REWARDED_S:

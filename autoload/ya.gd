@@ -104,6 +104,52 @@ func gameplay_stop() -> void:
 		_bridge.gameplayStop()
 
 
+# --- Remote Config (T24c) --------------------------------------------------
+
+## Загружает удалённые флаги. defaults — словарь значений по умолчанию.
+## Возвращает словарь флагов (объединение defaults и серверных значений).
+## В редакторе и без SDK возвращает defaults.
+func get_flags(defaults: Dictionary) -> Dictionary:
+	if not _is_web:
+		return defaults
+	if not sdk_ok:
+		return defaults
+	var req := _flags_begin()
+	_bridge.getFlags(req, defaults)
+	var res: Dictionary = await _flags_wait(req, PAY_TIMEOUT)
+	if not bool(res.get("ok", false)):
+		push_warning("getFlags failed: %s" % str(res.get("error", "?")))
+		return defaults
+	return _flags_of(res)
+
+
+func _flags_begin() -> int:
+	var req := _pay_next_id
+	_pay_next_id += 1
+	_pay_pending[req] = true
+	return req
+
+
+func _flags_wait(req: int, timeout: float) -> Dictionary:
+	var t := 0.0
+	while not _pay_results.has(req) and t < timeout:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+	_pay_pending.erase(req)
+	if not _pay_results.has(req):
+		return {"ok": false, "error": "timeout"}
+	var res: Dictionary = _pay_results[req]
+	_pay_results.erase(req)
+	return res
+
+
+func _flags_of(res: Dictionary) -> Dictionary:
+	if not bool(res.get("ok", false)):
+		return {}
+	var flags: Variant = res.get("flags", {})
+	return flags if flags is Dictionary else {}
+
+
 # --- Реклама ---------------------------------------------------------------
 
 func show_interstitial() -> void:

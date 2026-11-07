@@ -122,6 +122,18 @@
 				pay(req, (p) => p.consumePurchase(token).then(() => ({})));
 			},
 
+			// --- Remote Config (T24c) ---
+			getFlags(req, defaults) {
+				if (!ysdk || !ysdk.flags) {
+					emit('flags', { req: req, ok: true, flags: defaults || {} });
+					return;
+				}
+				ysdk.flags.getFlags(defaults || {}).then(
+					(flags) => emit('flags', { req: req, ok: true, flags: flags }),
+					(e) => { console.warn('getFlags failed', e); emit('flags', { req: req, ok: false, error: err(e) }); }
+				);
+			},
+
 			// --- Асинхронный мультиплеер (T24b) ---
 			multiplayerInit(params) {
 				if (!ysdk || !ysdk.multiplayer || !ysdk.multiplayer.sessions) {
