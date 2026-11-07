@@ -72,6 +72,7 @@ func _run_all() -> void:
 	_test_recipes()
 	_test_recipe_fallback()
 	_test_recipe_animation()
+	_test_slither_animation()
 
 	_restore_save(backup)
 	print("")
@@ -974,13 +975,18 @@ func _test_shop_game() -> void:
 # ---------- T24d: рецепты зверей ----------
 
 const FOREST_RECIPE_IDS: Array[String] = ["frog", "squirrel", "rabbit", "fox", "deer", "boar", "wolf", "bear"]
+const JUNGLE_RECIPE_IDS: Array[String] = ["parrot", "monkey", "tapir", "koala", "python", "jaguar", "tiger", "gorilla"]
 const TRIS_LIMIT: int = 3000          # жёсткий предел R8 §5.3
 const TRIS_LIMIT_TOP_RANKS: int = 5000   # для рангов 7-8
 
 
 func _test_recipes() -> void:
 	_check("рецепты есть у 8 зверей Леса", FOREST_RECIPE_IDS.all(func(id: String) -> bool: return AnimalRecipes.has_recipe(id)))
-	for id in FOREST_RECIPE_IDS:
+	_check("рецепты есть у 8 зверей Джунглей", JUNGLE_RECIPE_IDS.all(func(id: String) -> bool: return AnimalRecipes.has_recipe(id)))
+	var zone_ids: Array[String] = []
+	zone_ids.append_array(FOREST_RECIPE_IDS)
+	zone_ids.append_array(JUNGLE_RECIPE_IDS)
+	for id in zone_ids:
 		var recipe: Dictionary = AnimalRecipes.get_recipe(id)
 		var data: Dictionary = AnimalBuilder.generate(recipe)
 		var errors: Array = data["errors"]
@@ -1034,8 +1040,8 @@ func _test_recipes() -> void:
 			model.free()
 			fx.free()
 		_check("%s: все варианты (0-5) строятся, один меш, свечение и искры в норме" % id, variants_ok)
-	_check("move задан и допустим у всех зверей Леса",
-		FOREST_RECIPE_IDS.all(func(id: String) -> bool: return AnimalBuilder.MOVES.has(ModelLoader.move_of(id))))
+	_check("move задан и допустим у всех зверей Леса и Джунглей",
+		zone_ids.all(func(id: String) -> bool: return AnimalBuilder.MOVES.has(ModelLoader.move_of(id))))
 	_check("общий материал зверей один и матовый",
 		AnimalBuilder.material() == AnimalBuilder.material() and _near(AnimalBuilder.material().roughness, 1.0)
 		and _near(AnimalBuilder.material().metallic, 0.0))
@@ -1060,6 +1066,23 @@ func _test_recipe_fallback() -> void:
 	var broken_data: Dictionary = AnimalBuilder.generate(broken)
 	_check("рецепт с ошибками даёт список ошибок и пустую геометрию",
 		not (broken_data["errors"] as Array).is_empty() and int(broken_data["tris"]) == 0)
+
+
+func _test_slither_animation() -> void:
+	var view := AnimalView.new()
+	view.set_creature("python", 0, 5, 0.0)
+	var model: Node3D = view.get_node_or_null("Model") as Node3D
+	_check("питон: тип движения slither", ModelLoader.move_of("python") == "slither" and model != null)
+	if model == null:
+		view.free()
+		return
+	var base: Transform3D = model.transform
+	view.set_anim_running(true)
+	for i in 60:
+		view._process(0.016)
+	_check("питон: змеиное движение виляет корпусом", not model.transform.basis.is_equal_approx(base.basis))
+	_check("питон: виляние не двигает сам AnimalView", view.position == Vector3.ZERO)
+	view.free()
 
 
 func _test_recipe_animation() -> void:

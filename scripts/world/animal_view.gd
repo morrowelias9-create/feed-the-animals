@@ -171,8 +171,13 @@ func _animate(delta: float) -> void:
 			off_y = absf(sin(w)) * _height * 0.035 * amp
 			pitch = (-0.045 + sin(w) * 0.03) * amp
 			roll = sin(w * 0.5) * 0.025 * amp
+		"slither":
+			# змеиное движение: корпус «виляет» из стороны в сторону, чуть покачиваясь
+			var sl: float = _anim_t * 7.0
+			yaw = sin(sl) * 0.16 * amp
+			roll = sin(sl * 0.5) * 0.03 * amp
 		_:
-			pass   # idle: только дыхание; slither и swim будут в T24e
+			pass   # idle: только дыхание; swim будет в T24e (Океан)
 	var squash_xz: float = 1.0 / sqrt(stretch)   # объём сохраняется: выше значит уже
 	var rot_basis: Basis = Basis.from_euler(Vector3(pitch, yaw, roll))
 	var scale_basis: Basis = Basis.from_scale(Vector3(squash_xz, stretch, squash_xz))
