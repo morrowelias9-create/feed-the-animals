@@ -2,9 +2,12 @@ class_name AnimalView
 extends Node3D
 ## Модель зверя + подпись из трёх строк над головой (шаги T10/T10b, справочник R4/R6/R8):
 ## вариант (его цветом, мелко), название цветом редкости, доход зелёным.
+## Шаг T24d (R8 §5.5, режим А): корень модели анимируется кодом по типу движения из рецепта.
+## Анимация меняет только transform модели внутри AnimalView, позицию и логику run_to/eat она не трогает.
 
 const SIGN_GAP: Array[float] = [1.0, 0.55, 0.12]   # высота строк над головой: вариант, имя, доход
 const FLOAT_SIZE_S: float = 0.8           # длительность всплытия названия размера
+const ANIM_BLEND_PER_S: float = 5.0       # скорость перехода между покоем и бегом (доля в секунду)
 
 var animal_id: String = ""
 var variant: int = 0
@@ -22,6 +25,11 @@ var _run_from: Vector3 = Vector3.ZERO   # откуда зверь пошёл: х
 var _run_t: float = 0.0
 var _run_dur: float = 0.0
 var _wander_bob_t: float = 0.0
+var _move: String = ""                  # тип движения из рецепта; пусто у заглушки без рецепта
+var _model_base: Transform3D = Transform3D.IDENTITY   # посадка модели от ModelLoader (масштаб, высота)
+var _anim_t: float = 0.0
+var _anim_amp: float = 0.0              # 0 покой, 1 бег; плавно перетекает
+var _anim_force_run: bool = false       # для отладочной сцены и экрана T24f: бег на месте
 
 var _label_variant: Label3D
 var _label_name: Label3D
@@ -54,6 +62,10 @@ func set_creature(id: String, new_variant: int, new_rarity: int, new_income: flo
 	_model.name = "Model"
 	add_child(_model)
 	_height = ModelLoader.height_of(_model)
+	_model_base = _model.transform
+	_move = ModelLoader.move_of(id)
+	_anim_t = float(id.hash() % 1000) * 0.01   # у разных зверей разная фаза, стадо не качается в унисон
+	_anim_amp = 0.0
 	_rebuild_fx()
 	_update_labels()
 
@@ -75,6 +87,11 @@ func set_signs_visible(on: bool) -> void:
 
 func model_height() -> float:
 	return _height
+
+
+## Включает анимацию бега без перемещения (отладочная сцена «зоопарк»). false возвращает обычное поведение.
+func set_anim_running(on: bool) -> void:
+	_anim_force_run = on
 
 
 func idle() -> void:
@@ -118,6 +135,48 @@ func _process(delta: float) -> void:
 			position.y = 0.0
 	if _float_t >= 0.0:
 		_update_float(delta)
+	if _move != "" and _model != null and is_instance_valid(_model):
+		_animate(delta)
+
+
+# Анимация всего тела: бег по типу движения и спокойное «дыхание» в покое.
+# Сдвиг, наклон и сжатие считаются в системе AnimalView вокруг точки на земле под зверем
+# (ноги не уходят под пол), затем накладываются на посадку модели от ModelLoader.
+# Здесь только числа и один Transform3D, новых узлов и ресурсов нет.
+func _animate(delta: float) -> void:
+	var running: bool = _behavior == "run_to" or _anim_force_run
+	_anim_amp = move_toward(_anim_amp, 1.0 if running else 0.0, delta * ANIM_BLEND_PER_S)
+	_anim_t += delta
+	var amp: float = _anim_amp
+	var off_y: float = 0.0
+	var pitch: float = 0.0   # плюс поднимает морду (она в -Z)
+	var yaw: float = 0.0
+	var roll: float = 0.0
+	var stretch: float = 1.0 + sin(_anim_t * 2.2) * (1.0 - amp) * 0.018   # дыхание в покое
+	match _move:
+		"hop":
+			var s: float = sin(_anim_t * 8.0)
+			var up: float = maxf(s, 0.0)
+			var down: float = maxf(-s, 0.0)
+			off_y = up * _height * 0.22 * amp
+			stretch += (up * 0.07 - down * 0.09) * amp
+			pitch = (up * 0.14 - down * 0.04) * amp
+		"waddle":
+			var w: float = _anim_t * 5.0
+			roll = sin(w) * 0.13 * amp
+			yaw = sin(w) * 0.05 * amp
+			off_y = absf(sin(w)) * _height * 0.03 * amp
+		"trot":
+			var w: float = _anim_t * 9.0
+			off_y = absf(sin(w)) * _height * 0.035 * amp
+			pitch = (-0.045 + sin(w) * 0.03) * amp
+			roll = sin(w * 0.5) * 0.025 * amp
+		_:
+			pass   # idle: только дыхание; slither и swim будут в T24e
+	var squash_xz: float = 1.0 / sqrt(stretch)   # объём сохраняется: выше значит уже
+	var rot_basis: Basis = Basis.from_euler(Vector3(pitch, yaw, roll))
+	var scale_basis: Basis = Basis.from_scale(Vector3(squash_xz, stretch, squash_xz))
+	_model.transform = Transform3D(rot_basis * scale_basis, Vector3(0.0, off_y, 0.0)) * _model_base
 
 
 func _rebuild_fx() -> void:

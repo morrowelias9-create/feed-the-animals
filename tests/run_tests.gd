@@ -68,6 +68,10 @@ func _run_all() -> void:
 	_test_shop_data()
 	_test_shop_logic()
 	_test_shop_game()
+	print("== T24d: рецепты зверей")
+	_test_recipes()
+	_test_recipe_fallback()
+	_test_recipe_animation()
 
 	_restore_save(backup)
 	print("")
@@ -965,3 +969,119 @@ func _test_shop_game() -> void:
 	_check("T24a: без no_ads предупреждение запускается (проверка, что причина именно в покупке)",
 		_game.check_backup_ad(null, null, false))
 	_game.reset_backup_ad_timer()
+
+
+# ---------- T24d: рецепты зверей ----------
+
+const FOREST_RECIPE_IDS: Array[String] = ["frog", "squirrel", "rabbit", "fox", "deer", "boar", "wolf", "bear"]
+const TRIS_LIMIT: int = 3000          # жёсткий предел R8 §5.3
+const TRIS_LIMIT_TOP_RANKS: int = 5000   # для рангов 7-8
+
+
+func _test_recipes() -> void:
+	_check("рецепты есть у 8 зверей Леса", FOREST_RECIPE_IDS.all(func(id: String) -> bool: return AnimalRecipes.has_recipe(id)))
+	for id in FOREST_RECIPE_IDS:
+		var recipe: Dictionary = AnimalRecipes.get_recipe(id)
+		var data: Dictionary = AnimalBuilder.generate(recipe)
+		var errors: Array = data["errors"]
+		var tris: int = int(data["tris"])
+		_check("%s: рецепт разобран без ошибок %s" % [id, str(errors)], errors.is_empty() and tris > 0)
+		var colors: PackedColorArray = data["colors"]
+		var verts: PackedVector3Array = data["vertices"]
+		var normals: PackedVector3Array = data["normals"]
+		_check("%s: у каждой вершины цвет и нормаль" % id, colors.size() == verts.size() and normals.size() == verts.size())
+		var limit: int = TRIS_LIMIT_TOP_RANKS if AnimalData.rank_of(id) >= 7 else TRIS_LIMIT
+		print("      %s: треугольников %d (лимит %d)" % [id, tris, limit])
+		_check("%s: треугольников %d не больше %d" % [id, tris, limit], tris <= limit)
+		# детерминизм: второе построение даёт те же массивы
+		var again: Dictionary = AnimalBuilder.generate(recipe)
+		_check("%s: детерминизм (два построения совпадают)" % id,
+			data["vertices"] == again["vertices"] and data["colors"] == again["colors"] and data["normals"] == again["normals"])
+		# посадка и размер после нормализации ModelLoader
+		var node: Node3D = ModelLoader.get_animal(id, 0)
+		var box: AABB = data["aabb"]
+		var k: float = node.scale.y
+		var foot_y: float = node.position.y + box.position.y * k
+		var longest: float = maxf(box.size.x, maxf(box.size.y, box.size.z)) * k
+		var size_m: float = float(AnimalData.by_id(id).get("size_m", 1.2))
+		_check("%s: основание на земле (y = %.4f)" % [id, foot_y], absf(foot_y) < 0.001)
+		_check("%s: самая длинная сторона = size_m (%.3f из %.1f)" % [id, longest, size_m], _near(longest, size_m, 0.001))
+		_check("%s: не развёрнут нормализацией (морда в -Z)" % id, _near(node.rotation.y, 0.0, 0.0001))
+		_check("%s: height_of = высота меша" % id, _near(ModelLoader.height_of(node), box.size.y * k, 0.001))
+		# направление взгляда -Z: голова не дальше от -Z, чем тело (исключения помечены в рецепте)
+		var has_parts: bool = AnimalBuilder.has_group(recipe, "head") and AnimalBuilder.has_group(recipe, "body")
+		var head_z: float = AnimalBuilder.group_center(recipe, "head").z
+		var body_z: float = AnimalBuilder.group_center(recipe, "body").z
+		var exception: bool = bool(recipe.get("head_not_front", false))
+		_check("%s: голова впереди тела (head z %.2f, body z %.2f)" % [id, head_z, body_z], has_parts and (exception or head_z <= body_z))
+		node.free()
+		# все пять вариантов строятся, один меш и один материал
+		var variants_ok: bool = true
+		for v in range(VariantData.count()):
+			var model: Node3D = ModelLoader.get_animal(id, v)
+			var mi: MeshInstance3D = model.get_child(0) as MeshInstance3D
+			var mat: StandardMaterial3D = null
+			if mi != null:
+				mat = mi.material_override as StandardMaterial3D
+			var one_mesh: bool = _count_nodes(model, "MeshInstance3D") == 1
+			var glow_ok: bool = mat != null and (v == VariantData.NONE or mat.emission_enabled)
+			var color_ok: bool = mat != null and mat.vertex_color_use_as_albedo
+			var fx: Node3D = ModelLoader.make_variant_fx(v, size_m)
+			var sparks: CPUParticles3D = fx.get_node_or_null("Sparks") as CPUParticles3D
+			var sparks_ok: bool = sparks == null or sparks.amount <= ModelLoader.SPARKS_MAX
+			if not (one_mesh and glow_ok and color_ok and sparks_ok):
+				variants_ok = false
+			model.free()
+			fx.free()
+		_check("%s: все варианты (0-5) строятся, один меш, свечение и искры в норме" % id, variants_ok)
+	_check("move задан и допустим у всех зверей Леса",
+		FOREST_RECIPE_IDS.all(func(id: String) -> bool: return AnimalBuilder.MOVES.has(ModelLoader.move_of(id))))
+	_check("общий материал зверей один и матовый",
+		AnimalBuilder.material() == AnimalBuilder.material() and _near(AnimalBuilder.material().roughness, 1.0)
+		and _near(AnimalBuilder.material().metallic, 0.0))
+
+
+func _test_recipe_fallback() -> void:
+	# Зверь без рецепта по-прежнему получает заглушку (блок и морда), без ошибки.
+	var plain_id: String = ""
+	for a in AnimalData.ANIMALS:
+		if not AnimalRecipes.has_recipe(String(a["id"])):
+			plain_id = String(a["id"])
+			break
+	if plain_id != "":
+		var plain: Node3D = ModelLoader.get_animal(plain_id, 0)
+		_check("%s без рецепта: заглушка с мордой" % plain_id, plain.get_node_or_null("Muzzle") != null and ModelLoader.height_of(plain) > 0.0)
+		_check("%s без рецепта: движения нет" % plain_id, ModelLoader.move_of(plain_id) == "")
+		plain.free()
+	var ghost: Node3D = ModelLoader.get_animal("нет_такого_зверя", 0)
+	_check("неизвестный id: заглушка, а не ошибка", ghost.get_node_or_null("Muzzle") != null)
+	ghost.free()
+	var broken: Dictionary = {"move": "hop", "blocks": [{"shape": "cube", "group": "body"}]}
+	var broken_data: Dictionary = AnimalBuilder.generate(broken)
+	_check("рецепт с ошибками даёт список ошибок и пустую геометрию",
+		not (broken_data["errors"] as Array).is_empty() and int(broken_data["tris"]) == 0)
+
+
+func _test_recipe_animation() -> void:
+	var view := AnimalView.new()
+	view.set_creature("fox", 0, 1, 0.0)
+	var model: Node3D = view.get_node_or_null("Model") as Node3D
+	_check("лиса: AnimalView получил модель и тип движения trot", model != null and ModelLoader.move_of("fox") == "trot")
+	if model == null:
+		view.free()
+		return
+	var base: Transform3D = model.transform
+	var children_before: int = view.get_child_count()
+	view.set_anim_running(true)
+	for i in 60:
+		view._process(0.016)
+	var running_basis_changed: bool = not model.transform.basis.is_equal_approx(base.basis) or not model.transform.origin.is_equal_approx(base.origin)
+	_check("бег на месте двигает корень модели", running_basis_changed)
+	_check("анимация не создаёт узлов", view.get_child_count() == children_before)
+	_check("анимация не двигает сам AnimalView", view.position == Vector3.ZERO)
+	view.set_anim_running(false)
+	for i in 60:
+		view._process(0.1)
+	var rest_k: float = model.scale.y / base.basis.get_scale().y
+	_check("в покое остаётся только дыхание (в пределах 3%% масштаба): %.3f" % rest_k, absf(rest_k - 1.0) < 0.03)
+	view.free()

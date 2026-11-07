@@ -1,6 +1,7 @@
 class_name ModelLoader
 extends RefCounted
-## Загрузка моделей зверей по требованию, заглушки и варианты (шаги T10/T10b, справочник R4/R8).
+## Загрузка моделей зверей по требованию, заглушки и варианты (шаги T10/T10b/T24d, справочник R4/R8).
+## Порядок выбора модели: файл .glb (если есть) -> рецепт из AnimalRecipes -> заглушка из примитива.
 ## Прототип зверя (из .glb или заглушка) хранится в кэше вне дерева сцены, наружу отдаётся его копия:
 ## так один и тот же зверь может стоять в нескольких местах, а удаление копии не ломает кэш.
 
@@ -10,6 +11,7 @@ const GLOW_ENERGY: float = 1.2
 
 static var _protos: Dictionary = {}      # id -> прототип Node3D (не в дереве)
 static var _heights: Dictionary = {}     # id -> высота модели в метрах после подгонки
+static var _moves: Dictionary = {}       # id -> тип движения всего тела из рецепта (hop, waddle, trot, ...)
 static var _variant_mats: Dictionary = {} # "id материала|вариант" -> материал с оттенком
 
 
@@ -28,6 +30,13 @@ static func height_of(node: Node3D) -> float:
 	if node != null and node.has_meta("height_m"):
 		return float(node.get_meta("height_m"))
 	return 1.0
+
+
+## Тип движения зверя из рецепта (hop, waddle, trot, slither, swim, idle) или пустая строка, если рецепта нет.
+## AnimalView по нему анимирует корень модели.
+static func move_of(id: String) -> String:
+	_get_proto(id)
+	return String(_moves.get(id, ""))
 
 
 ## Текстура иконки или null, если файла нет.
@@ -83,10 +92,37 @@ static func _get_proto(id: String) -> Node3D:
 	if node != null:
 		_heights[id] = _fit_to_size(node, size_m)
 	else:
+		node = _make_from_recipe(id, size_m)
+	if node == null:
 		node = _make_placeholder(id)
 		_heights[id] = size_m * 0.8
+	_moves[id] = AnimalRecipes.move_of(id)
 	node.name = id
 	_protos[id] = node
+	return node
+
+
+## Зверь из рецепта: один MeshInstance3D и один общий матовый материал с вершинными цветами.
+## Размер и посадка на землю по габаритам из построителя (не зависят от того, читает ли headless меш).
+## Возвращает null, если рецепта нет или он с ошибками (тогда будет заглушка).
+static func _make_from_recipe(id: String, size_m: float) -> Node3D:
+	if not AnimalRecipes.has_recipe(id):
+		return null
+	var data: Dictionary = AnimalBuilder.generate(AnimalRecipes.get_recipe(id))
+	var errors: Array = data["errors"]
+	var mesh: ArrayMesh = AnimalBuilder.mesh_from(data)
+	if not errors.is_empty() or mesh == null:
+		return null
+	var node := Node3D.new()
+	node.name = id
+	var mi := MeshInstance3D.new()
+	mi.name = "Mesh"
+	mi.mesh = mesh
+	mi.material_override = AnimalBuilder.material()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.add_child(mi)
+	var box: AABB = data["aabb"]
+	_heights[id] = _apply_fit(node, box, size_m)
 	return node
 
 
@@ -130,7 +166,11 @@ static func _animal_mat(rarity: int) -> StandardMaterial3D:
 ## Приводит модель к size_m по габаритам (самая длинная сторона), основание на землю.
 ## Возвращает высоту после подгонки. Габариты считаются по локальным трансформациям, узел может быть вне дерева.
 static func _fit_to_size(node: Node3D, size_m: float) -> float:
-	var box: AABB = _bounds(node, Transform3D.IDENTITY)
+	return _apply_fit(node, _bounds(node, Transform3D.IDENTITY), size_m)
+
+
+## Подгонка по готовым габаритам box (в системе узла): масштаб, посадка на землю, разворот длинной стороны по X.
+static func _apply_fit(node: Node3D, box: AABB, size_m: float) -> float:
 	if box.size.x <= 0.0 and box.size.y <= 0.0 and box.size.z <= 0.0:
 		return size_m
 	var size: Vector3 = box.size
