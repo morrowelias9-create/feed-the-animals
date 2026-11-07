@@ -67,8 +67,7 @@ func _build_body() -> void:
 		Game.inventory_changed.connect(_on_game_changed)
 	if not Game.slots_changed.is_connected(_on_game_changed):
 		Game.slots_changed.connect(_on_game_changed)
-	# T24: обновляем текст рекорда при смене языка
-	Loc.language_changed.connect(_on_language_changed)
+	# T24: обновляем текст рекорда при смене языка — WindowBase уже подключает language_changed и вызывает refresh()
 
 
 ## Перестраивает список. Прокрутка сохраняется, чтобы после продажи список не прыгал вверх.

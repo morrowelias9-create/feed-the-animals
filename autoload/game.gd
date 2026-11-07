@@ -16,6 +16,10 @@ signal boost_changed
 signal notice(key: String, args: Array)      # короткие сообщения игроку
 # T23: нужен для показа предупреждения перед межстраничной рекламой (путь Б).
 signal backup_ad_warning_needed
+# T24b: мультиплеер
+signal mp_sessions_loaded(opponents: Array)
+signal mp_neighbor_transaction(opponent_id: String, transactions: Array)
+signal mp_neighbor_finish(opponent_id: String)
 
 const MONEY_SIGNAL_INTERVAL: float = 0.1     # как часто tick сообщает об изменении денег
 
@@ -966,3 +970,157 @@ func check_backup_ad(throw_controller: ThrowController, bar_controller: Node, wi
 func _show_backup_ad_warning() -> void:
 	# Эмитим сигнал, который main.gd слушает.
 	backup_ad_warning_needed.emit()
+
+
+# ============ T24b: Асинхронный мультиплеер (Соседи) ============
+
+var _mp_initialized: bool = false
+var _mp_snapshot_timer: float = 0.0
+var _mp_push_timer: float = 0.0
+var _mp_session_active: bool = false
+var _mp_neighbors: Array = []  # загруженные сессии соседей
+
+const MP_SNAPSHOT_INTERVAL: float = 20.0   # снимок загона каждые 20 с
+const MP_PUSH_DELAY: float = 180.0         # push через 3 минуты игры
+const MP_PUSH_ON_BACKGROUND: bool = true   # push при уходе в фон
+
+## Инициализирует мультиплеер: загружает соседей и начинает запись.
+## Вызывать из main.gd после Ya.initialize() и Game.start().
+## Результат загрузки соседей придёт через сигнал mp_sessions_loaded.
+func mp_init() -> void:
+	if _mp_initialized:
+		return
+	_mp_initialized = true
+	
+	# Загружаем соседей: 4 сессии с силой ±30%
+	var my_strength: int = strength()
+	var strength_min: int = maxi(1, int(my_strength * 0.7))
+	var strength_max: int = int(my_strength * 1.3)
+	
+	var meta: Dictionary = {
+		"meta1": {"min": strength_min, "max": strength_max},
+		"meta2": {"min": 0, "max": ZoneData.count() - 1}  # максимальная открытая зона
+	}
+	
+	# Запускаем асинхронную загрузку, результат придёт через сигнал
+	Ya.mp_init(4, meta)
+	
+	# Начинаем запись своей сессии
+	Ya.mp_start_recording()
+	_mp_session_active = true
+	_mp_snapshot_timer = 0.0
+	_mp_push_timer = 0.0
+	
+	# Подписываемся на события от Ya
+	Ya.mp_transaction.connect(_on_mp_transaction)
+	Ya.mp_finish.connect(_on_mp_finish)
+	Ya.mp_sessions_loaded.connect(_on_mp_sessions_loaded)
+
+func _on_mp_sessions_loaded(opponents: Array) -> void:
+	_mp_neighbors = opponents
+
+func _on_mp_transaction(opponent_id: String, transactions: Array) -> void:
+	# Передаём транзакции в NeighborView через сигнал (main.gd слушает)
+	mp_neighbor_transaction.emit(opponent_id, transactions)
+
+func _on_mp_finish(opponent_id: String) -> void:
+	# Сессия соседа закончилась
+	mp_neighbor_finish.emit(opponent_id)
+
+
+## Обновление таймеров мультиплеера. Вызывать каждый кадр из main.gd.
+func mp_tick(delta: float) -> void:
+	if not _mp_initialized or not _mp_session_active:
+		return
+	
+	# Снимок загона каждые 20 с
+	_mp_snapshot_timer += delta
+	if _mp_snapshot_timer >= MP_SNAPSHOT_INTERVAL:
+		_mp_snapshot_timer = 0.0
+		_record_pen_snapshot()
+	
+	# Push через 3 минуты игры
+	_mp_push_timer += delta
+	if _mp_push_timer >= MP_PUSH_DELAY:
+		_mp_push_timer = 0.0
+		_try_push_session()
+
+## Записать событие броска в таймлайн.
+## Вызывать из ThrowController при приземлении еды.
+func mp_record_throw(dist: float, food_idx: int) -> void:
+	if not _mp_session_active:
+		return
+	var payload: Dictionary = {
+		"t": "throw",
+		"d": dist,
+		"f": food_idx
+	}
+	Ya.mp_commit(payload)
+
+## Попытка отправить сессию на сервер.
+func _try_push_session() -> void:
+	if not _mp_session_active:
+		return
+	var now: int = int(Time.get_unix_time_from_system())
+	var last_push: int = _i("mp_last_push")
+	# Не чаще раза в 60 с
+	if now - last_push < 60:
+		return
+	
+	var my_strength: int = strength()
+	var zone_max: int = _calc_max_unlocked_zone()
+	
+	var meta: Dictionary = {
+		"meta1": my_strength,
+		"meta2": zone_max
+	}
+	
+	Ya.mp_push(meta)
+	Save.data["mp_last_push"] = now
+	Save.save_data()
+
+## Вызывать при уходе в фон (NOTIFICATION_APPLICATION_FOCUS_OUT в main.gd).
+func mp_on_focus_out() -> void:
+	if _mp_session_active and MP_PUSH_ON_BACKGROUND:
+		_try_push_session()
+
+## Вызывать при возврате из фона.
+func mp_on_focus_in() -> void:
+	if not _mp_session_active:
+		# Возобновляем запись, если была остановлена
+		Ya.mp_start_recording()
+		_mp_session_active = true
+
+## Снимок текущего состояния загона.
+func _record_pen_snapshot() -> void:
+	var placed: Array = placed_animals()
+	var animals_data: Array = []
+	
+	# Берём до 10 зверей (по задаче)
+	for i in range(min(placed.size(), 10)):
+		var a: Dictionary = placed[i]
+		animals_data.append([
+			str(a["animal_id"]),
+			int(a["variant"]),
+			int(a["size"])
+		])
+	
+	var payload: Dictionary = {
+		"t": "pen",
+		"a": animals_data
+	}
+	Ya.mp_commit(payload)
+
+## Максимальная открытая зона игрока (индекс зоны, 0-4).
+func _calc_max_unlocked_zone() -> int:
+	var max_zone: int = 0
+	for zone in ZoneData.count():
+		if is_zone_complete(zone):
+			max_zone = zone
+		else:
+			break
+	return max_zone
+
+## Получить загруженных соседей (для main.gd).
+func get_mp_neighbors() -> Array:
+	return _mp_neighbors

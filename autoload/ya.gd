@@ -7,6 +7,9 @@ signal initialized(ok: bool)
 signal rewarded_granted
 signal ad_started(kind: String)
 signal ad_finished(kind: String, shown: bool)
+signal mp_transaction(opponent_id: String, transactions: Array)  # данные транзакций от соперника
+signal mp_finish(opponent_id: String)                           # сессия соперника закончилась
+signal mp_sessions_loaded(opponents: Array)                     # загружены сессии соседей
 
 ## Минимальный интервал между полноэкранной рекламой, секунд. Подстрой под правила платформы.
 const INTERSTITIAL_COOLDOWN := 61.0
@@ -15,6 +18,10 @@ const CLOUD_TIMEOUT := 5.0
 const PAY_TIMEOUT := 10.0        # каталог, список покупок, закрытие покупки
 const PURCHASE_TIMEOUT := 180.0  # окно оплаты платформы ждёт игрока, поэтому ждём долго
 const MOCK_PURCHASE_DELAY := 0.2  # заглушка отвечает не мгновенно, как настоящий SDK
+
+# --- Мультиплеер ---
+const MP_INIT_TIMEOUT := 8.0
+const MP_PUSH_TIMEOUT := 5.0
 
 var sdk_ok := false
 var lang := "ru"
@@ -208,7 +215,7 @@ func get_catalog() -> Array:
 ## Начислять товар можно только при ok = true; расходуемую после начисления надо закрыть через consume().
 func purchase(product_id: String) -> Dictionary:
 	if not _is_web:
-		return await _mock_purchase(product_id)
+		return await _mock_purchase_single(product_id)
 	if not sdk_ok:
 		return {"ok": false, "error": "no_sdk"}
 	var req := _pay_begin()
@@ -292,7 +299,7 @@ func _mock_catalog() -> Array:
 	return items
 
 
-func _mock_purchase(product_id: String) -> Dictionary:
+func _mock_purchase_single(product_id: String) -> Dictionary:
 	await get_tree().create_timer(MOCK_PURCHASE_DELAY).timeout
 	if not ShopData.is_known(product_id):
 		return {"ok": false, "error": "unknown product"}
@@ -300,6 +307,99 @@ func _mock_purchase(product_id: String) -> Dictionary:
 	var token := "mock_%d_%d" % [int(Time.get_unix_time_from_system()), _mock_seq]
 	_mock_purchases.append({"product_id": product_id, "token": token})
 	return {"ok": true, "product_id": product_id, "token": token, "error": ""}
+
+
+func _mock_mp_sessions(count: int) -> Array:
+	# В редакторе возвращаем пустой массив — соседей нет
+	return []
+
+
+# --- Мультиплеер (асинхронные сессии) ----------------------------------------
+
+var _mp_init_done := false
+var _mp_sessions: Array = []  # загруженные сессии оппонентов
+var _mp_session_start: int = 0  # unix time старта записи сессии
+var _mp_recording: bool = false
+
+## Инициализирует асинхронный мультиплеер: загружает сессии соседей.
+## count — количество сессий для загрузки (до 10).
+## meta — словарь с min/max для meta1, meta2, meta3 (например, strength ±30%).
+## Результат придёт через сигнал mp_sessions_loaded.
+func mp_init(count: int, meta: Dictionary = {}) -> void:
+	if _mp_init_done:
+		mp_sessions_loaded.emit(_mp_sessions)
+		return
+	if not _is_web:
+		_mp_init_done = true
+		_mp_sessions = _mock_mp_sessions(count)
+		mp_sessions_loaded.emit(_mp_sessions)
+		return
+	if not sdk_ok:
+		_mp_init_done = true
+		mp_sessions_loaded.emit([])
+		return
+	_bridge = JavaScriptBridge.get_interface("YaBridge")
+	if _bridge == null:
+		_mp_init_done = true
+		mp_sessions_loaded.emit([])
+		return
+	# Подписываемся на события мультиплеера, если ещё не подписаны
+	# (инициализация происходит один раз, колбэк уже установлен в initialize)
+	var req_meta: Dictionary = {}
+	if meta.has("meta1"):
+		req_meta["meta1"] = meta["meta1"]
+	if meta.has("meta2"):
+		req_meta["meta2"] = meta["meta2"]
+	if meta.has("meta3"):
+		req_meta["meta3"] = meta["meta3"]
+	_bridge.multiplayerInit({
+		"count": count,
+		"isEventBased": true,
+		"maxOpponentTurnTime": 200,
+		"meta": req_meta
+	})
+	# Результат придёт асинхронно через сигнал mp_sessions_loaded
+
+## Фиксирует транзакцию текущей игровой сессии (payload).
+## Вызывать во время игры для записи таймлайна.
+func mp_commit(payload: Dictionary) -> void:
+	if not _mp_recording:
+		return
+	if not _is_web:
+		return  # в редакторе не пишем
+	if not sdk_ok:
+		return
+	_bridge.multiplayerCommit(payload)
+
+## Сохраняет таймлайн на сервере. Вызывать по завершении игры или уходе в фон.
+## meta1, meta2, meta3 — пользовательские параметры для выборки (минимум один).
+func mp_push(meta: Dictionary) -> void:
+	if not _mp_recording:
+		return
+	if not _is_web:
+		_mp_recording = false
+		return
+	if not sdk_ok:
+		_mp_recording = false
+		return
+	var req_meta: Dictionary = {}
+	if meta.has("meta1"):
+		req_meta["meta1"] = meta["meta1"]
+	if meta.has("meta2"):
+		req_meta["meta2"] = meta["meta2"]
+	if meta.has("meta3"):
+		req_meta["meta3"] = meta["meta3"]
+	_bridge.multiplayerPush(req_meta)
+	_mp_recording = false
+
+## Начать запись новой сессии (вызывать при старте геймплея).
+func mp_start_recording() -> void:
+	_mp_recording = true
+	_mp_session_start = int(Time.get_unix_time_from_system())
+
+## Остановить запись без отправки на сервер (например, при выходе в меню).
+func mp_stop_recording() -> void:
+	_mp_recording = false
 
 
 # --- Звук ------------------------------------------------------------------
@@ -330,6 +430,19 @@ func _on_js_event(args: Array) -> void:
 				push_warning("Yandex SDK недоступен: %s" % payload.get("error", "?"))
 			_init_done = true
 			initialized.emit(sdk_ok)
+		"multiplayer_init":
+			_mp_sessions = payload.get("sessions", [])
+			_mp_init_done = true
+			mp_sessions_loaded.emit(_mp_sessions)
+		"multiplayer-sessions-transaction":
+			var opponent_id: String = str(payload.get("opponentId", ""))
+			var transactions: Array = payload.get("transactions", [])
+			if opponent_id != "" and transactions.size() > 0:
+				mp_transaction.emit(opponent_id, transactions)
+		"multiplayer-sessions-finish":
+			var opponent_id: String = str(payload.get("opponentId", ""))
+			if opponent_id != "":
+				mp_finish.emit(opponent_id)
 		"ad_rewarded":
 			_grant_reward()
 		"ad_close":

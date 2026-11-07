@@ -36,6 +36,8 @@ const DEFAULTS := {
 	"last_interstitial_time": 0,       # T23: время последней межстраничной рекламы (unix time)
 	"last_rewarded_time": 0,           # T23: время последней rewarded-рекламы (unix time)
 	"session_start_time": 0,           # T23: время старта текущей сессии (unix time)
+	"mp_last_push": 0,                 # T24b: время последнего push сессии мультиплеера
+	"mp_session_time": 0,              # T24b: накопленное время текущей сессии (сек)
 	"_ts": 0,
 }
 

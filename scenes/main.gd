@@ -28,6 +28,9 @@ var _tutorial: TutorialController
 var _offline_window: OfflineWindow
 var _ad_warning: AdWarning
 
+# T24b: Соседи (асинхронный мультиплеер)
+var _neighbors: Array = []  # NeighborView для 4 соседних участков (0,1,3,4)
+
 
 func _ready() -> void:
 	# Порядок старта (CLAUDE.md): SDK, сохранение, Game.start(), и только потом мир и интерфейс.
@@ -48,6 +51,24 @@ func _ready() -> void:
 	Ya.gameplay_start()
 	# T24a: незакрытые покупки за яны (требование Яндекса 1.13.1). Без await: старт игры не ждёт сеть.
 	_restore_purchases()
+	
+	# T24b: инициализация асинхронного мультиплеера (соседи).
+	Game.mp_init()
+	# Подписываемся на загрузку сессий соседей
+	Game.mp_sessions_loaded.connect(_on_mp_sessions_loaded)
+	# T24b: подписываемся на события мультиплеера от Game
+	Game.mp_neighbor_transaction.connect(_on_mp_neighbor_transaction)
+	Game.mp_neighbor_finish.connect(_on_mp_neighbor_finish)
+	# Фокус приложения для push сессии при уходе в фон
+	Ya.ad_finished.connect(_on_ya_ad_finished)
+
+
+func _notification(what: int) -> void:
+	# T24b: обработка фокуса для push мультиплеера при уходе в фон/возврате
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		Game.mp_on_focus_out()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		Game.mp_on_focus_in()
 
 
 # T24a: постоянные покупки включаются, необработанные расходуемые начисляются и закрываются.
@@ -102,6 +123,27 @@ func _build_world() -> void:
 	_zone_look.world_builder = _world_builder
 	world.add_child(_zone_look)
 	_build_input()
+
+
+# T24b: создаёт NeighborView для 4 соседних участков (индексы 0, 1, 3, 4).
+func _build_neighbors(opponents: Array = []) -> void:
+	var neighbor_indices: Array = [0, 1, 3, 4]  # свой участок — 2
+	
+	for i in neighbor_indices.size():
+		var plot_idx: int = neighbor_indices[i]
+		var nv: NeighborView = NeighborView.new()
+		nv.name = "Neighbor_%d" % plot_idx
+		_world.add_child(nv)
+		
+		# Если есть загруженная сессия для этого участка
+		if i < opponents.size():
+			var session: Dictionary = opponents[i]
+			nv.setup(str(session.get("id", "")), plot_idx, session)
+		else:
+			# Нет сессии — показываем "Свободный участок"
+			nv.show_free_plot()
+		
+		_neighbors.append(nv)
 
 
 # Ввод: один роутер на всю игру, два плавающих джойстика (движение слева, камера справа), но под интерфейсом.
@@ -203,6 +245,28 @@ func _on_ad_warning_finished() -> void:
 func _on_ya_ad_finished(kind: String, shown: bool) -> void:
 	if kind == "interstitial":
 		Game.reset_backup_ad_timer()
+
+
+# T24b: обработчик загрузки сессий соседей.
+func _on_mp_sessions_loaded(opponents: Array) -> void:
+	# Строим соседей только когда мир уже готов
+	if _world != null:
+		_build_neighbors(opponents)
+
+# T24b: обработчики событий мультиплеера от Game.
+func _on_mp_neighbor_transaction(opponent_id: String, transactions: Array) -> void:
+	# Находим NeighborView для этого opponent_id и передаём транзакции
+	for nv in _neighbors:
+		if nv.get_opponent_id() == opponent_id:
+			nv.handle_transactions(transactions)
+			break
+
+func _on_mp_neighbor_finish(opponent_id: String) -> void:
+	# Сессия соседа закончилась — показываем "Свободный участок"
+	for nv in _neighbors:
+		if nv.get_opponent_id() == opponent_id:
+			nv.show_free_plot()
+			break
 
 
 # Окна (T12, T12a, T18, T21) в своём слое поверх HUD и лавка продажи в мире.
@@ -341,6 +405,8 @@ func _process(delta: float) -> void:
 	Game.update_ad_timers(delta)
 	# T24: обновляем таймер лидерборда.
 	Game._tick_leaderboard(delta)
+	# T24b: обновляем таймеры мультиплеера (снимки загона, push).
+	Game.mp_tick(delta)
 	# T23: проверяем путь Б (резервная реклама).
 	# Проверяем только если нет открытых окон (router enabled) и игрок в допустимом состоянии.
 	if _router.enabled:

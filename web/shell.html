@@ -121,6 +121,40 @@
 			consumePurchase(req, token) {
 				pay(req, (p) => p.consumePurchase(token).then(() => ({})));
 			},
+
+			// --- Асинхронный мультиплеер (T24b) ---
+			multiplayerInit(params) {
+				if (!ysdk || !ysdk.multiplayer || !ysdk.multiplayer.sessions) {
+					emit('multiplayer_init', { sessions: [] });
+					return;
+				}
+				ysdk.multiplayer.sessions.init(params).then((opponents) => {
+					emit('multiplayer_init', { sessions: opponents });
+				}).catch((e) => {
+					console.warn('multiplayer init failed', e);
+					emit('multiplayer_init', { sessions: [] });
+				});
+			},
+
+			multiplayerCommit(payload) {
+				if (!ysdk || !ysdk.multiplayer || !ysdk.multiplayer.sessions) {
+					return;
+				}
+				try {
+					ysdk.multiplayer.sessions.commit(payload);
+				} catch (e) {
+					console.warn('multiplayer commit failed', e);
+				}
+			},
+
+			multiplayerPush(meta) {
+				if (!ysdk || !ysdk.multiplayer || !ysdk.multiplayer.sessions) {
+					return;
+				}
+				ysdk.multiplayer.sessions.push(meta).catch((e) => {
+					console.warn('multiplayer push failed', e);
+				});
+			},
 		};
 	})();
 	</script>

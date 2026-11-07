@@ -275,6 +275,9 @@ func _land() -> void:
 	# T24: если установлен новый рекорд — отправляем в лидерборд (с троттлингом 5 с).
 	if new_best > old_best:
 		Game.submit_best_throw(new_best)
+	# T24b: записываем бросок в таймлайн мультиплеера.
+	var food_idx: int = int(Save.data.get("food_selected", 0))
+	Game.mp_record_throw(dist, food_idx)
 	_set_toast(true, dist)
 	_spawn_land_fx(position)
 	landed.emit(dist, zone, perfect, position)
