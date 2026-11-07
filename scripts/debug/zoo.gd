@@ -2,8 +2,11 @@ extends Node3D
 ## Отладочная сцена «зоопарк» (шаг T24d): все звери с рецептами стоят рядами, можно быстро их осмотреть.
 ## Запуск: открыть scenes/debug/zoo.tscn и «Запустить текущую сцену» (F6). Игра эту сцену не загружает.
 ## Звери стоят боком к камере (мордой вправо), камера смотрит вдоль -Z под углом, как в игре.
-## Клавиши: 0-5 вариант, [ и ] ступень размера, R покой/бег на месте, T силуэт (всё чёрное на светлом),
-## Влево/Вправо следующий зверь, Вверх/Вниз или колесо дистанция, Home обзор всех.
+## Клавиши:
+##   0-5 вариант, [ и ] ступень размера, R покой/бег на месте, T силуэт (всё чёрное на светлом),
+##   Влево/Вправо следующий зверь, Вверх/Вниз или колесо дистанция, Home обзор всех.
+##   F — переключение режима камеры (орбита / свободный полёт)
+##   В свободном полёте: WASD — движение, мышь — обзор, Shift — ускорить, Q/E — вверх/вниз, Пробел — фокус на звере
 ## Подписи только id зверей. Локализация не нужна.
 
 const ROW_SIZE: int = 8
@@ -14,7 +17,10 @@ const CAM_DIST_MIN: float = 3.0
 const CAM_DIST_MAX: float = 90.0
 const SIZE_STEP_MULT: float = 1.12        # во сколько раз зверь крупнее за ступень (только для осмотра)
 const SIZE_STEP_MAX: int = 8
-const SMOOTH: float = 6.0                 # скорость сглаживания камеры
+const SMOOTH: float = 6.0                 # скорость сглаживания камеры (орбита)
+const FLY_SPEED: float = 15.0             # скорость свободного полёта
+const FLY_SPEED_FAST: float = 40.0        # с Shift
+const MOUSE_SENS: float = 0.003           # чувствительность мыши
 const BG_NORMAL: Color = Color("#CFE6F7")
 const BG_SILHOUETTE: Color = Color("#F4F4F4")
 const GROUND_NORMAL: Color = Color("#86B36B")
@@ -32,6 +38,9 @@ var _variant: int = 0
 var _size_step: int = 0
 var _running: bool = false
 var _silhouette: bool = false
+var _free_fly: bool = false               # режим свободного полёта
+var _fly_yaw: float = 0.0                 # рыскание камеры
+var _fly_pitch: float = 0.0               # тангаж камеры
 var _cam: Camera3D
 var _cam_focus: Vector3 = Vector3.ZERO
 var _cam_dist: float = 6.0
@@ -57,13 +66,51 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _cam == null:
 		return
-	var k: float = clampf(delta * SMOOTH, 0.0, 1.0)
-	var want_dist: float = _overview_dist if _overview else _dist
-	_cam_focus = _cam_focus.lerp(_focus_point(), k)
-	_cam_dist = lerpf(_cam_dist, want_dist, k)
-	var pitch: float = deg_to_rad(CAM_PITCH_DEG)
-	var offset: Vector3 = Vector3(0.0, -sin(pitch), cos(pitch)) * _cam_dist
-	_cam.look_at_from_position(_cam_focus + offset, _cam_focus, Vector3.UP)
+	if _free_fly:
+		_process_free_fly(delta)
+	else:
+		var k: float = clampf(delta * SMOOTH, 0.0, 1.0)
+		var want_dist: float = _overview_dist if _overview else _dist
+		_cam_focus = _cam_focus.lerp(_focus_point(), k)
+		_cam_dist = lerpf(_cam_dist, want_dist, k)
+		var pitch: float = deg_to_rad(CAM_PITCH_DEG)
+		var offset: Vector3 = Vector3(0.0, -sin(pitch), cos(pitch)) * _cam_dist
+		_cam.look_at_from_position(_cam_focus + offset, _cam_focus, Vector3.UP)
+
+
+func _process_free_fly(delta: float) -> void:
+	# Ввод движения
+	var input_dir: Vector3 = Vector3.ZERO
+	if Input.is_key_pressed(KEY_W):
+		input_dir.z -= 1.0
+	if Input.is_key_pressed(KEY_S):
+		input_dir.z += 1.0
+	if Input.is_key_pressed(KEY_A):
+		input_dir.x -= 1.0
+	if Input.is_key_pressed(KEY_D):
+		input_dir.x += 1.0
+	if Input.is_key_pressed(KEY_Q):
+		input_dir.y += 1.0
+	if Input.is_key_pressed(KEY_E):
+		input_dir.y -= 1.0
+	
+	var speed: float = FLY_SPEED_FAST if Input.is_key_pressed(KEY_SHIFT) else FLY_SPEED
+	
+	# Вычисляем forward вектор камеры (камера смотрит вдоль -Z при yaw=0)
+	# forward = (sin(yaw), 0, cos(yaw)) для движения по горизонтали
+	var forward_h: Vector3 = Vector3(sin(_fly_yaw), 0.0, cos(_fly_yaw)).normalized()
+	var right_h: Vector3 = Vector3(cos(_fly_yaw), 0.0, -sin(_fly_yaw)).normalized()
+	var up: Vector3 = Vector3.UP
+	
+	var move_vel: Vector3 = Vector3.ZERO
+	if input_dir != Vector3.ZERO:
+		input_dir = input_dir.normalized()
+		move_vel = (forward_h * -input_dir.z + right_h * input_dir.x + up * input_dir.y) * speed
+	
+	_cam.position += move_vel * delta
+	
+	# Обновление вращения камеры
+	_cam.rotation = Vector3(_fly_pitch, _fly_yaw, 0.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -73,6 +120,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_change_dist(0.88)
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_change_dist(1.14)
+		return
+	if event is InputEventMouseMotion and _free_fly:
+		var mm: InputEventMouseMotion = event as InputEventMouseMotion
+		_fly_yaw -= mm.relative.x * MOUSE_SENS
+		_fly_pitch = clampf(_fly_pitch - mm.relative.y * MOUSE_SENS, deg_to_rad(-89.0), deg_to_rad(89.0))
 		return
 	if not (event is InputEventKey):
 		return
@@ -104,6 +156,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_T:
 			_silhouette = not _silhouette
 			_apply_look()
+			_update_info()
+		KEY_F:
+			_free_fly = not _free_fly
+			if _free_fly:
+				# Инициализируем yaw/pitch из текущей ориентации камеры
+				_fly_yaw = _cam.rotation.y
+				_fly_pitch = _cam.rotation.x
+				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			else:
+				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			_update_info()
+		KEY_SPACE:
+			if _free_fly and not _views.is_empty():
+				# Фокус на текущем звере
+				_cam.position = _focus_point() + Vector3(0.0, 0.0, 5.0)
+				_fly_yaw = 0.0
+				_fly_pitch = deg_to_rad(-20.0)
 			_update_info()
 		KEY_LEFT:
 			_focus_on(_focus - 1)
@@ -316,8 +385,11 @@ func _update_info() -> void:
 	var lines: PackedStringArray = PackedStringArray()
 	var who: String = "overview" if _overview else "%s [%d/%d]" % [_ids[_focus], _focus + 1, _ids.size()]
 	var mutation: String = String(VariantData.VARIANTS[_variant]["id"])
-	lines.append("zoo T24d   view: %s   variant: %d %s   size step: %d   motion: %s   silhouette: %s" % [
-		who, _variant, mutation, _size_step, "run" if _running else "rest", "on" if _silhouette else "off"])
-	lines.append("0-5 variant | [ ] size | R rest/run | T silhouette | Left/Right animal | Up/Down, wheel zoom | Home overview")
+	lines.append("zoo T24d   view: %s   variant: %d %s   size step: %d   motion: %s   silhouette: %s   fly: %s" % [
+		who, _variant, mutation, _size_step, "run" if _running else "rest", "on" if _silhouette else "off", "on" if _free_fly else "off"])
+	if _free_fly:
+		lines.append("F — орбита | WASD/QE — полёт | Мышь — обзор | Shift — ускорение | Пробел — фокус на звере")
+	else:
+		lines.append("0-5 вариант | [ ] size | R rest/run | T silhouette | F — свободный полёт | Left/Right зверь | Up/Down, колесо zoom | Home overview")
 	var text: String = "\n".join(lines)
 	_info.text = text
