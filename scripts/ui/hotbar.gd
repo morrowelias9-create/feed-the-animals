@@ -56,9 +56,18 @@ func refresh() -> void:
 			var a := Game.animal_by_uid(_uids[i])
 			var id := String(a.get("animal_id", "?"))
 			var animal_name: String = Loc.t("animal_" + id)
-			b.text = animal_name.left(1).to_upper()
+			
+			# Иконка зверя: PNG (T25) или фоллбек — буква
+			var icon_path: String = "res://assets/ui/icons/animal_%s.png" % id
+			if ResourceLoader.exists(icon_path):
+				b.icon = load(icon_path) as Texture2D
+				b.add_theme_constant_override("icon_max_width", int(ITEM_SIZE.x * 0.9))
+				b.text = ""
+			else:
+				b.icon = null
+				b.text = animal_name.left(1).to_upper()
+				b.modulate = Color.from_hsv(float(abs(id.hash()) % 1000) / 1000.0, 0.55, 1.0)
 			b.tooltip_text = animal_name
-			b.modulate = Color.from_hsv(float(abs(id.hash()) % 1000) / 1000.0, 0.55, 1.0)
 			b.visible = true
 		else:
 			b.visible = false

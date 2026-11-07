@@ -196,21 +196,33 @@ func _refresh_zone_grid(zone_idx: int) -> void:
 func _make_card_icon(animal_id: String, is_found: bool) -> Control:
 	var icon_size: float = 70.0
 	if is_found:
-		# Цветной квадрат с первой буквой (как в AnimalRow)
+		# Иконка зверя: PNG из assets/ui/icons/animal_<id>.png (T25), фоллбек — буква
 		var icon := ColorRect.new()
 		var rarity_color: Color = AnimalData.rarity_color(AnimalData.rarity_of(animal_id))
 		icon.color = rarity_color.darkened(0.55)
 		icon.custom_minimum_size = Vector2(icon_size, icon_size)
 		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var animal_name: String = Loc.t("animal_" + animal_id)
-		var letter: Label = UiStyle.outline_label(animal_name.left(1).to_upper(), 36, 5, rarity_color)
-		letter.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		letter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		icon.add_child(letter)
+		
+		var icon_path: String = "res://assets/ui/icons/animal_%s.png" % animal_id
+		if ResourceLoader.exists(icon_path):
+			var tex_rect: TextureRect = TextureRect.new()
+			tex_rect.texture = load(icon_path) as Texture2D
+			tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tex_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			icon.add_child(tex_rect)
+		else:
+			# Фоллбек: буква
+			var animal_name: String = Loc.t("animal_" + animal_id)
+			var letter: Label = UiStyle.outline_label(animal_name.left(1).to_upper(), 36, 5, rarity_color)
+			letter.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			letter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			icon.add_child(letter)
 		return icon
 	else:
-		# Тёмный силуэт
+		# Тёмный силуэт (неоткрытый зверь)
 		var icon := ColorRect.new()
 		icon.color = Color(0.18, 0.18, 0.2)
 		icon.custom_minimum_size = Vector2(icon_size, icon_size)
