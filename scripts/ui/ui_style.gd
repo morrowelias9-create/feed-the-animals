@@ -40,14 +40,19 @@ static func panel_style() -> StyleBoxFlat:
 static func make_icon_button(key: String, icon_path: String, label: String, parent: Control) -> Button:
 	var button := Button.new()
 	button.custom_minimum_size = BUTTON_SIZE
-	var style := panel_style()
-	button.add_theme_stylebox_override("normal", style)
-	button.add_theme_stylebox_override("hover", style)
-	button.add_theme_stylebox_override("pressed", style)
+	# Прозрачный стиль — иконка И ЕСТЬ кнопка, никаких рамок и фона
+	var transparent_style := StyleBoxFlat.new()
+	transparent_style.bg_color = Color(0, 0, 0, 0)
+	transparent_style.set_border_width_all(0)
+	transparent_style.set_content_margin_all(0)
+	for st in ["normal", "hover", "pressed", "focus", "disabled"]:
+		button.add_theme_stylebox_override(st, transparent_style)
 	button.add_theme_font_size_override("font_size", BUTTON_FONT_SIZE)
 	button.add_theme_color_override("font_color", COLOR_TEXT)
 	button.add_theme_color_override("font_outline_color", COLOR_OUTLINE)
 	button.add_theme_constant_override("outline_size", BUTTON_OUTLINE_SIZE)
+	# Иконка почти на весь размер кнопки (90%), центрируется автоматически
+	button.add_theme_constant_override("icon_max_width", int(BUTTON_SIZE.x * 0.9))
 	button.icon = _load_icon(icon_path)
 	button.text = label.substr(0, 1) if button.icon == null else ""
 	parent.add_child(button)

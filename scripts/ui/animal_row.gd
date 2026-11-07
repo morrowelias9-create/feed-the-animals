@@ -61,7 +61,7 @@ func _build(animal: Dictionary, with_take: bool, with_income: bool) -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(row)
 
-	row.add_child(_make_icon(animal_name, rarity_color))
+	row.add_child(_make_icon(animal_name, rarity_color, id))
 
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -102,13 +102,28 @@ func _build(animal: Dictionary, with_take: bool, with_income: bool) -> void:
 	row.add_child(sell_button)
 
 
-# Квадрат цвета редкости с первой буквой названия.
-func _make_icon(animal_name: String, rarity_color: Color) -> Control:
+# Иконка зверя: загружает PNG из assets/ui/icons/animal_<id>.png (T25),
+# если нет — фоллбек: квадрат цвета редкости с первой буквой.
+func _make_icon(animal_name: String, rarity_color: Color, animal_id: String = "") -> Control:
 	var icon := ColorRect.new()
 	icon.color = rarity_color.darkened(0.55)
 	icon.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
 	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	if animal_id != "":
+		var icon_path: String = "res://assets/ui/icons/animal_%s.png" % animal_id
+		if ResourceLoader.exists(icon_path):
+			var tex_rect: TextureRect = TextureRect.new()
+			tex_rect.texture = load(icon_path) as Texture2D
+			tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tex_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			icon.add_child(tex_rect)
+			return icon
+	
+	# Фоллбек: буква
 	var letter: Label = UiStyle.outline_label(animal_name.left(1).to_upper(), 32, 4, rarity_color)
 	letter.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	letter.mouse_filter = Control.MOUSE_FILTER_IGNORE

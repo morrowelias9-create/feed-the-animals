@@ -26,6 +26,7 @@ for zone, names in ANIMALS.items():
 groups.append(("Еда (модели)", [f"assets/models/food/{f}.glb" for f in FOODS]))
 groups.append(("Еда (иконки)", [f"assets/ui/icons/food_{f}.png" for f in FOODS]))
 groups.append(("Турники (иконки)", [f"assets/ui/icons/bar_{b}.png" for b in BARS]))
+groups.append(("Иконки зверей", [f"assets/ui/icons/animal_{n}.png" for zone in ANIMALS.values() for n in zone.split()]))
 groups.append(("Иконки интерфейса", [f"assets/ui/icons/{u}.png" for u in UI]))
 
 total = have = 0
