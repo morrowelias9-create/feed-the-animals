@@ -4,6 +4,7 @@ extends Node
 ## Мышь и клавиатура для компьютера, касания для телефона:
 ## левая половина экрана — плавающий джойстик (движение), правая — плавающий джойстик (поворот камеры),
 ## короткое нажатие в любой половине — действие, колесо мыши — дистанция камеры.
+## Два пальца (pinch) — приближение/отдаление камеры.
 ## Кнопки интерфейса поглощают касания сами, сюда они не доходят.
 
 signal action_pressed
@@ -12,6 +13,8 @@ signal zoom_delta(steps: float)
 
 const TAP_MAX_S: float = 0.25          # короче — это нажатие, а не перетаскивание
 const TAP_MAX_PX: float = 20.0         # сдвиг меньше — это нажатие
+const PINCH_MIN_DIST: float = 30.0     # минимальное расстояние между пальцами для распознавания pinch
+const PINCH_SENSITIVITY: float = 0.005 # чувствительность pinch: шаги зума на пиксель изменения расстояния
 
 const ACTION_FORWARD: StringName = &"move_forward"
 const ACTION_BACK: StringName = &"move_back"
@@ -42,6 +45,13 @@ var _look_index: int = -1
 var _look_start_pos: Vector2 = Vector2.ZERO
 var _look_start_ms: int = 0
 var _look_moved: bool = false
+
+# Pinch-зум (два пальца): отслеживаем два касания одновременно.
+var _pinch_indices: Array[int] = []
+var _pinch_start_dist: float = 0.0
+
+# Хранилище позиций касаний: pointer_id -> Vector2.
+var _touch_positions: Dictionary[int, Vector2] = {}
 
 # Мышь на компьютере: перетаскивание всегда вертит камеру.
 var _mouse_down: bool = false
@@ -76,7 +86,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		# На телефоне касания дублируются мышью с этим device — иначе всё сработает дважды.
 		# Если в редакторе включено «Emulate Touch From Mouse», мышь конвертируется в касание,
 		# поэтому реальную мышь игнорируем: она уже ушла в сессию касаний.
-		if _mouse_emulated() or event.device == InputEvent.DEVICE_ID_EMULATION:
+		# НО колесо мыши (wheel up/down) никогда не эмулируется как касание — всегда пропускаем.
+		var is_wheel: bool = event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN
+		if not is_wheel and (_mouse_emulated() or event.device == InputEvent.DEVICE_ID_EMULATION):
 			return
 		_on_mouse_button(event as InputEventMouseButton)
 	elif event is InputEventMouseMotion:
@@ -92,9 +104,36 @@ func _on_screen_touch(event: InputEventScreenTouch) -> void:
 		_start_touch(event.index, event.position)
 	else:
 		_end_touch(event.index, event.position)
+	# При отпускании одного из пальцев pinch — сбрасываем pinch.
+	if event.index in _pinch_indices:
+		_pinch_indices.erase(event.index)
+		if _pinch_indices.size() < 2:
+			_pinch_start_dist = 0.0
 
 
 func _start_touch(index: int, pos: Vector2) -> void:
+	_touch_positions[index] = pos
+	# Если уже есть одно касание, проверяем, не начинается ли pinch.
+	# Pinch начинается, когда есть два касания одновременно.
+	var existing_indices: Array[int] = []
+	if _joy_index != -1:
+		existing_indices.append(_joy_index)
+	if _look_index != -1:
+		existing_indices.append(_look_index)
+	if existing_indices.size() == 1:
+		# Второе касание — начинаем pinch.
+		_pinch_indices = [existing_indices[0], index]
+		_pinch_start_dist = pos.distance_to(_touch_positions[existing_indices[0]])
+		# Скрываем джойстики, так как pinch перекрывает их.
+		if movement_joystick != null:
+			movement_joystick.hide_joystick()
+		if camera_joystick != null:
+			camera_joystick.hide_joystick()
+		_joy_index = -1
+		_look_index = -1
+		return
+
+	# Обычное одиночное касание.
 	if _is_left_half(pos):
 		if _joy_index != -1:
 			return
@@ -131,8 +170,34 @@ func _end_touch(index: int, pos: Vector2) -> void:
 		if instant_look:
 			_emit_action()
 
+	# Pinch: удаляем палец из pinch.
+	if index in _pinch_indices:
+		_pinch_indices.erase(index)
+		if _pinch_indices.size() < 2:
+			_pinch_start_dist = 0.0
+
+	# Удаляем позицию касания.
+	_touch_positions.erase(index)
+
 
 func _on_screen_drag(event: InputEventScreenDrag) -> void:
+	_touch_positions[event.index] = event.position
+
+	# Pinch-зум: если два пальца в _pinch_indices, вычисляем изменение расстояния.
+	if _pinch_indices.size() == 2 and event.index in _pinch_indices:
+		var other_idx: int = _pinch_indices[0] if _pinch_indices[1] == event.index else _pinch_indices[1]
+		var other_pos: Vector2 = _touch_positions.get(other_idx, Vector2.ZERO)
+		if other_pos != Vector2.ZERO:
+			var current_dist: float = event.position.distance_to(other_pos)
+			if _pinch_start_dist >= PINCH_MIN_DIST:
+				var delta_dist: float = current_dist - _pinch_start_dist
+				# Положительное delta_dist = пальцы разошлись = приближение (zoom out = отрицательные шаги)
+				var steps: float = -delta_dist * PINCH_SENSITIVITY
+				if absf(steps) > 0.01:
+					zoom_delta.emit(steps)
+					_pinch_start_dist = current_dist  # обновляем базу для плавности
+		return
+
 	if event.index == _joy_index:
 		if event.position.distance_to(_joy_start_pos) > TAP_MAX_PX:
 			_joy_moved = true
@@ -259,6 +324,9 @@ func _release_all() -> void:
 	_mouse_down = false
 	_mouse_start_ms = 0
 	_mouse_moved = false
+	_pinch_indices.clear()
+	_pinch_start_dist = 0.0
+	_touch_positions.clear()
 	if movement_joystick != null:
 		movement_joystick.hide_joystick()
 	if camera_joystick != null:
