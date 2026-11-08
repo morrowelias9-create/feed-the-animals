@@ -124,9 +124,9 @@
 Пример направления промпта для внешней генерации (если используется вместо рецепта):
 > stylized hand-painted chunky faceted block animal [animal], bevelled edges, slightly irregular proportions, large expressive head, matte colors with soft gradient, readable silhouette, no studs, no glossy plastic, no thick black outline, no text, isolated asset, front three-quarter view
 
-## 6. Еда — 10 моделей
+## 6. Еда — 15 моделей
 
-Модели: `assets/models/food/<id>.glb`, до 1000 треугольников, размер 0.3–0.6 м. ID: `carrot apple banana toast orange cheese bread watermelon pizza cake`.
+Модели: `assets/models/food/<id>.glb`, до 1000 треугольников, размер 0.3–0.6 м. ID: `carrot apple honeycomb grass_bundle watermelon baobab_fruit cactus_fruit dates oasis_fruit banana mango coconut fish shrimp pearl_oyster`.
 
 - Предмет должен мгновенно распознаваться в полёте и при приземлении.
 - Форма важнее мелкой фактуры.

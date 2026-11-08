@@ -47,7 +47,7 @@ for key, where in sorted(used.items()):
 animals = ("frog rabbit squirrel fox deer boar wolf bear hyena zebra antelope giraffe ostrich rhino elephant lion "
            "lizard scorpion jackal fennec camel monitor vulture cobra parrot monkey tapir koala python jaguar tiger gorilla "
            "seahorse crab jellyfish turtle mantis_shrimp dolphin shark orca").split()
-foods = "carrot apple banana toast orange cheese bread watermelon pizza cake".split()
+foods = "carrot apple honeycomb grass_bundle watermelon baobab_fruit cactus_fruit dates oasis_fruit banana mango coconut fish shrimp pearl_oyster".split()
 zones = "forest savanna desert jungle ocean".split()
 required = [f"animal_{a}" for a in animals] + [f"food_{f}" for f in foods] + [f"zone_{z}" for z in zones] \
     + [f"rarity_{r}" for r in range(5)] \

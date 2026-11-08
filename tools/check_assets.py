@@ -16,7 +16,7 @@ ANIMALS = {
     "Джунгли": "parrot monkey tapir koala python jaguar tiger gorilla",
     "Океан": "seahorse crab jellyfish turtle mantis_shrimp dolphin shark orca",
 }
-FOODS = "carrot apple banana toast orange cheese bread watermelon pizza cake".split()
+FOODS = "carrot apple honeycomb grass_bundle watermelon baobab_fruit cactus_fruit dates oasis_fruit banana mango coconut fish shrimp pearl_oyster".split()
 BARS = "wood steel gold blue purple".split()
 UI = "index shop animals strength money paw close lock".split()
 
