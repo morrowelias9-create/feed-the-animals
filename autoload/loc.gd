@@ -197,7 +197,7 @@ const T := {
 	"offline_double": {"ru": "x2 за рекламу", "en": "x2 for ad"},
 
 	# Буст x2 за рекламу (T22)
-	"boost_btn": {"ru": "x2 за рекламу", "en": "x2 for ad"},
+	"boost_btn": {"ru": "Получить х2 опыта\nза рекламу", "en": "Get x2 experience\nfor ad"},
 
 	# Предупреждение перед межстраничной рекламой (путь Б, T23)
 	"ad_warning": {"ru": "Реклама через %d...", "en": "Ad in %d...", "tr": "Reklam %d saniye sonra..."},
