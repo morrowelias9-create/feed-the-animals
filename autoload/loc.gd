@@ -38,6 +38,7 @@ const T := {
 	"reveal_score": {"ru": "SCORE %d", "en": "SCORE %d"},
 	"reveal_tap": {"ru": "Нажмите, чтобы продолжить", "en": "Tap to continue"},
 	"reveal_size": {"ru": "Размер: %s x%s", "en": "Size: %s x%s", "tr": "Boyut: %s x%s"},
+	"reveal_new": {"ru": "Новинка", "en": "New"},
 	"carry_hint": {"ru": "Выбери место и нажми «Поставить»", "en": "Pick a spot and tap “Place”"},
 	"carry_place": {"ru": "Поставить", "en": "Place"},
 	"carry_back": {"ru": "В рюкзак", "en": "Backpack"},

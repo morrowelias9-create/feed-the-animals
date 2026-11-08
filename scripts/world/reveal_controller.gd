@@ -281,6 +281,9 @@ func _enter_result() -> void:
 		_view.set_anim_running(false)   # останавливаем анимацию бега, зверь стоит на месте
 	_overlay.skip_typing()
 	_overlay.hide_typing()
+	# Проверяем, новый ли это вид зверя (до вызова add_animal, который добавит в found).
+	var found: Array = Save.data.get("found", [])
+	var is_new: bool = not found.has(_animal_id)
 	Game.add_animal(_animal_id, _variant, _size_step)
 	_view.set_variant(_variant, _income)
 	var lucky: bool = _final_size > 0 or _variant != VariantData.NONE or _rarity >= 3
@@ -294,6 +297,7 @@ func _enter_result() -> void:
 		"income": _income,
 		"lucky": lucky,
 		"size_step": _final_size,
+		"is_new": is_new,
 	})
 	# Вид 3/4 спереди: камера впереди зверя и сбоку, зверь поворачивается к ней.
 	var az: float = deg_to_rad(RESULT_AZIMUTH_DEG)

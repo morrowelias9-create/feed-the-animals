@@ -11,7 +11,7 @@ signal slots_changed
 signal food_changed               # куплена или выбрана еда
 signal bar_changed               # куплен турник
 signal xp_changed                # опыт силы изменился (шкала тренировки, T14)
-signal animal_received(animal: Dictionary)   # {uid, animal_id, variant, placed}, у сразу проданного ещё sold = 1
+signal animal_received(animal: Dictionary, is_new: bool)   # {uid, animal_id, variant, placed}, у сразу проданного ещё sold = 1
 signal boost_changed
 signal notice(key: String, args: Array)      # короткие сообщения игроку
 # T23: нужен для показа предупреждения перед межстраничной рекламой (путь Б).
@@ -314,7 +314,8 @@ func add_animal(animal_id: String, variant: int, size: int = 0) -> Dictionary:
 	}
 
 	var found: Array = _arr("found")
-	if not found.has(animal_id):
+	var is_new: bool = not found.has(animal_id)
+	if is_new:
 		found.append(animal_id)
 	_touch_catch_history(animal_id)
 
@@ -360,7 +361,7 @@ func add_animal(animal_id: String, variant: int, size: int = 0) -> Dictionary:
 	var result: Dictionary = animal.duplicate()
 	if sold_new:
 		result["sold"] = 1
-	animal_received.emit(result)
+	animal_received.emit(result, is_new)
 	if full:
 		notice.emit("notice_inventory_full", [])
 	Save.save_data()

@@ -15,6 +15,12 @@ const SLOT_H: float = 60.0
 const RAYS_CENTER_Y: float = 167.0
 const LUCK_COLOR: Color = Color("#FFD9A0")
 const RAY_COLOR: Color = Color("#FF2D55")
+const NEW_LABEL_CY: float = 180.0       # центр по y (под SCORE)
+const NEW_LABEL_X: float = 640.0        # x по центру экрана (база 1280)
+const NEW_LABEL_W: float = 220.0        # ширина панели
+const NEW_LABEL_H: float = 50.0         # высота панели
+const NEW_PULSE_SPEED: float = 3.0      # скорость пульсации свечения
+const NEW_GLOW_COLOR: Color = Color("#FFD9A0")  # цвет свечения/рамки
 
 var _root: Control
 var _vignette: TextureRect
@@ -28,6 +34,7 @@ var _name: Label
 var _rarity: Label
 var _income: Label
 var _size: Label
+var _new: Label
 var _prompt: Label
 var _slots_root: Control
 var _flash: ColorRect
@@ -72,6 +79,7 @@ func _ready() -> void:
 	_rarity = _row("Rarity", 20, 5, Color.WHITE, 635.0)
 	_income = _row("Income", 33, 6, UiStyle.COLOR_MONEY, 665.0)
 	_size = _row("Size", 18, 4, Color.WHITE, 652.0)
+	_new = _make_new_label()
 	_prompt = _row("Prompt", 20, 5, Color.WHITE, 703.0)
 	_slots_root = Control.new()
 	_slots_root.name = "NameSlots"
@@ -106,6 +114,21 @@ func _process(delta: float) -> void:
 		_rays.rotation += delta * 0.35
 		_prompt.pivot_offset = _prompt.size * 0.5
 		_prompt.scale = Vector2.ONE * (1.0 + 0.06 * sin(_clock * 5.0))
+		# Пульсация свечения для метки «Новинка»
+		if _new != null and _new.visible:
+			var panel: Panel = _new.get_parent()
+			if panel != null:
+				var glow: float = 0.5 + 0.5 * sin(_clock * NEW_PULSE_SPEED)
+				panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
+				var style: StyleBoxFlat = panel.get_theme_stylebox("panel")
+				if style != null:
+					style.border_color = NEW_GLOW_COLOR
+					style.border_color.a = glow
+					# Свечение через тень
+					style.shadow_color = NEW_GLOW_COLOR
+					style.shadow_color.a = glow * 0.6
+					style.shadow_offset = Vector2(0, 0)
+					style.shadow_size = int(8.0 + 4.0 * glow)
 	if _flash_a > 0.0:
 		_flash_a = maxf(_flash_a - delta * 3.0, 0.0)
 		_flash.color.a = _flash_a
@@ -122,6 +145,11 @@ func reset() -> void:
 	_clear_slots()
 	for l in [_title, _score, _variant, _name, _rarity, _income, _size, _prompt]:
 		(l as Label).visible = false
+	# Скрываем панель «Новинка» (Label внутри Panel)
+	if _new != null:
+		var panel: Panel = _new.get_parent()
+		if panel != null:
+			panel.visible = false
 	_rays.visible = false
 
 
@@ -244,6 +272,16 @@ func show_result(info: Dictionary) -> void:
 	_size.text = _size_text(size_step)
 	_prompt.text = Loc.t("reveal_tap")
 	_prompt.visible = true
+	# Метка «Новинка» справа от центра, если вид получается впервые.
+	var is_new: bool = bool(info.get("is_new", false))
+	if _new != null:
+		var panel: Panel = _new.get_parent()
+		if panel != null:
+			panel.visible = is_new
+			if is_new:
+				_new.text = Loc.t("reveal_new")
+				# Сбрасываем модуляцию для чистого старта анимации
+				panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
 
 
 ## Цель накрутки SCORE (финиш): текст экрана обновляется до этого значения.
@@ -317,6 +355,62 @@ func _row(node_name: String, font_size: int, outline: int, color: Color, cy: flo
 	var h: float = float(font_size) * 1.4
 	label.offset_left = 0.0
 	label.offset_right = 0.0
+	label.offset_top = cy - h * 0.5
+	label.offset_bottom = cy + h * 0.5
+	_ui.add_child(label)
+	return label
+
+
+# Создаёт панель с меткой «Новинка» справа от центра (у SCORE).
+func _make_new_label() -> Label:
+	var panel := Panel.new()
+	panel.name = "NewPanel"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	# Позиционируем справа от центра (база 1280x720)
+	panel.offset_left = NEW_LABEL_X - NEW_LABEL_W * 0.5
+	panel.offset_top = NEW_LABEL_CY - NEW_LABEL_H * 0.5
+	panel.offset_right = panel.offset_left + NEW_LABEL_W
+	panel.offset_bottom = panel.offset_top + NEW_LABEL_H
+	# Стиль панели: тёмный фон, яркая рамка, скруглённые углы, тень для свечения
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.7)
+	style.set_border_width_all(3)
+	style.border_color = NEW_GLOW_COLOR
+	style.set_corner_radius_all(12)
+	style.shadow_color = NEW_GLOW_COLOR
+	style.shadow_offset = Vector2(0, 0)
+	style.shadow_size = 12
+	panel.add_theme_stylebox_override("panel", style)
+	_ui.add_child(panel)
+
+	var label: Label = UiStyle.outline_label("", 28, 6, NEW_GLOW_COLOR)
+	label.name = "NewLabel"
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.offset_left = 10.0
+	label.offset_right = -10.0
+	label.offset_top = 0.0
+	label.offset_bottom = 0.0
+	panel.add_child(label)
+
+	panel.visible = false
+	return label
+
+
+# Строка текста справа экрана (устарела, оставлена для совместимости).
+func _row_right(node_name: String, font_size: int, outline: int, color: Color, cy: float) -> Label:
+	var label: Label = UiStyle.outline_label("", font_size, outline, color)
+	label.name = node_name
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	var h: float = float(font_size) * 1.4
+	var margin: float = 40.0
+	label.offset_left = -400.0
+	label.offset_right = -margin
 	label.offset_top = cy - h * 0.5
 	label.offset_bottom = cy + h * 0.5
 	_ui.add_child(label)
