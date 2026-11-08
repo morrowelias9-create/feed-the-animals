@@ -73,6 +73,9 @@ func _run_all() -> void:
 	_test_recipe_fallback()
 	_test_recipe_animation()
 	_test_slither_animation()
+	_test_parts()
+	_test_part_modes()
+	_test_parts_animation()
 
 	_restore_save(backup)
 	print("")
@@ -1083,6 +1086,145 @@ func _test_slither_animation() -> void:
 	_check("питон: змеиное движение виляет корпусом", not model.transform.basis.is_equal_approx(base.basis))
 	_check("питон: виляние не двигает сам AnimalView", view.position == Vector3.ZERO)
 	view.free()
+
+
+# ---------- T24f: звери по частям ----------
+
+const PARTS_LIGHT_MAX: int = 3
+const PARTS_FULL_MAX: int = 12
+const PEN_SLOTS_MAX: int = 20    # R: 4 места + 8 расширений по 2
+
+
+func _test_parts() -> void:
+	var ids: Array[String] = AnimalRecipes.ids()
+	_check("T24f: есть звери с рецептами для проверки частей", ids.size() >= 16)
+	for id in ids:
+		var recipe: Dictionary = AnimalRecipes.get_recipe(id)
+		var whole: Dictionary = AnimalBuilder.generate(recipe)
+		var block_count: int = (recipe["blocks"] as Array).size()
+		for mode in [AnimalBuilder.PART_LIGHT, AnimalBuilder.PART_FULL]:
+			var m: String = String(mode)
+			var limit: int = PARTS_LIGHT_MAX if m == AnimalBuilder.PART_LIGHT else PARTS_FULL_MAX
+			var specs: Array[Dictionary] = AnimalBuilder.split_parts(recipe, m)
+			var tris: int = 0
+			var blocks_seen: int = 0
+			for spec in specs:
+				var data: Dictionary = AnimalBuilder.generate_blocks(recipe, spec["indices"] as Array)
+				tris += int(data["tris"])
+				blocks_seen += (spec["indices"] as Array).size()
+			_check("%s %s: частей %d не больше %d" % [id, m, specs.size(), limit], specs.size() >= 1 and specs.size() <= limit)
+			_check("%s %s: сумма треугольников частей %d = режим А %d, каждый блок ровно в одной части" % [id, m, tris, int(whole["tris"])],
+				tris == int(whole["tris"]) and blocks_seen == block_count)
+			var node: Node3D = ModelLoader.get_animal_parts(id, 0, m)
+			_check("%s %s: модель по частям построена" % [id, m], node != null)
+			if node == null:
+				continue
+			var mesh_count: int = _count_nodes(node, "MeshInstance3D")
+			var mats_ok: bool = true
+			for child in node.get_children():
+				var mi: MeshInstance3D = child as MeshInstance3D
+				if mi == null or mi.material_override == null:
+					mats_ok = false
+			_check("%s %s: мешей %d, по одному на часть, материал у каждой" % [id, m, mesh_count], mesh_count == specs.size() and mats_ok)
+			_check("%s %s: число частей в описании совпадает" % [id, m], ModelLoader.part_infos(id, m).size() == node.get_child_count())
+			# габариты частей вместе совпадают с целым зверем (посадка на землю и размер те же, что в режиме А)
+			var whole_node: Node3D = ModelLoader.get_animal(id, 0)
+			var same_fit: bool = _near(node.scale.y, whole_node.scale.y, 0.0001) and _near(node.position.y, whole_node.position.y, 0.0001) \
+				and _near(node.rotation.y, whole_node.rotation.y, 0.0001) and _near(ModelLoader.height_of(node), ModelLoader.height_of(whole_node), 0.0001)
+			_check("%s %s: масштаб, посадка и высота как в режиме А" % [id, m], same_fit)
+			whole_node.free()
+			node.free()
+	# режим А по-прежнему один меш, а у неизвестного зверя частей нет и ошибки нет
+	var one: Node3D = ModelLoader.get_animal("fox", 0)
+	_check("T24f: режим А: один MeshInstance3D", _count_nodes(one, "MeshInstance3D") == 1)
+	one.free()
+	_check("T24f: неизвестный зверь без частей (null, не ошибка)", ModelLoader.get_animal_parts("нет_такого_зверя", 0, AnimalBuilder.PART_LIGHT) == null)
+	# варианты в режиме по частям: оттенок и свечение на всех частях, один общий материал-основа
+	var tinted: Node3D = ModelLoader.get_animal_parts("fox", 2, AnimalBuilder.PART_FULL)
+	var tint_ok: bool = tinted != null
+	if tinted != null:
+		for child in tinted.get_children():
+			var mat: StandardMaterial3D = (child as MeshInstance3D).material_override as StandardMaterial3D
+			if mat == null or not mat.emission_enabled:
+				tint_ok = false
+		tinted.free()
+	_check("T24f: вариант Бриллиант светится на всех частях", tint_ok)
+
+
+func _test_part_modes() -> void:
+	# переключение А -> лёгкий -> полный -> А не плодит узлы и возвращает прежнюю модель
+	var view := AnimalView.new()
+	view.set_creature("fox", 0, 1, 0.0)
+	var children_whole: int = view.get_child_count()
+	view.set_part_mode(AnimalBuilder.PART_LIGHT)
+	var light_meshes: int = _count_nodes(view.get_node("Model"), "MeshInstance3D")
+	_check("T24f: лёгкий режим лисы: 2-3 меша (%d)" % light_meshes, light_meshes >= 2 and light_meshes <= PARTS_LIGHT_MAX)
+	view.set_part_mode(AnimalBuilder.PART_FULL)
+	var full_meshes: int = _count_nodes(view.get_node("Model"), "MeshInstance3D")
+	_check("T24f: полный режим лисы: не больше 12 мешей (%d)" % full_meshes, full_meshes > light_meshes and full_meshes <= PARTS_FULL_MAX)
+	view.set_part_mode("whole")
+	_check("T24f: возврат в режим А: один меш", _count_nodes(view.get_node("Model"), "MeshInstance3D") == 1)
+	_check("T24f: после А -> лёгкий -> полный -> А число дочерних узлов зверя прежнее", view.get_child_count() == children_whole)
+	for i in 5:
+		view.set_part_mode(AnimalBuilder.PART_LIGHT)
+		view.set_part_mode("whole")
+	_check("T24f: многократные переключения не растят число узлов", view.get_child_count() == children_whole)
+	view.free()
+	# зверь без рецепта остаётся в режиме А без ошибки
+	var ghost := AnimalView.new()
+	ghost.set_creature("нет_такого_зверя", 0, 0, 0.0)
+	ghost.set_part_mode(AnimalBuilder.PART_LIGHT)
+	_check("T24f: зверь без рецепта остаётся в режиме А", ghost.get_node_or_null("Model") != null and ghost.get_node("Model").get_node_or_null("Muzzle") != null)
+	ghost.free()
+	# загон на 20 местах в лёгком режиме: не больше 60 мешей
+	var ids: Array[String] = AnimalRecipes.ids()
+	var total: int = 0
+	var views: Array[AnimalView] = []
+	for i in PEN_SLOTS_MAX:
+		var v := AnimalView.new()
+		v.set_creature(ids[i % ids.size()], 0, 1, 0.0)
+		v.set_part_mode(AnimalBuilder.PART_LIGHT)
+		total += _count_nodes(v.get_node("Model"), "MeshInstance3D")
+		views.append(v)
+	_check("T24f: 20 зверей загона в лёгком режиме: %d мешей, не больше %d" % [total, PEN_SLOTS_MAX * PARTS_LIGHT_MAX], total <= PEN_SLOTS_MAX * PARTS_LIGHT_MAX)
+	for v in views:
+		v.free()
+
+
+func _test_parts_animation() -> void:
+	# ноги лисы и части питона двигаются, узлы не создаются, сам зверь не сдвигается
+	for id in ["fox", "python", "parrot"]:
+		var view := AnimalView.new()
+		view.set_creature(id, 0, 1, 0.0)
+		view.set_part_mode(AnimalBuilder.PART_LIGHT)
+		var model: Node3D = view.get_node("Model") as Node3D
+		var before: Array[Transform3D] = []
+		for child in model.get_children():
+			before.append((child as Node3D).transform)
+		var children_before: int = view.get_child_count()
+		view.set_anim_running(true)
+		for i in 60:
+			view._process(0.016)
+		var moved: int = 0
+		var k: int = 0
+		for child in model.get_children():
+			if not (child as Node3D).transform.is_equal_approx(before[k]):
+				moved += 1
+			k += 1
+		_check("T24f: %s: в беге двигаются части модели (%d из %d)" % [id, moved, before.size()], moved >= 1)
+		_check("T24f: %s: анимация частей не создаёт узлов и не двигает зверя" % id, view.get_child_count() == children_before and view.position == Vector3.ZERO)
+		view.set_anim_running(false)
+		for i in 120:
+			view._process(0.1)
+		var settled: bool = true
+		k = 0
+		for child in model.get_children():
+			var rest: Transform3D = (child as Node3D).transform
+			if not rest.origin.is_equal_approx(before[k].origin):
+				settled = false
+			k += 1
+		_check("T24f: %s: в покое опорные точки частей на месте" % id, settled)
+		view.free()
 
 
 func _test_recipe_animation() -> void:

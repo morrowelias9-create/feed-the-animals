@@ -180,6 +180,8 @@ func _spawn(a: Dictionary) -> void:
 	view.name = "Pet%d" % uid
 	add_child(view)
 	view.set_creature(id, variant, rarity, Economy.income(id, variant, size_step))
+	if GameConfig.PEN_PARTS_ENABLED:
+		view.set_part_mode(AnimalBuilder.PART_LIGHT)   # T24f: ноги и волна по частям, до 3 мешей на зверя
 	view.position = WorldLayout.slot_position(slot)
 	view.rotation.y = 0.0    # лицом к -Z, к игроку, который ходит перед загонами
 	var fit: float = display_scale(id)

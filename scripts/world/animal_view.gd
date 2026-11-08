@@ -4,10 +4,13 @@ extends Node3D
 ## вариант (его цветом, мелко), название цветом редкости, доход зелёным.
 ## Шаг T24d (R8 §5.5, режим А): корень модели анимируется кодом по типу движения из рецепта.
 ## Анимация меняет только transform модели внутри AnimalView, позицию и логику run_to/eat она не трогает.
+## Шаг T24f: три режима модели. Режим А (по умолчанию, один меш), лёгкий (до 3 частей, звери загона) и полный
+## (до 12 частей, экран получения). У частей свои повороты вокруг суставов, у корня модели прежняя анимация режима А.
 
 const SIGN_GAP: Array[float] = [1.0, 0.55, 0.12]   # высота строк над головой: вариант, имя, доход
 const FLOAT_SIZE_S: float = 0.8           # длительность всплытия названия размера
 const ANIM_BLEND_PER_S: float = 5.0       # скорость перехода между покоем и бегом (доля в секунду)
+const PART_WHOLE: String = "whole"        # режим А: один MeshInstance3D на зверя
 
 var animal_id: String = ""
 var variant: int = 0
@@ -30,6 +33,8 @@ var _model_base: Transform3D = Transform3D.IDENTITY   # посадка моде�
 var _anim_t: float = 0.0
 var _anim_amp: float = 0.0              # 0 покой, 1 бег; плавно перетекает
 var _anim_force_run: bool = false       # для отладочной сцены и экрана T24f: бег на месте
+var _part_mode: String = PART_WHOLE     # whole, AnimalBuilder.PART_LIGHT или AnimalBuilder.PART_FULL
+var _parts: Array[Dictionary] = []      # части модели: {node, role, pivot, axis}; пусто в режиме А
 
 var _label_variant: Label3D
 var _label_name: Label3D
@@ -56,18 +61,54 @@ func set_creature(id: String, new_variant: int, new_rarity: int, new_income: flo
 	rarity = new_rarity
 	income = new_income
 	_size_m = float(AnimalData.by_id(id).get("size_m", 1.2))
-	if _model != null and is_instance_valid(_model):
-		_model.queue_free()
-	_model = ModelLoader.get_animal(id, variant)
-	_model.name = "Model"
-	add_child(_model)
-	_height = ModelLoader.height_of(_model)
-	_model_base = _model.transform
-	_move = ModelLoader.move_of(id)
+	_make_model()
 	_anim_t = float(id.hash() % 1000) * 0.01   # у разных зверей разная фаза, стадо не качается в унисон
 	_anim_amp = 0.0
 	_rebuild_fx()
 	_update_labels()
+
+
+## Режим модели (T24f): AnimalBuilder.PART_LIGHT, AnimalBuilder.PART_FULL или любое другое значение для режима А.
+## Зверь без рецепта (или с внешним .glb) остаётся в режиме А без ошибки. Звери загона остаются в режиме А,
+## если выключен GameConfig.PEN_PARTS_ENABLED (это проверяет вызывающий SlotManager).
+func set_part_mode(mode: String) -> void:
+	var wanted: String = mode
+	if wanted != AnimalBuilder.PART_LIGHT and wanted != AnimalBuilder.PART_FULL:
+		wanted = PART_WHOLE
+	if wanted == _part_mode:
+		return
+	_part_mode = wanted
+	if animal_id != "":
+		_make_model()
+
+
+func part_mode() -> String:
+	return _part_mode
+
+
+# Собирает модель текущего режима и ставит её вместо прежней. Старая убирается из дерева сразу (имя «Model» освобождается),
+# поэтому число дочерних узлов зверя не растёт при переключениях.
+func _make_model() -> void:
+	if _model != null and is_instance_valid(_model):
+		remove_child(_model)
+		_model.queue_free()
+	_parts.clear()
+	var node: Node3D = null
+	if _part_mode != PART_WHOLE:
+		node = ModelLoader.get_animal_parts(animal_id, variant, _part_mode)
+		if node != null:
+			var infos: Array = ModelLoader.part_infos(animal_id, _part_mode)
+			for i in mini(infos.size(), node.get_child_count()):
+				var info: Dictionary = infos[i]
+				_parts.append({"node": node.get_child(i), "role": String(info["role"]), "pivot": info["pivot"], "axis": String(info["axis"])})
+	if node == null:
+		node = ModelLoader.get_animal(animal_id, variant)
+	_model = node
+	_model.name = "Model"
+	add_child(_model)
+	_height = ModelLoader.height_of(_model)
+	_model_base = _model.transform
+	_move = ModelLoader.move_of(animal_id)
 
 
 ## Меняет вариант уже стоящего зверя (экран награды: «Удача!» вспыхивает позже появления).
@@ -182,6 +223,86 @@ func _animate(delta: float) -> void:
 	var rot_basis: Basis = Basis.from_euler(Vector3(pitch, yaw, roll))
 	var scale_basis: Basis = Basis.from_scale(Vector3(squash_xz, stretch, squash_xz))
 	_model.transform = Transform3D(rot_basis * scale_basis, Vector3(0.0, off_y, 0.0)) * _model_base
+	if not _parts.is_empty():
+		_animate_parts(amp)
+
+
+# Анимация частей (T24f): повороты вокруг суставов. Только числа и Transform3D готовых узлов, новых объектов нет.
+# Пары ног идут в противофазе (диагональная рысь), у прыжка обе пары поджимаются вместе, плавники и крылья машут,
+# безногие двигаются волной из трёх частей. Тело (role body) не трогаем: оно стоит в начале координат.
+func _animate_parts(amp: float) -> void:
+	var t: float = _anim_t
+	var w: float = t * _gait_speed()
+	var wave_w: float = t * (7.0 if _move == "slither" else 4.0)
+	var wave_amp: float = 0.25 + 0.75 * amp    # волна живёт и в покое, чуть слабее
+	for p in _parts:
+		var node: Node3D = p["node"] as Node3D
+		if node == null or not is_instance_valid(node):
+			continue
+		var pivot: Vector3 = p["pivot"]
+		var part_basis: Basis = Basis.IDENTITY
+		match String(p["role"]):
+			"leg_a", "leg_fl", "leg_br":
+				part_basis = Basis(Vector3.RIGHT, _leg_angle(w, 1.0, amp))
+			"leg_b", "leg_fr", "leg_bl":
+				part_basis = Basis(Vector3.RIGHT, _leg_angle(w, -1.0, amp))
+			"legs":
+				part_basis = Basis(Vector3.RIGHT, _leg_angle(w, 1.0, amp))
+			"fin_l":
+				part_basis = Basis(Vector3.BACK, -(0.3 + 0.3 * sin(w)) * (0.4 + 0.6 * amp))
+			"fin_r":
+				part_basis = Basis(Vector3.BACK, (0.3 + 0.3 * sin(w)) * (0.4 + 0.6 * amp))
+			"head":
+				part_basis = Basis(Vector3.RIGHT, sin(w * 2.0) * 0.1 * amp + sin(t * 1.4) * 0.04)
+			"tail":
+				part_basis = Basis(Vector3.UP, sin(w * 0.8) * 0.35 * amp + sin(t * 2.0) * 0.1)
+			"ear_l":
+				part_basis = Basis(Vector3.BACK, sin(w * 1.3) * 0.12 * amp + sin(t * 1.7) * 0.05)
+			"ear_r":
+				part_basis = Basis(Vector3.BACK, sin(w * 1.3 + 1.5) * 0.12 * amp + sin(t * 1.7 + 1.0) * 0.05)
+			"wings":
+				var flap: float = 1.0 + maxf(sin(w), 0.0) * 0.45 * amp   # крылья раскрываются в стороны
+				part_basis = Basis.from_scale(Vector3(flap, 1.0, 1.0))
+			"wave0":
+				part_basis = _wave_basis(String(p["axis"]), sin(wave_w) * 0.22 * wave_amp)
+			"wave1":
+				part_basis = _wave_basis(String(p["axis"]), sin(wave_w - 1.2) * 0.1 * wave_amp)
+			"wave2":
+				part_basis = _wave_basis(String(p["axis"]), sin(wave_w - 2.4) * 0.3 * wave_amp)
+			_:
+				continue
+		node.transform = Transform3D(part_basis, pivot)
+
+
+# Скорость шага (радиан в секунду) по типу движения.
+func _gait_speed() -> float:
+	match _move:
+		"trot":
+			return 9.0
+		"waddle":
+			return 5.0
+		"hop":
+			return 8.0
+		"swim":
+			return 4.0
+		"slither":
+			return 7.0
+	return 6.0
+
+
+# Угол качания ноги вокруг бедра: sign +1 и -1 это две диагональные пары. При прыжке обе пары поджимаются вместе.
+func _leg_angle(w: float, sign_k: float, amp: float) -> float:
+	if _move == "hop":
+		return maxf(sin(w), 0.0) * 0.6 * amp
+	var swing: float = 0.55 if _move == "trot" else (0.4 if _move == "waddle" else 0.3)
+	return sin(w) * sign_k * swing * amp
+
+
+# Поворот части волны: вдоль z (змея) вокруг вертикали, вдоль y (медуза, морской конёк) вокруг оси z.
+func _wave_basis(axis: String, angle: float) -> Basis:
+	if axis == "y":
+		return Basis(Vector3.BACK, angle)
+	return Basis(Vector3.UP, angle)
 
 
 func _rebuild_fx() -> void:

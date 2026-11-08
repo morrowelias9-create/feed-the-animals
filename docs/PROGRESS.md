@@ -138,7 +138,7 @@
     - [x] T24e-3: `T24e: звери Джунглей`
     - [x] T24e-4: `T24e: звери Океана`
   - зафиксировано: да
-- [ ] **T24f** Анимация по частям для зверя в центре внимания
+- [x] **T24f** Анимация по частям для зверя в центре внимания
   - коммит: `T24f: анимация частей для зверя в центре внимания`
   - зафиксировано: нет
 ## M4. Арт и релиз
@@ -272,3 +272,5 @@ T24d (исправление): устранены дыры в моделях з�
 T24c: реализованы удалённые флаги (Remote Config). В `web/shell.html` добавлен `getFlags` в YaBridge (вызов `ysdk.flags.getFlags`). В `autoload/ya.gd` — `get_flags(defaults)` с заглушкой для редактора (возвращает defaults). В `autoload/game.gd` добавлены поля `remote_ad_interval_s`, `remote_ad_first_s`, `remote_boost_s` и метод `_load_remote_config()`, вызываемый в `start()` до `_loaded = true`. Константы `AD_INTERVAL_S`, `AD_FIRST_S`, `BOOST_S` заменены на remote-поля в `can_show_interstitial()` и `activate_boost()`. `Game.start()` стал корутиной, в `main.gd` вызов через `await`. Проверено: `test.py` 350/0, `check.py` 0/0, headless `--editor --quit` чисто. Не проверено: реальный SDK Яндекса, консоль, телефон, веб.
 
 T24e-4 (Океан): добавлены рецепты для 8 зверей Океана в `scripts/data/recipes/ocean.gd` — seahorse (swim), crab (waddle), jellyfish (swim, head_not_front), turtle (waddle), mantis_shrimp (trot), dolphin (swim), shark (swim), orca (swim). Все 8 рецептов проходят валидацию, треугольники в лимитах, детерминизм, посадка на землю, направление -Z (для jellyfish — head_not_front), 5 вариантов. Итог: `test.py` 350/0, `check.py` 0/0, headless `--editor --quit` чисто. Не проверено: телефон, веб, зрительный осмотр в зоопарке.
+
+T24f: звери по частям, три режима. `AnimalBuilder`: `split_parts` (лёгкий режим до 3 частей: корпус и пары ног fl+br / fr+bl; у птиц ноги и крылья из группы `other`; у дельфина, акулы, косатки корпус и два плавника; у безногих три части волны по длинной оси), полный режим до 12 частей, `generate_blocks`, `mesh_from_shifted`, `part_pivot` (опорные точки суставов). `ModelLoader`: `get_animal_parts`, `part_infos`, кэш прототипов по `id|режим`. `AnimalView`: `set_part_mode`, `_animate_parts` (ноги, плавники, крылья, голова, хвост, уши, волна), по умолчанию режим А. `SlotManager` включает лёгкий режим (флаг `GameConfig.PEN_PARTS_ENABLED`, false возвращает всех в режим А), `RevealController` включает полный. Зверь в руках остаётся в режиме А. В зоопарке клавиша M переключает режимы. Тесты: `_test_parts`, `_test_part_modes`, `_test_parts_animation`. решение: сдвиг вершин части на опорную точку и узел части в этой точке, чтобы вид совпадал с режимом А. Не проверено: Godot не запускался (нет в среде), `tools/test.py`, зоопарк, FPS на 20 зверях, телефон. Разбиение проверено Python-копией на всех 40 зверях (проблем 0). `check.py`: 3 ошибки про `assets/ui/icons/animal_*.png` относятся к T25 (иконок нет в репозитории), не к T24f.

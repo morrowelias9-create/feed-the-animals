@@ -390,6 +390,7 @@ func _spawn_view(at: Vector3) -> void:
 	add_child(_view)
 	# Вариант проявится в фазе C: «Удача!» не должна выдаваться заранее.
 	_view.set_creature(_animal_id, VariantData.NONE, _rarity, _income)
+	_view.set_part_mode(AnimalBuilder.PART_FULL)   # T24f: один зверь на экране получения, до 12 мешей
 	_view.set_signs_visible(false)
 	_view.position = at
 	_view.rotation.y = _yaw_of(_dir)

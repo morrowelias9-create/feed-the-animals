@@ -12,6 +12,12 @@ const SHAPES: Array[String] = ["box", "wedge", "taper", "sphere"]
 const GROUPS: Array[String] = ["body", "head", "leg_fl", "leg_fr", "leg_bl", "leg_br", "tail", "ear_l", "ear_r", "other"]
 const MOVES: Array[String] = ["hop", "waddle", "trot", "slither", "swim", "idle"]
 
+## Режимы по частям (шаг T24f). Режим А (весь зверь одним мешем) это обычный generate().
+const PART_LIGHT: String = "light"       # лёгкий: не больше 3 частей, для зверей загона
+const PART_FULL: String = "full"         # полный: не больше 12 частей, для зверя на экране получения
+const LEG_GROUPS: Array[String] = ["leg_fl", "leg_fr", "leg_bl", "leg_br"]
+const WAVE_AXIS_RATIO: float = 1.2       # тело считается «стоячим» (волна по высоте), если оно выше, чем длиннее в 1.2 раза
+
 const DEFAULT_BEVEL: float = 0.05
 const BEVEL_MAX_EDGE_K: float = 0.4      # фаска не больше 40% самого короткого ребра блока
 const DEFAULT_DARKEN: float = 0.25       # если color2 не задан, низ темнее верха на столько
@@ -108,10 +114,26 @@ static func _validate_block(b: Dictionary, i: int, errors: Array[String]) -> voi
 ## {"errors", "vertices", "normals", "colors", "tris", "aabb"}. При ошибках рецепта геометрия пустая.
 static func generate(recipe: Dictionary) -> Dictionary:
 	var errors: Array[String] = validate(recipe)
-	var acc := _Acc.new()
+	var indices: Array = []
 	if errors.is_empty():
 		var blocks: Array = recipe["blocks"]
 		for i in blocks.size():
+			indices.append(i)
+	return _build(recipe, errors, indices)
+
+
+## То же для части блоков (T24f): indices это номера блоков рецепта. Цвета и «рисованный» разброс яркости
+## такие же, как в режиме А (номер блока берётся из рецепта), сумма треугольников частей равна целому зверю.
+static func generate_blocks(recipe: Dictionary, indices: Array) -> Dictionary:
+	return _build(recipe, validate(recipe), indices)
+
+
+static func _build(recipe: Dictionary, errors: Array[String], indices: Array) -> Dictionary:
+	var acc := _Acc.new()
+	if errors.is_empty():
+		var blocks: Array = recipe["blocks"]
+		for k in indices.size():
+			var i: int = int(indices[k])
 			_add_block(acc, blocks[i] as Dictionary, i)
 	var box: AABB = AABB()
 	if acc.verts.size() > 0:
@@ -147,6 +169,17 @@ static func mesh_from(data: Dictionary) -> ArrayMesh:
 	return mesh
 
 
+## Меш части со сдвигом вершин на -offset: узел части ставится в точку offset (опорная точка вращения),
+## поэтому на экране часть остаётся на своём месте, а вращается вокруг опорной точки.
+static func mesh_from_shifted(data: Dictionary, offset: Vector3) -> ArrayMesh:
+	var verts: PackedVector3Array = (data["vertices"] as PackedVector3Array).duplicate()
+	for i in verts.size():
+		verts[i] = verts[i] - offset
+	var shifted: Dictionary = data.duplicate()
+	shifted["vertices"] = verts
+	return mesh_from(shifted)
+
+
 ## Один вызов: рецепт сразу в меш (без проверки ошибок, для отладки).
 static func build_mesh(recipe: Dictionary) -> ArrayMesh:
 	return mesh_from(generate(recipe))
@@ -176,6 +209,140 @@ static func group_center(recipe: Dictionary, group: String) -> Vector3:
 	if n == 0:
 		return Vector3.ZERO
 	return sum / float(n)
+
+
+# ---------- Части зверя (T24f) ----------
+
+## Разбиение блоков рецепта на части для режима по частям. Результат: массив словарей
+## {"role", "axis", "indices"}, тело (role "body") первое. Роли:
+##   body, leg_a, leg_b (лёгкий: диагональные пары fl+br и fr+bl), legs (обе ноги птицы), wings (крылья птицы из группы other),
+##   fin_l, fin_r (плавники дельфина, акулы, косатки), head, tail, ear_l, ear_r, leg_fl, leg_fr, leg_bl, leg_br (полный),
+##   wave0, wave1, wave2 (безногие: змеи, морской конёк, медуза; три части вдоль тела, "axis" это "z" или "y").
+## Лёгкий режим даёт не больше 3 частей, полный не больше 12. Пустые части пропускаются.
+static func split_parts(recipe: Dictionary, mode: String) -> Array[Dictionary]:
+	var blocks: Array = recipe.get("blocks", [])
+	var by_group: Dictionary = {}
+	for i in blocks.size():
+		var g: String = String((blocks[i] as Dictionary).get("group", ""))
+		if not by_group.has(g):
+			by_group[g] = []
+		(by_group[g] as Array).append(i)
+	var has_legs: bool = false
+	for g in LEG_GROUPS:
+		if by_group.has(g):
+			has_legs = true
+	if not has_legs:
+		return _split_wave(recipe)
+	var has_front: bool = by_group.has("leg_fl") or by_group.has("leg_fr")
+	var has_rear: bool = by_group.has("leg_bl") or by_group.has("leg_br")
+	var is_fins: bool = String(recipe.get("move", "")) == "swim" and has_front and not has_rear
+	var is_bird: bool = has_rear and not has_front and by_group.has("other")
+	var used: Dictionary = {}
+	var parts: Array[Dictionary] = []
+	if mode == PART_FULL:
+		if is_fins:
+			_take(parts, by_group, used, "fin_l", ["leg_fl"])
+			_take(parts, by_group, used, "fin_r", ["leg_fr"])
+		else:
+			_take(parts, by_group, used, "leg_fl", ["leg_fl"])
+			_take(parts, by_group, used, "leg_fr", ["leg_fr"])
+			_take(parts, by_group, used, "leg_bl", ["leg_bl"])
+			_take(parts, by_group, used, "leg_br", ["leg_br"])
+		if is_bird:
+			_take(parts, by_group, used, "wings", ["other"])
+		_take(parts, by_group, used, "head", ["head"])
+		_take(parts, by_group, used, "tail", ["tail"])
+		_take(parts, by_group, used, "ear_l", ["ear_l"])
+		_take(parts, by_group, used, "ear_r", ["ear_r"])
+	elif is_fins:
+		_take(parts, by_group, used, "fin_l", ["leg_fl"])
+		_take(parts, by_group, used, "fin_r", ["leg_fr"])
+	elif is_bird:
+		_take(parts, by_group, used, "legs", ["leg_bl", "leg_br"])
+		_take(parts, by_group, used, "wings", ["other"])
+	else:
+		_take(parts, by_group, used, "leg_a", ["leg_fl", "leg_br"])
+		_take(parts, by_group, used, "leg_b", ["leg_fr", "leg_bl"])
+	var rest: Array = []
+	for i in blocks.size():
+		if not used.has(i):
+			rest.append(i)
+	if not rest.is_empty():
+		parts.push_front({"role": "body", "axis": "", "indices": rest})
+	return parts
+
+
+# Собирает блоки перечисленных групп в одну часть (если они есть) и помечает их использованными.
+static func _take(parts: Array[Dictionary], by_group: Dictionary, used: Dictionary, role: String, groups: Array) -> void:
+	var list: Array = []
+	for g in groups:
+		if by_group.has(g):
+			for i in (by_group[g] as Array):
+				list.append(i)
+				used[i] = true
+	if not list.is_empty():
+		parts.append({"role": role, "axis": "", "indices": list})
+
+
+# Безногие звери: блоки делятся на три части по положению центра вдоль длинной оси тела.
+# Ось "z" (змея: голова спереди, хвост сзади) или "y" (медуза, морской конёк: верх и низ).
+static func _split_wave(recipe: Dictionary) -> Array[Dictionary]:
+	var blocks: Array = recipe.get("blocks", [])
+	var parts: Array[Dictionary] = []
+	if blocks.is_empty():
+		return parts
+	var lo: Vector3 = Vector3(INF, INF, INF)
+	var hi: Vector3 = Vector3(-INF, -INF, -INF)
+	for i in blocks.size():
+		var p: Vector3 = (blocks[i] as Dictionary)["pos"]
+		lo = Vector3(minf(lo.x, p.x), minf(lo.y, p.y), minf(lo.z, p.z))
+		hi = Vector3(maxf(hi.x, p.x), maxf(hi.y, p.y), maxf(hi.z, p.z))
+	var ext: Vector3 = hi - lo
+	var axis: String = "y" if ext.y > ext.z * WAVE_AXIS_RATIO else "z"
+	var span: float = ext.y if axis == "y" else ext.z
+	var lists: Array = [[], [], []]
+	for i in blocks.size():
+		var p: Vector3 = (blocks[i] as Dictionary)["pos"]
+		var k: int = 0
+		if span > 0.001:
+			# часть 0 это перед (z меньше) или верх (y больше)
+			var t: float = (hi.y - p.y) / span if axis == "y" else (p.z - lo.z) / span
+			k = clampi(int(t * 3.0), 0, 2)
+		(lists[k] as Array).append(i)
+	for k in 3:
+		if not (lists[k] as Array).is_empty():
+			parts.append({"role": "wave%d" % k, "axis": axis, "indices": lists[k]})
+	return parts
+
+
+## Опорная точка вращения части (в системе рецепта) по её габаритам. body_z это z центра тела:
+## по нему хвост выбирает край, которым прикреплён к телу.
+static func part_pivot(role: String, box: AABB, body_z: float, axis: String) -> Vector3:
+	var c: Vector3 = box.get_center()
+	var lo: Vector3 = box.position
+	var hi: Vector3 = box.end
+	match role:
+		"leg_a", "leg_b", "legs", "leg_fl", "leg_fr", "leg_bl", "leg_br":
+			return Vector3(c.x, hi.y, c.z)          # бедро: верх ноги
+		"fin_l":
+			return Vector3(hi.x, c.y, c.z)          # плавник слева (x < 0) крепится внутренним краем
+		"fin_r":
+			return Vector3(lo.x, c.y, c.z)
+		"head":
+			return Vector3(c.x, lo.y + box.size.y * 0.25, hi.z)   # шея: низ и зад головы
+		"tail":
+			return Vector3(c.x, c.y, lo.z if c.z >= body_z else hi.z)
+		"ear_l", "ear_r":
+			return Vector3(c.x, lo.y, c.z)
+		"wings":
+			return Vector3(0.0, hi.y, c.z)
+		"wave0":
+			return Vector3(c.x, c.y, hi.z) if axis == "z" else Vector3(c.x, lo.y, c.z)
+		"wave1":
+			return c
+		"wave2":
+			return Vector3(c.x, c.y, lo.z) if axis == "z" else Vector3(c.x, hi.y, c.z)
+	return Vector3.ZERO                              # body
 
 
 # ---------- Блоки ----------

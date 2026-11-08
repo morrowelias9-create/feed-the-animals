@@ -13,6 +13,8 @@ static var _protos: Dictionary = {}      # id -> прототип Node3D (не �
 static var _heights: Dictionary = {}     # id -> высота модели в метрах после подгонки
 static var _moves: Dictionary = {}       # id -> тип движения всего тела из рецепта (hop, waddle, trot, ...)
 static var _variant_mats: Dictionary = {} # "id материала|вариант" -> материал с оттенком
+static var _part_protos: Dictionary = {}  # "id|режим" -> прототип по частям Node3D (не в дереве) или null
+static var _part_infos: Dictionary = {}   # "id|режим" -> Array[Dictionary] {role, pivot, axis} в порядке дочерних узлов
 
 
 ## Новая копия зверя: модель из .glb (если есть) или заглушка цвета редкости, с оформлением варианта.
@@ -23,6 +25,25 @@ static func get_animal(id: String, variant: int = 0) -> Node3D:
 	node.set_meta("height_m", float(_heights.get(id, 1.0)))
 	apply_variant(node, variant)
 	return node
+
+
+## Зверь по частям (T24f): отдельный MeshInstance3D на часть, режим AnimalBuilder.PART_LIGHT или PART_FULL.
+## Размер, посадка и вариант те же, что у get_animal. Возвращает null, если зверь без рецепта, с ошибками в рецепте
+## или с внешним .glb: тогда вызывающий остаётся в режиме А (один меш), ошибки нет.
+static func get_animal_parts(id: String, variant: int, mode: String) -> Node3D:
+	var proto: Node3D = _get_part_proto(id, mode)
+	if proto == null:
+		return null
+	var node: Node3D = proto.duplicate() as Node3D
+	node.set_meta("height_m", float(_heights.get(id, 1.0)))
+	apply_variant(node, variant)
+	return node
+
+
+## Описание частей зверя в порядке дочерних узлов копии из get_animal_parts: {"role", "pivot", "axis"}.
+static func part_infos(id: String, mode: String) -> Array:
+	_get_part_proto(id, mode)
+	return _part_infos.get(id + "|" + mode, []) as Array
 
 
 ## Высота подогнанной модели в метрах (у копии из get_animal лежит в метаданных).
@@ -99,6 +120,61 @@ static func _get_proto(id: String) -> Node3D:
 	_moves[id] = AnimalRecipes.move_of(id)
 	node.name = id
 	_protos[id] = node
+	return node
+
+
+static func _get_part_proto(id: String, mode: String) -> Node3D:
+	var key: String = id + "|" + mode
+	if _part_protos.has(key):
+		var raw: Variant = _part_protos[key]
+		if raw == null:
+			return null
+		if is_instance_valid(raw):
+			return raw as Node3D
+	_get_proto(id)   # размер и высота берутся из режима А
+	var node: Node3D = _make_parts(id, mode)
+	_part_protos[key] = node
+	return node
+
+
+## Зверь по частям из рецепта: на каждую часть один MeshInstance3D с тем же общим материалом. Узел части стоит
+## в своей опорной точке (pivot), вершины сдвинуты на -pivot, поэтому внешний вид тот же, что в режиме А,
+## а вращение идёт вокруг сустава. Размер и посадка по габаритам целого зверя (как в режиме А).
+static func _make_parts(id: String, mode: String) -> Node3D:
+	if not AnimalRecipes.has_recipe(id) or ResourceLoader.exists(ANIMALS_DIR + id + ".glb"):
+		return null
+	var recipe: Dictionary = AnimalRecipes.get_recipe(id)
+	var whole: Dictionary = AnimalBuilder.generate(recipe)
+	if not (whole["errors"] as Array).is_empty() or int(whole["tris"]) == 0:
+		return null
+	var size_m: float = float(AnimalData.by_id(id).get("size_m", 1.2))
+	var body_z: float = AnimalBuilder.group_center(recipe, "body").z
+	var node := Node3D.new()
+	node.name = id
+	var infos: Array[Dictionary] = []
+	var specs: Array[Dictionary] = AnimalBuilder.split_parts(recipe, mode)
+	for i in specs.size():
+		var spec: Dictionary = specs[i]
+		var role: String = String(spec["role"])
+		var axis: String = String(spec["axis"])
+		var data: Dictionary = AnimalBuilder.generate_blocks(recipe, spec["indices"] as Array)
+		var pivot: Vector3 = AnimalBuilder.part_pivot(role, data["aabb"], body_z, axis)
+		var mesh: ArrayMesh = AnimalBuilder.mesh_from_shifted(data, pivot)
+		if mesh == null:
+			continue
+		var mi := MeshInstance3D.new()
+		mi.name = "P%d" % node.get_child_count()
+		mi.mesh = mesh
+		mi.material_override = AnimalBuilder.material()
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.position = pivot
+		node.add_child(mi)
+		infos.append({"role": role, "pivot": pivot, "axis": axis})
+	if node.get_child_count() == 0:
+		node.free()
+		return null
+	_apply_fit(node, whole["aabb"], size_m)
+	_part_infos[id + "|" + mode] = infos
 	return node
 
 

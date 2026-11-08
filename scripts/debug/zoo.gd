@@ -5,6 +5,7 @@ extends Node3D
 ## Клавиши:
 ##   0-5 вариант, [ и ] ступень размера, R покой/бег на месте, T силуэт (всё чёрное на светлом),
 ##   Влево/Вправо следующий зверь, Вверх/Вниз или колесо дистанция, Home обзор всех.
+##   M — режим модели по частям (T24f): целиком (1 меш), лёгкий (до 3), полный (до 12)
 ##   F — переключение режима камеры (орбита / свободный полёт)
 ##   В свободном полёте: WASD — движение, мышь — обзор, Shift — ускорить, Q/E — вверх/вниз, Пробел — фокус на звере
 ## Подписи только id зверей. Локализация не нужна.
@@ -37,6 +38,7 @@ var _overview_center: Vector3 = Vector3.ZERO
 var _variant: int = 0
 var _size_step: int = 0
 var _running: bool = false
+var _part_mode: String = AnimalView.PART_WHOLE   # режим моделей по частям, клавиша M
 var _silhouette: bool = false
 var _free_fly: bool = false               # режим свободного полёта
 var _fly_yaw: float = 0.0                 # рыскание камеры
@@ -153,6 +155,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			for view in _views:
 				view.set_anim_running(_running)
 			_update_info()
+		KEY_M:
+			_cycle_part_mode()
 		KEY_T:
 			_silhouette = not _silhouette
 			_apply_look()
@@ -254,6 +258,7 @@ func _spawn_animals() -> void:
 		view.position = pos
 		view.rotation_degrees = Vector3(0.0, -90.0, 0.0)   # мордой вправо, боком к камере
 		view.set_creature(id, 0, AnimalData.rarity_of(id), 0.0)
+		view.set_part_mode(_part_mode)
 		view.set_signs_visible(false)
 		_views.append(view)
 		_ids.append(id)
@@ -334,6 +339,20 @@ func _view_scale() -> float:
 	return pow(SIZE_STEP_MULT, float(_size_step))
 
 
+# Режимы по частям по кругу: целиком -> лёгкий -> полный. У зверей без рецепта режим остаётся «целиком».
+func _cycle_part_mode() -> void:
+	if _part_mode == AnimalView.PART_WHOLE:
+		_part_mode = AnimalBuilder.PART_LIGHT
+	elif _part_mode == AnimalBuilder.PART_LIGHT:
+		_part_mode = AnimalBuilder.PART_FULL
+	else:
+		_part_mode = AnimalView.PART_WHOLE
+	for view in _views:
+		view.set_part_mode(_part_mode)
+	_apply_look()   # силуэт и вариант накладываются на новые меши
+	_update_info()
+
+
 func _set_variant(v: int) -> void:
 	_variant = v
 	for view in _views:
@@ -385,8 +404,8 @@ func _update_info() -> void:
 	var lines: PackedStringArray = PackedStringArray()
 	var who: String = "overview" if _overview else "%s [%d/%d]" % [_ids[_focus], _focus + 1, _ids.size()]
 	var mutation: String = String(VariantData.VARIANTS[_variant]["id"])
-	lines.append("zoo T24d   view: %s   variant: %d %s   size step: %d   motion: %s   silhouette: %s   fly: %s" % [
-		who, _variant, mutation, _size_step, "run" if _running else "rest", "on" if _silhouette else "off", "on" if _free_fly else "off"])
+	lines.append("zoo T24d   view: %s   variant: %d %s   size step: %d   motion: %s   parts: %s   silhouette: %s   fly: %s" % [
+		who, _variant, mutation, _size_step, "run" if _running else "rest", _part_mode, "on" if _silhouette else "off", "on" if _free_fly else "off"])
 	if _free_fly:
 		lines.append("F — орбита | WASD/QE — полёт | Мышь — обзор | Shift — ускорение | Пробел — фокус на звере")
 	else:
