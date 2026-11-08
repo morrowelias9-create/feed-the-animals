@@ -69,8 +69,8 @@ func set_creature(id: String, new_variant: int, new_rarity: int, new_income: flo
 
 
 ## Режим модели (T24f): AnimalBuilder.PART_LIGHT, AnimalBuilder.PART_FULL или любое другое значение для режима А.
-## Зверь без рецепта (или с внешним .glb) остаётся в режиме А без ошибки. Звери загона остаются в режиме А,
-## если выключен GameConfig.PEN_PARTS_ENABLED (это проверяет вызывающий SlotManager).
+## Зверь без рецепта (или с внешним .glb) остаётся в режиме А без ошибки. Звери загона используют полный режим,
+## если включен GameConfig.PEN_PARTS_ENABLED (это проверяет вызывающий SlotManager).
 func set_part_mode(mode: String) -> void:
 	var wanted: String = mode
 	if wanted != AnimalBuilder.PART_LIGHT and wanted != AnimalBuilder.PART_FULL:

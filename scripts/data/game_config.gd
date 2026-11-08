@@ -64,4 +64,4 @@ const BAR_BONUS_LIFE_S: float = 2.5  # T14: пузырь исчезает чер
 const BAR_IDLE_INPUT: float = 0.1    # T14: тренировка идёт, пока игрок не двигает джойстик (длина вектора ввода меньше)
 const BAR_CENTER_SPEED: float = 5.0  # T14: м/с, с которой игрок встаёт точно под перекладину
 const FX_ENABLED: bool = true        # частицы и вспышки
-const PEN_PARTS_ENABLED: bool = true # T24f: звери загона по частям (лёгкий режим, 3 меша); false возвращает всех в режим А (1 меш)
+const PEN_PARTS_ENABLED: bool = true # T24f: звери загона по частям (полный режим, до 12 мешей на зверя); false возвращает всех в режим А (1 меш)

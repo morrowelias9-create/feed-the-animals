@@ -235,6 +235,8 @@ func _enter_side() -> void:
 	_lock_t = TAP_LOCK_S
 	_spawn_view(_run_from)
 	_overlay.begin_typing(Loc.t("animal_" + _animal_id), GameConfig.REVEAL_LETTER_S)
+	if _view != null:
+		_view.set_anim_running(true)   # включаем анимацию бега (ноги, хвост, части)
 	_update_side(0.0)
 
 
@@ -275,6 +277,8 @@ func _enter_result() -> void:
 	if _view == null:
 		_spawn_view(_stop)
 	_view.position = _stop
+	if _view != null:
+		_view.set_anim_running(false)   # останавливаем анимацию бега, зверь стоит на месте
 	_overlay.skip_typing()
 	_overlay.hide_typing()
 	Game.add_animal(_animal_id, _variant, _size_step)

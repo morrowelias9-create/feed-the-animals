@@ -181,7 +181,7 @@ func _spawn(a: Dictionary) -> void:
 	add_child(view)
 	view.set_creature(id, variant, rarity, Economy.income(id, variant, size_step))
 	if GameConfig.PEN_PARTS_ENABLED:
-		view.set_part_mode(AnimalBuilder.PART_LIGHT)   # T24f: ноги и волна по частям, до 3 мешей на зверя
+		view.set_part_mode(AnimalBuilder.PART_FULL)   # T24f: звери загона в полном режиме (до 12 мешей на зверя, среднее ~7.4)
 	view.position = WorldLayout.slot_position(slot)
 	view.rotation.y = 0.0    # лицом к -Z, к игроку, который ходит перед загонами
 	var fit: float = display_scale(id)
