@@ -244,6 +244,21 @@ func _test_economy() -> void:
 	_check("sell_price(lion, 2) = 61509.375", _near(Economy.sell_price("lion", 2, 0), 61509.375))
 	_check("income неизвестного зверя = 0", _near(Economy.income("нет_такого", 0, 0), 0.0))
 	_check("sell_price(frog) = 30.0", _near(Economy.sell_price("frog", 0, 0), 30.0))
+
+	# T31: сравнение вариантов на сопоставимых рангах
+	# Лягушка ранг 1, Белка ранг 2 (оба Лес, base_income = 1.0)
+	_check("T31: доход лягушки ранг 1 без мутации = 1.0", _near(Economy.income("frog", 0, 0), 1.0))
+	_check("T31: доход белки ранг 2 без мутации = 1.5", _near(Economy.income("squirrel", 0, 0), 1.5))
+	_check("T31: золотая лягушка (ранг 1) = 1.5", _near(Economy.income("frog", 1, 0), 1.5))
+	_check("T31: золотая белка (ранг 2) = 2.25", _near(Economy.income("squirrel", 1, 0), 2.25))
+	_check("T31: бриллиантовая лягушка (ранг 1) = 3.0", _near(Economy.income("frog", 2, 0), 3.0))
+	_check("T31: бриллиантовая белка (ранг 2) = 4.5", _near(Economy.income("squirrel", 2, 0), 4.5))
+	# На одинаковом ранге бриллиантовый (x3) даёт в 2 раза больше золотого (x1.5)
+	_check("T31: на ранге 1 бриллиант > золото в 2 раза", _near(Economy.income("frog", 2, 0) / Economy.income("frog", 1, 0), 2.0))
+	_check("T31: на ранге 2 бриллиант > золото в 2 раза", _near(Economy.income("squirrel", 2, 0) / Economy.income("squirrel", 1, 0), 2.0))
+	# Размер 1 на золотой белке даёт ~4.67 (близко к наблюдаемым 5)
+	_check("T31: золотая белка с размером 1 ~ 4.67", _near(Economy.income("squirrel", 1, 1), 4.668171301876246))
+
 	_check("xp_needed(1) = 30.75", _near(Economy.xp_needed(1), 30.75))
 	_check("xp_needed(30) = 183.75 (начало Саванны)", _near(Economy.xp_needed(30), 183.75))
 	_check("xp_needed(100) = 1286.25 (начало Пустыни)", _near(Economy.xp_needed(100), 1286.25))
