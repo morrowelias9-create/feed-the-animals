@@ -14,8 +14,8 @@ const ANIM_BLEND_PER_S: float = 5.0       # скорость перехода м
 const PART_WHOLE: String = "whole"        # режим А: один MeshInstance3D на зверя
 
 # Подписи 2D UI
-const LABEL_MAX_DIST: float = 30.0       # макс. дистанция показа подписей (метры) — уменьшено для гарантии скрытия
-const LABEL_FADE_START: float = 20.0     # дистанция начала затухания
+const LABEL_MAX_DIST: float = 80.0       # макс. дистанция показа подписей (метры)
+const LABEL_FADE_START: float = 50.0     # дистанция начала затухания
 const LABEL_BASE_SIZE: float = 28.0      # базовый размер шрифта (пиксели)
 
 var animal_id: String = ""
@@ -428,8 +428,16 @@ func _update_ui_positions(camera: Camera3D) -> void:
 	var vp_size: Vector2 = viewport.get_visible_rect().size
 	var margin: float = 50.0
 	
+	# Направление взгляда камеры (в Godot камера смотрит по -Z)
+	var cam_forward: Vector3 = -camera.global_basis.z
+	
 	for i in 3:
 		var world_pos: Vector3 = base_pos + vars[i]
+		# Проверяем, что точка ПЕРЕД камерой (dot product > 0)
+		var to_point: Vector3 = world_pos - cam_pos
+		if to_point.dot(cam_forward) <= 0.0:
+			labels[i].visible = false
+			continue
 		var screen_pos: Vector2 = camera.unproject_position(world_pos)
 		# Проверяем, что точка на экране (с небольшим запасом)
 		if screen_pos.x >= -margin and screen_pos.x <= vp_size.x + margin \
@@ -444,14 +452,19 @@ func _update_ui_positions(camera: Camera3D) -> void:
 	if _label_size != null and _float_t >= 0.0 and _float_step > 0:
 		var life: float = clampf(_float_t / FLOAT_SIZE_S, 0.0, 1.0)
 		var world_pos: Vector3 = base_pos + _sign_pos_size + Vector3.UP * (1.5 * smoothstep(0.0, 1.0, life))
-		var screen_pos: Vector2 = camera.unproject_position(world_pos)
-		if screen_pos.x >= -margin and screen_pos.x <= vp_size.x + margin \
-			and screen_pos.y >= -margin and screen_pos.y <= vp_size.y + margin:
-			_label_size.position = screen_pos
-			_label_size.modulate.a = (1.0 - life) * alpha
-			_label_size.visible = true
-		else:
+		# Проверяем, что точка ПЕРЕД камерой
+		var to_point: Vector3 = world_pos - cam_pos
+		if to_point.dot(cam_forward) <= 0.0:
 			_label_size.visible = false
+		else:
+			var screen_pos: Vector2 = camera.unproject_position(world_pos)
+			if screen_pos.x >= -margin and screen_pos.x <= vp_size.x + margin \
+				and screen_pos.y >= -margin and screen_pos.y <= vp_size.y + margin:
+				_label_size.position = screen_pos
+				_label_size.modulate.a = (1.0 - life) * alpha
+				_label_size.visible = true
+			else:
+				_label_size.visible = false
 		if life >= 1.0:
 			_float_t = -1.0
 			_label_size.visible = false
