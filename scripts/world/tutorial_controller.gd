@@ -1,7 +1,7 @@
 class_name TutorialController
 extends Node3D
-## Обучение (T19, справочник R6 «Обучение»). Шаг хранится в Save.data["tutorial_step"], цель выводится в HUD.
-## Шаги: 0 идти к линии броска, 1 бросить, 2 накопить и купить яблоко, 3 подтянуться 10 раз, 4 бросить 5 раз,
+## Обучение (T19, T30, справочник R6 «Обучение»). Шаг хранится в Save.data["tutorial_step"], цель выводится в HUD.
+## Шаги: 0 идти к линии броска, 1 бросить, 2 накопить и купить яблоко (в палатке еды), 3 подтянуться 10 раз, 4 бросить 5 раз,
 ## 5 обучение закончено. Условия перехода проверяются раз в CHECK_S секунд по состоянию игры,
 ## поэтому сохранение с прогрессом само пролистывает пройденные шаги. После шага 4 подсказки исчезают навсегда.
 
@@ -93,16 +93,17 @@ func _apply_goal() -> void:
 	hud.set_goal(Loc.t(GOAL_KEYS[_step]))
 
 
-# Кнопка «Магазин» пульсирует на шаге 2, пока хватает денег на яблоко.
+# Кнопка «Магазин» пульсирует на шаге 1 (подсказка броска), на шаге 2 пульсации нет — покупка в палатке.
 func _update_shop_pulse() -> void:
-	var want: bool = _step == 2 and Game.money() >= _apple_price()
+	var want: bool = _step == 1
 	if want == _shop_pulse:
 		return
 	_shop_pulse = want
 	hud.set_shop_pulse(want)
 
 
-# Стрелки на шагах 0 (к линии броска) и 3 (к диску покупки турника, потом к самому турнику).
+# Стрелки: шаг 0 — к линии броска; шаг 2 — к палатке еды (когда хватает денег и яблоко не куплено);
+# шаг 3 — к диску покупки турника, потом к самому турнику.
 func _update_arrows_target() -> void:
 	if _arrows == null:
 		return
@@ -110,6 +111,12 @@ func _update_arrows_target() -> void:
 		0:
 			var center: Vector2 = WorldLayout.throw_line_rect().get_center()
 			_point_arrows(Vector3(center.x, 0.0, center.y))
+		2:
+			# Показываем стрелки к палатке еды, только если яблоко доступно для покупки и ещё не куплено.
+			if int(Save.data.get("food_unlocked", 0)) < _apple_tier and Game.money() >= _apple_price():
+				_point_arrows(WorldLayout.food_tent_position())
+			elif _arrows.is_active():
+				_arrows.hide_guide()
 		3:
 			if Game.bars_owned() == 0:
 				_point_arrows(WorldLayout.buy_pad_position())
