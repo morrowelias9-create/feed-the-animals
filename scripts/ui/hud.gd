@@ -194,9 +194,9 @@ func _update_boost_display() -> void:
 func _start_boost_glow() -> void:
 	if _boost_pulse_tween != null and _boost_pulse_tween.is_valid():
 		_boost_pulse_tween.kill()
-	# Тихое пульсирование прозрачности (opacity 1.0 -> 0.7 -> 1.0), без масштабирования
 	var tween: Tween = _boost_button.create_tween()
 	tween.set_loops()
+	# Тихое пульсирование прозрачности (modulate.a) 1.0 -> 0.7 -> 1.0
 	var fade_out: PropertyTweener = tween.tween_property(_boost_button, "modulate:a", 0.7, 1.5)
 	fade_out.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	var fade_in: PropertyTweener = tween.tween_property(_boost_button, "modulate:a", 1.0, 1.5)
@@ -258,11 +258,11 @@ func _build_stats() -> void:
 
 # T22: создаёт кнопку буста и таймер (правый верхний угол, над звуком)
 func _build_boost() -> void:
-	# Кнопка "получить х2 опыта за рекламу" (прямоугольник 200×52, над звуком)
+	# Кнопка "х2 дохода за рекламу" (правый верхний угол, над звуком)
 	_boost_button = Button.new()
 	_boost_button.name = "BoostButton"
-	const BOOST_BTN_W: float = 200.0
-	const BOOST_BTN_H: float = 52.0
+	const BOOST_BTN_W: float = 220.0
+	const BOOST_BTN_H: float = 56.0
 	_boost_button.custom_minimum_size = Vector2(BOOST_BTN_W, BOOST_BTN_H)
 	_boost_button.size = Vector2(BOOST_BTN_W, BOOST_BTN_H)
 	_boost_button.focus_mode = Control.FOCUS_NONE
@@ -273,7 +273,7 @@ func _build_boost() -> void:
 	style.set_corner_radius_all(int(BOOST_BTN_H / 2.0))
 	for st in ["normal", "hover", "pressed", "focus", "disabled"]:
 		_boost_button.add_theme_stylebox_override(st, style)
-	_boost_button.add_theme_font_size_override("font_size", 16)
+	_boost_button.add_theme_font_size_override("font_size", 18)
 	for color_name in ["font_color", "font_hover_color", "font_pressed_color", "font_disabled_color"]:
 		_boost_button.add_theme_color_override(color_name, UiStyle.COLOR_TEXT)
 	_boost_button.add_theme_color_override("font_outline_color", UiStyle.COLOR_OUTLINE)
@@ -281,15 +281,9 @@ func _build_boost() -> void:
 	# Текст на двух строках
 	_boost_button.text = Loc.t("boost_btn")
 	_boost_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	# Позиция: справа от счетчика денег (справа от _money)
-	# Деньги: x=20, ширина=360, заканчиваются на x=380
-	# Буст: справа от денег с зазором 12px, по центру по вертикали относительно денег
-	var money_x: float = 20.0
-	var money_w: float = 360.0
-	var money_h: float = 50.0
-	var money_y: float = 612.0
-	var gap: float = 12.0
-	_boost_button.position = Vector2(money_x + money_w + gap, money_y)
+	# Позиция: справа сверху, над кнопкой звука
+	var margin: float = 16.0
+	_boost_button.position = Vector2(1280.0 - BOOST_BTN_W - margin, margin)
 	_boost_button.pressed.connect(_on_boost_pressed)
 	add_child(_boost_button)
 
@@ -299,16 +293,16 @@ func _build_boost() -> void:
 	_boost_timer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_boost_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_boost_timer.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_boost_timer.add_theme_font_size_override("font_size", 20)
+	_boost_timer.add_theme_font_size_override("font_size", 22)
 	_boost_timer.add_theme_color_override("font_color", UiStyle.COLOR_MONEY)
 	_boost_timer.add_theme_color_override("font_outline_color", UiStyle.COLOR_OUTLINE)
 	_boost_timer.add_theme_constant_override("outline_size", 4)
-	_boost_timer.position = Vector2(money_x + money_w + gap, money_y + BOOST_BTN_H + 4.0)
-	_boost_timer.size = Vector2(BOOST_BTN_W, 28.0)
+	_boost_timer.position = Vector2(1280.0 - BOOST_BTN_W - margin, margin + BOOST_BTN_H + 4.0)
+	_boost_timer.size = Vector2(BOOST_BTN_W, 32.0)
 	_boost_timer.visible = false
 	add_child(_boost_timer)
 
-	# Изначально: если буст не активен — кнопка видна БЕЗ пульсации, с лёгким пульсированием прозрачности
+	# Изначально: если буст не активен — кнопка видна БЕЗ пульсации, с лёгкой свето-анимацией
 	var active: bool = Game._boost_active()
 	_boost_active = active
 	if active:
@@ -320,7 +314,7 @@ func _build_boost() -> void:
 		_boost_button.visible = _full
 		_boost_timer.visible = false
 		set_process_internal(false)
-		# Тихое пульсирование прозрачности (opacity 1.0 -> 0.7 -> 1.0), без масштабирования
+		# Тихое пульсирование свечения (opacity), без масштабирования
 		_start_boost_glow()
 
 
