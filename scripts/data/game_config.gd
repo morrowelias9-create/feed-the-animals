@@ -19,7 +19,7 @@ const RARE_SIZE_MIN: int = 2         # или размер 2 и выше (T12a);
 const SIZE_STEP: float = 1.5         # SIZE_STEP^(SIZE_POW * k)
 const SIZE_POW: float = 1.8
 const SIZE_P0: float = 0.18          # начальный шанс ступени размера при lm = 1
-const SIZE_MAX: int = 10             # дальше размер не растёт
+const SIZE_MAX: int = 20             # максимальная ступень размера (визуальный масштаб ограничен в SizeData.visual_scale)
 
 # Сила: опыт следующего уровня растёт по зонам
 const XP_ZONE_K: float = 3.5

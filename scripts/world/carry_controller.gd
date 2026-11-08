@@ -4,7 +4,6 @@ extends Node3D
 ## Маркер и кнопка «Поставить» работают только пока игрок стоит внутри своего загона; снаружи подсказка зовёт зайти.
 
 const MARKER_RADIUS := 0.8
-const HELD_HEIGHT := 0.55
 
 var player: Player
 var camera_rig: CameraRig
@@ -187,11 +186,15 @@ func _attach_held(animal: Dictionary) -> void:
 	var socket: Node3D = player.avatar.carry_socket() if player.avatar != null else player
 	socket.add_child(_held)
 	var id := String(animal.get("animal_id", "frog"))
-	_held.set_creature(id, int(animal.get("variant", 0)), AnimalData.rarity_of(id),
-		Economy.income(id, int(animal.get("variant", 0)), int(animal.get("size", 0))))
+	var variant := int(animal.get("variant", 0))
+	var size_step := SizeData.clamp_size(int(animal.get("size", 0)))
+	_held.set_creature(id, variant, AnimalData.rarity_of(id),
+		Economy.income(id, variant, size_step))
 	_held.set_signs_visible(false)
-	var h := maxf(_held.model_height(), 0.1)
-	_held.scale = Vector3.ONE * (HELD_HEIGHT / h)
+	# Естественный масштаб: базовый размер вида × мутация размера
+	var base_size_m: float = float(AnimalData.by_id(id).get("size_m", 1.2))
+	var size_mult: float = SizeData.visual_scale(size_step)
+	_held.scale = Vector3.ONE * (base_size_m * size_mult)
 	_held.position = Vector3(0.0, -0.58, -0.05)
 	_held.rotation.x = -1.45
 

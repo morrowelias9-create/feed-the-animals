@@ -8,7 +8,6 @@ extends Node3D
 ## - Появление зверя: масштаб 0 -> 1 за POP_S. Пока идёт кинематика получения (REVEAL), появление ждёт её конца.
 ## - Раз в POPUP_EVERY_S над случайным зверем всплывает «+$N» (пул из POPUP_POOL подписей).
 
-const MAX_DISPLAY_M: float = 5.0
 const POP_S: float = 0.3
 const POPUP_POOL: int = 8
 const POPUP_EVERY_S: float = 2.0
@@ -126,12 +125,11 @@ func active_popups() -> int:
 	return n
 
 
-## Масштаб зверя в загоне: крупные ужимаются до MAX_DISPLAY_M.
-static func display_scale(animal_id: String) -> float:
-	var size_m: float = float(AnimalData.by_id(animal_id).get("size_m", 1.2))
-	if size_m <= MAX_DISPLAY_M:
-		return 1.0
-	return MAX_DISPLAY_M / size_m
+## Масштаб зверя в загоне: учитывает базовый размер вида и мутацию размера.
+static func display_scale(animal_id: String, size_step: int = 0) -> float:
+	var base_size_m: float = float(AnimalData.by_id(animal_id).get("size_m", 1.2))
+	var size_mult: float = SizeData.visual_scale(size_step)
+	return base_size_m * size_mult
 
 
 ## Показывает «+$N» над случайным зверем. false, если звери не стоят или пул занят.
@@ -184,7 +182,7 @@ func _spawn(a: Dictionary) -> void:
 		view.set_part_mode(AnimalBuilder.PART_FULL)   # T24f: звери загона в полном режиме (до 12 мешей на зверя, среднее ~7.4)
 	view.position = WorldLayout.slot_position(slot)
 	view.rotation.y = 0.0    # лицом к -Z, к игроку, который ходит перед загонами
-	var fit: float = display_scale(id)
+	var fit: float = display_scale(id, size_step)
 	_views[uid] = view
 	_slot_of[uid] = slot
 	_slot_used[slot] = uid
