@@ -63,6 +63,14 @@ func start() -> void:
 	if Save.data["session_start_time"] == 0:
 		Save.data["session_start_time"] = now
 		Save.save_data()
+	
+	# T26: создаём SoundBank как дочерний узел Game.
+	const SoundBank := preload("res://scripts/util/sound_bank.gd")
+	var sound_bank: Node = SoundBank.new()
+	sound_bank.name = "SoundBank"
+	add_child(sound_bank)
+	# Применяем сохранённое состояние звука
+	sound_bank.set_enabled(Save.data.get("sound_on", true))
 
 
 # T24c: загружает удалённые флаги (Remote Config) через Ya.get_flags().

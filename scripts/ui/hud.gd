@@ -10,6 +10,7 @@ signal bonus_pressed               # T14: тап по пузырю-бонусу 
 
 const BONUS_SIZE: float = 96.0
 const BOOST_BTN_SIZE: float = 96.0
+const SOUND_BTN_SIZE: float = 48.0
 
 var _full: bool = true
 var _throw_meter_enabled: bool = true
@@ -25,6 +26,7 @@ var xp_bar: XpBar                       # T14: шкала «Уровень N x/y
 var _bonus: Button                      # T14: пузырь-бонус 96x96 в экранных координатах
 var _boost_button: Button               # T22: кнопка буста x2 за рекламу
 var _boost_timer: Label                 # T22: таймер буста "x2 MM:SS"
+var _sound_button: Button               # T26: кнопка звука вкл/выкл
 var _training: bool = false
 var _bonus_shown: bool = false
 var _boost_active: bool = false
@@ -142,6 +144,11 @@ func _on_language_changed() -> void:
 	# T22: кнопка буста и таймер
 	if _boost_button != null:
 		_boost_button.text = Loc.t("boost_btn")
+	# T26: кнопка звука
+	if _sound_button != null:
+		var sound_bank: Node = Game.get_node_or_null("SoundBank")
+		var sound_on: bool = sound_bank.is_enabled() if sound_bank != null else true
+		_update_sound_button(sound_on)
 	_update_boost_display()
 
 
@@ -215,23 +222,26 @@ func _build_texts() -> void:
 
 
 func _build_stats() -> void:
+	# Компактный layout для 720p: сила (564-610), деньги (610-660), доход (660-686), кнопки (620-716) - но кнопки справа
 	_strength = UiStyle.outline_label(str(Game.strength()), 46, 6, UiStyle.COLOR_STRENGTH)
 	_strength.position = Vector2(20.0, 564.0)
 	_strength.size = Vector2(360.0, 46.0)
 	add_child(_strength)
 
 	_money = UiStyle.outline_label(NumFmt.money(Game.money()), 50, 6, UiStyle.COLOR_MONEY)
-	_money.position = Vector2(20.0, 642.0)
+	_money.position = Vector2(20.0, 612.0)
 	_money.size = Vector2(360.0, 50.0)
 	add_child(_money)
 
 	_income = UiStyle.outline_label(NumFmt.money(Game.income_per_sec()) + "/s", 26, 4, UiStyle.COLOR_MONEY)
-	_income.position = Vector2(20.0, 701.0)
+	_income.position = Vector2(20.0, 664.0)
 	_income.size = Vector2(360.0, 26.0)
 	add_child(_income)
 
-	# T22: кнопка буста x2 и таймер под доходом
+	# T22: кнопка буста x2 и таймер справа от денег/дохода
 	_build_boost()
+	# T26: кнопка звука справа от буста
+	_build_sound()
 
 
 # T22: создаёт кнопку буста и таймер под строкой дохода
@@ -249,13 +259,14 @@ func _build_boost() -> void:
 	style.set_corner_radius_all(int(BOOST_BTN_SIZE / 4.0))
 	for st in ["normal", "hover", "pressed", "focus"]:
 		_boost_button.add_theme_stylebox_override(st, style)
-	_boost_button.add_theme_font_size_override("font_size", 28)
+	_boost_button.add_theme_font_size_override("font_size", 24)
 	for color_name in ["font_color", "font_hover_color", "font_pressed_color"]:
 		_boost_button.add_theme_color_override(color_name, UiStyle.COLOR_TEXT)
 	_boost_button.add_theme_color_override("font_outline_color", UiStyle.COLOR_OUTLINE)
 	_boost_button.add_theme_constant_override("outline_size", 4)
 	_boost_button.text = Loc.t("boost_btn")
-	_boost_button.position = Vector2(20.0, 735.0)
+	# Подняли выше, чтобы влезало в 720p
+	_boost_button.position = Vector2(20.0, 620.0)
 	_boost_button.pressed.connect(_on_boost_pressed)
 	add_child(_boost_button)
 
@@ -285,6 +296,52 @@ func _build_boost() -> void:
 		_boost_button.visible = _full
 		_boost_timer.visible = false
 		_start_boost_pulse()
+
+
+# T26: создаёт маленькую кнопку звука в правом верхнем углу
+func _build_sound() -> void:
+	var sound_on: bool = Save.data.get("sound_on", true)
+	_sound_button = Button.new()
+	_sound_button.name = "SoundButton"
+	_sound_button.custom_minimum_size = Vector2(SOUND_BTN_SIZE, SOUND_BTN_SIZE)
+	_sound_button.size = Vector2(SOUND_BTN_SIZE, SOUND_BTN_SIZE)
+	_sound_button.focus_mode = Control.FOCUS_NONE
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = Color("#8B8B8B")
+	style.set_border_width_all(2)
+	style.border_color = Color("#4A4A4A")
+	style.set_corner_radius_all(int(SOUND_BTN_SIZE / 2.0))  # круглый
+	for st in ["normal", "hover", "pressed", "focus"]:
+		_sound_button.add_theme_stylebox_override(st, style)
+	# Без текста — просто иконка динамика через unicode
+	_sound_button.add_theme_font_size_override("font_size", 22)
+	for color_name in ["font_color", "font_hover_color", "font_pressed_color"]:
+		_sound_button.add_theme_color_override(color_name, UiStyle.COLOR_TEXT)
+	_sound_button.add_theme_color_override("font_outline_color", UiStyle.COLOR_OUTLINE)
+	_sound_button.add_theme_constant_override("outline_size", 2)
+	# Правый верхний угол с отступом
+	var margin: float = 16.0
+	_sound_button.position = Vector2(1280.0 - SOUND_BTN_SIZE - margin, margin)
+	_sound_button.pressed.connect(_on_sound_pressed)
+	add_child(_sound_button)
+	_update_sound_button(sound_on)
+
+
+func _update_sound_button(sound_on: bool) -> void:
+	if _sound_button == null:
+		return
+	# Unicode speaker icons
+	_sound_button.text = "🔊" if sound_on else "🔇"
+
+
+func _on_sound_pressed() -> void:
+	var sound_bank: Node = Game.get_node_or_null("SoundBank")
+	if sound_bank != null:
+		var new_state: bool = not sound_bank.is_enabled()
+		sound_bank.set_enabled(new_state)
+		_update_sound_button(new_state)
+		# Проигрываем клик для обратной связи
+		sound_bank.play("click")
 
 
 func _build_buttons() -> void:
@@ -447,6 +504,9 @@ func _update_visibility() -> void:
 		_boost_button.visible = _full and not _boost_active
 	if _boost_timer != null:
 		_boost_timer.visible = _full and _boost_active
+	# T26: кнопка звука
+	if _sound_button != null:
+		_sound_button.visible = _full
 
 
 func _on_index_pressed() -> void:
