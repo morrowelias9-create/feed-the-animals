@@ -186,6 +186,8 @@ func _setup_throw() -> void:
 	_slot_manager = SlotManager.new()
 	_slot_manager.name = "SlotManager"
 	_slot_manager.throw_controller = _throw_controller
+	_slot_manager._camera = _camera_rig.camera
+	_slot_manager._hud = _hud
 	_world.add_child(_slot_manager)
 
 	# Прогулки зверей по загону (T11c): без этого узла звери стоят на месте.

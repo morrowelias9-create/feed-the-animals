@@ -36,8 +36,16 @@ var _index_has_reward: bool = false
 var _hint_pulse_tween: Tween            # T19: пульс подсказки внизу (шаг обучения 1)
 var _shop_pulse_tween: Tween            # T19: пульс кнопки «Магазин» (шаг обучения 2)
 
+# CanvasLayer для 2D подписей зверей (над HUD, под модальными окнами)
+var _label_layer: CanvasLayer
+
 
 func _ready() -> void:
+	# Слой для подписей зверей (layer = 15, HUD layer = 0, WindowLayer = 20)
+	_label_layer = CanvasLayer.new()
+	_label_layer.name = "AnimalLabelLayer"
+	_label_layer.layer = 15
+	add_child(_label_layer)
 	_build_texts()
 	_build_stats()
 	_build_buttons()
@@ -139,6 +147,11 @@ func _on_language_changed() -> void:
 	index_button.text = Loc.t("index")
 	var shop_button: Button = _buttons["shop"]
 	shop_button.text = Loc.t("shop")
+
+
+## Возвращает CanvasLayer для 2D подписей зверей.
+func get_label_layer() -> CanvasLayer:
+	return _label_layer
 	var animals_button: Button = _buttons["animals"]
 	animals_button.text = Loc.t("animals")
 	# T22: кнопка буста и таймер

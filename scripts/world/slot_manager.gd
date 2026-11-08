@@ -22,9 +22,11 @@ const REVEAL_STATE: String = "REVEAL"  # ThrowController.STATE_REVEAL, без с
 var throw_controller: Node
 
 var _game: Node                        # автозагрузка Game из дерева (в тестах с `-s` имя как идентификатор недоступно)
+var _hud: Node                          # для доступа к CanvasLayer подписей (HUD автозагрузка)
+var _camera: Camera3D                  # для проецирования 3D позиций в 2D экранные координаты
 var _views: Dictionary = {}            # uid -> AnimalView
 var _slot_of: Dictionary = {}          # uid -> номер места
-var _fit: Dictionary = {}              # uid -> масштаб ужатия (<= 1)
+var _fit: Dictionary = {}              # uid -> масштаб зверя
 var _pop: Dictionary = {}              # uid -> секунд с начала появления
 var _pending: Array[int] = []          # звери, появление которых ждёт конца REVEAL
 var _done: Array[int] = []             # временный список закончивших появление (без новых объектов в кадре)
@@ -68,6 +70,12 @@ func _process(delta: float) -> void:
 	if _popup_clock >= POPUP_EVERY_S:
 		_popup_clock = 0.0
 		show_income_popup()
+	# Обновляем позиции 2D подписей зверей
+	if _camera != null:
+		for uid in _views:
+			var view: AnimalView = _views[uid]
+			if view != null and is_instance_valid(view):
+				view._update_ui_positions(_camera)
 
 
 # ---------- Публичное ----------
@@ -178,6 +186,9 @@ func _spawn(a: Dictionary) -> void:
 	view.name = "Pet%d" % uid
 	add_child(view)
 	view.set_creature(id, variant, rarity, Economy.income(id, variant, size_step))
+	if _hud != null:
+		view.ensure_ui_labels(_hud)
+		view.update_ui_labels()
 	if GameConfig.PEN_PARTS_ENABLED:
 		view.set_part_mode(AnimalBuilder.PART_FULL)   # T24f: звери загона в полном режиме (до 12 мешей на зверя, среднее ~7.4)
 	view.position = WorldLayout.slot_position(slot)
@@ -201,6 +212,7 @@ func _spawn(a: Dictionary) -> void:
 func _despawn(uid: int) -> void:
 	var view: AnimalView = _views.get(uid) as AnimalView
 	if view != null:
+		view.clear_ui_labels()
 		remove_child(view)    # сразу убираем из дерева, чтобы узлы не копились до конца кадра
 		view.queue_free()
 	var slot: int = int(_slot_of.get(uid, -1))
@@ -246,7 +258,8 @@ func _update_pops(delta: float) -> void:
 			_done.append(int(uid))
 			continue
 		var k: float = clampf(t / POP_S, 0.0, 1.0)
-		view.scale = Vector3.ONE * maxf(float(_fit.get(uid, 1.0)) * _ease_out_back(k), 0.001)
+		var current_scale: float = maxf(float(_fit.get(uid, 1.0)) * _ease_out_back(k), 0.001)
+		view.scale = Vector3.ONE * current_scale
 		if k >= 1.0:
 			_done.append(int(uid))
 		else:
