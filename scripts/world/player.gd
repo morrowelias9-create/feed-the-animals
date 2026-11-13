@@ -46,6 +46,12 @@ func set_carrying(value: bool) -> void:
 	carrying = value
 
 
+## Мгновенный разворот персонажа (T36: после переноса к загону под белым затемнением).
+func face(yaw: float) -> void:
+	_facing = yaw
+	rotation.y = _facing
+
+
 func _face(direction: Vector3, delta: float) -> void:
 	var target: float = atan2(-direction.x, -direction.z)
 	_facing = lerp_angle(_facing, target, clampf(TURN_RATE * delta, 0.0, 1.0))

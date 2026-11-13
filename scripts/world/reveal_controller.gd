@@ -40,6 +40,8 @@ const TAP_LOCK_S: float = 0.25          # после перехода тапы �
 const NAME_HOLD_S: float = 0.3          # пауза после конца печати имени
 const EXIT_EAT_S: float = 0.3           # зверь съедает еду
 const EXIT_S: float = 0.6               # весь выход
+const TELEPORT_FADE_IN_S: float = 0.3   # T36: белое затемнение перед переносом к загону
+const TELEPORT_FADE_OUT_S: float = 0.45 # T36: возврат из белого после переноса
 const CAM_X_LIMIT: float = 17.0         # камера не выходит за стену коридора (стена на x = +-18)
 const FOOD_SPIN: float = 0.0            # рад/с; на земле еда не крутится, FoodView сам поворачивает её к камере (T27b)
 
@@ -47,6 +49,10 @@ var throw_controller: ThrowController
 
 var _overlay: RevealOverlay
 var _camera_rig: CameraRig
+var _white_layer: CanvasLayer          # T36: белое затемнение поверх всего экрана
+var _white: ColorRect
+var _white_tween: Tween
+var _exit_fade_started: bool = false
 var _phase: Phase = Phase.NONE
 var _t: float = 0.0
 var _lock_t: float = 0.0
@@ -102,11 +108,13 @@ func _ready() -> void:
 	_overlay = RevealOverlay.new()
 	_overlay.name = "RevealOverlay"
 	add_child(_overlay)
+	_build_teleport_fade()
 
 
 ## Запуск после приземления: land_pos это точка земли под едой, food это узел еды (лежит и вращается).
 ## perfect — «Идеально!»: множитель удачи SCORE (1.25), тот же учитывает мутацию размера.
 func start(zone: int, dist: float, land_pos: Vector3, food: Node3D, perfect: bool = false) -> void:
+	_reset_teleport_fade()
 	_cleanup()
 	_camera_rig = throw_controller.camera_rig if throw_controller != null else null
 	var rng := RandomNumberGenerator.new()
@@ -451,7 +459,8 @@ func _enter_exit() -> void:
 	_phase = Phase.EXIT
 	_t = 0.0
 	_flashed = false
-	# Камера возвращается к игроку в его текущей позиции; сам игрок не телепортируется.
+	_exit_fade_started = false
+	# Камера возвращается к игроку; сам игрок переедет к загону под белым затемнением (T36).
 	_camera_rig.set_scripted(false)
 	_camera_rig.return_to_player(EXIT_S)
 
@@ -471,11 +480,92 @@ func _update_exit() -> void:
 	var fade: float = 1.0 - clampf(_t / EXIT_S, 0.0, 1.0)
 	_overlay.set_fade(fade)
 	_overlay.set_vignette(fade)
-	if _t >= EXIT_S:
-		_finish_run()
+	# T36: после видимого выхода экран плавно закрывается белым, под ним персонаж
+	# переносится к проёму загона, и белое так же плавно уходит.
+	if not _exit_fade_started and _t >= EXIT_S:
+		_start_teleport_fade()
 
 
 # ---------- Общее ----------
+
+## T36: белый слой поверх всей игры (HUD, экран награды, окна). Лежит выше RevealOverlay.
+func _build_teleport_fade() -> void:
+	_white_layer = CanvasLayer.new()
+	_white_layer.name = "TeleportFade"
+	_white_layer.layer = 30
+	add_child(_white_layer)
+	_white = ColorRect.new()
+	_white.name = "White"
+	_white.color = Color(1.0, 1.0, 1.0, 0.0)
+	_white.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_white.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_white.visible = false
+	_white_layer.add_child(_white)
+
+
+## T36: экран плавно закрывается белым, затем под полностью белым кадром персонаж
+## переносится к проёму своего загона и белое плавно уходит.
+func _start_teleport_fade() -> void:
+	_exit_fade_started = true
+	_white.visible = true
+	_white.color.a = 0.0
+	_kill_white_tween()
+	_white_tween = create_tween()
+	_white_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_white_tween.tween_property(_white, "color:a", 1.0, TELEPORT_FADE_IN_S)
+	_white_tween.tween_callback(_on_screen_covered)
+
+
+## Экран полностью белый: перенос и возврат из белого. Кинематика завершается здесь,
+## чтобы зверь оказался в руках уже под затемнением (T11c), без рывка на глазах игрока.
+func _on_screen_covered() -> void:
+	_teleport_to_pen()
+	# Старый твин уже закончил работу: просто заменяем ссылку новым.
+	_white_tween = create_tween()
+	_white_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_white_tween.tween_property(_white, "color:a", 0.0, TELEPORT_FADE_OUT_S)
+	_white_tween.tween_callback(_hide_teleport_fade)
+	_finish_run()
+
+
+## Перенос персонажа к точке перед проёмом своего загона (T11b, R2) и камера сразу за ним,
+## чтобы после затемнения игрок увидел себя перед загоном. Позиция ставится мгновенно,
+## пока экран полностью белый; управление в этот момент выключено.
+func _teleport_to_pen() -> void:
+	if throw_controller == null or throw_controller.player == null:
+		return
+	var player: Player = throw_controller.player
+	player.position = WorldLayout.pen_gate_position()
+	# Лицом к загону: модель смотрит в -Z, поворот на PI разворачивает к +Z (загон за проёмом).
+	player.face(PI)
+	if _camera_rig != null:
+		# Камера со стороны двора смотрит на игрока и загон, а не на обрыв.
+		_camera_rig.yaw_deg = 180.0
+		_camera_rig.set_scripted(false)
+		_camera_rig.snap_to_target()
+		if _camera_rig.camera != null:
+			_camera_rig.camera.fov = CameraRig.FOV
+
+
+func _hide_teleport_fade() -> void:
+	_white.visible = false
+	_white.color.a = 0.0
+	_white_tween = null
+
+
+func _kill_white_tween() -> void:
+	if _white_tween != null and _white_tween.is_valid():
+		_white_tween.kill()
+	_white_tween = null
+
+
+func _reset_teleport_fade() -> void:
+	_exit_fade_started = false
+	_kill_white_tween()
+	if _white != null:
+		_white.visible = false
+		_white.color.a = 0.0
+
 
 func _spawn_view(at: Vector3) -> void:
 	_view = AnimalView.new()
