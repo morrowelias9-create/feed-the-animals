@@ -363,8 +363,18 @@ func _test_variants() -> void:
 	_check("apply_variant(0) возвращает обычный вид", not (m2.material_override as StandardMaterial3D).emission_enabled)
 	var fx: Node3D = ModelLoader.make_variant_fx(2, 1.0)
 	var sparks: CPUParticles3D = fx.get_node_or_null("Sparks") as CPUParticles3D
-	_check("искры бриллианта не больше 12 частиц, есть диск",
-		sparks != null and sparks.amount <= 12 and fx.get_node_or_null("GlowDisc") != null)
+	_check("искры бриллианта не больше 12 частиц, есть декор, большого диска нет",
+		sparks != null and sparks.amount <= 12 and fx.get_node_or_null("Decor") != null and fx.get_node_or_null("GlowDisc") == null)
+	# T32: у каждой мутации свой декор в бюджете, у обычного зверя его нет; разные габариты (малыш, гигант, высокий)
+	var decor_ok: bool = VariantDecor.get_mesh(0, AABB()) == null
+	var boxes: Array[AABB] = [AABB(Vector3(-0.1, 0.0, -0.15), Vector3(0.2, 0.2, 0.3)),
+		AABB(Vector3(-1.5, 0.0, -2.5), Vector3(3.0, 3.0, 5.0)), AABB(Vector3(-0.3, 0.0, -0.4), Vector3(0.6, 2.5, 0.8))]
+	for vv in range(1, VariantData.count()):
+		for bx in boxes:
+			var tris: int = VariantDecor.tri_count(VariantDecor.get_mesh(vv, bx))
+			if tris <= 0 or tris > VariantDecor.MAX_TRIS:
+				decor_ok = false
+	_check("декор мутаций 1-5: от 1 до %d треугольников на любых габаритах, у обычного нет" % VariantDecor.MAX_TRIS, decor_ok)
 	var fx0: Node3D = ModelLoader.make_variant_fx(0, 1.0)
 	_check("у обычного зверя эффектов нет", fx0.get_child_count() == 0)
 	a1.free()

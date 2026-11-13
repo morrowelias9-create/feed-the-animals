@@ -103,6 +103,7 @@ func _build_world() -> void:
 	_world = world
 	_world_builder = WorldBuilder.new()
 	_world_builder.build(world)
+	YardDecor.build(world)  # деревья, кусты и камни по краям двора
 	_player = Player.new()
 	_player.name = "Player"
 	world.add_child(_player)
@@ -127,7 +128,7 @@ func _build_world() -> void:
 
 # T24b: создаёт NeighborView для 4 соседних участков (индексы 0, 1, 3, 4).
 func _build_neighbors(opponents: Array = []) -> void:
-	var neighbor_indices: Array = [0, 1, 3, 4]  # свой участок — 2
+	var neighbor_indices: Array = WorldLayout.neighbor_plot_indices()  # все участки, кроме своего
 	
 	for i in neighbor_indices.size():
 		var plot_idx: int = neighbor_indices[i]

@@ -14,17 +14,17 @@ const MAX_MUTATION_CHANCE_SUM: float = 0.35
 
 const VARIANTS: Array[Dictionary] = [
 	{"id": "none", "name_key": "", "chance": 0.0, "mult": 1.0,
-		"text": "#FFFFFF", "tint": "#FFFFFF", "glow": "#FFFFFF", "spark": "#FFFFFF"},
+		"text": "#FFFFFF", "tint": "#FFFFFF", "glow": "#FFFFFF", "spark": "#FFFFFF", "tint_k": 0.0, "glow_k": 0.0},
 	{"id": "gold", "name_key": "variant_gold", "chance": 0.09, "mult": 1.5,
-		"text": "#FFC83D", "tint": "#FFC83D", "glow": "#FFB000", "spark": "#FFE066"},
+		"text": "#FFC83D", "tint": "#FFC83D", "glow": "#FFB000", "spark": "#FFE066", "tint_k": 0.6, "glow_k": 0.45},
 	{"id": "diamond", "name_key": "variant_diamond", "chance": 0.035, "mult": 3.0,
-		"text": "#4DE0FF", "tint": "#5CC8FF", "glow": "#00D8FF", "spark": "#7FEFFF"},
+		"text": "#4DE0FF", "tint": "#5CC8FF", "glow": "#00D8FF", "spark": "#7FEFFF", "tint_k": 0.65, "glow_k": 0.55},
 	{"id": "emerald", "name_key": "variant_emerald", "chance": 0.015, "mult": 5.0,
-		"text": "#3DFF9A", "tint": "#4DFF8A", "glow": "#00FF7A", "spark": "#9BFFC4"},
+		"text": "#3DFF9A", "tint": "#4DFF8A", "glow": "#00FF7A", "spark": "#9BFFC4", "tint_k": 0.65, "glow_k": 0.4},
 	{"id": "ruby", "name_key": "variant_ruby", "chance": 0.007, "mult": 10.0,
-		"text": "#FF4D6D", "tint": "#FF5C7A", "glow": "#FF0040", "spark": "#FFA3B5"},
+		"text": "#FF4D6D", "tint": "#FF5C7A", "glow": "#FF0040", "spark": "#FFA3B5", "tint_k": 0.65, "glow_k": 0.45},
 	{"id": "rainbow", "name_key": "variant_rainbow", "chance": 0.003, "mult": 20.0,
-		"text": "#FF7AD9", "tint": "#FF7AD9", "glow": "#FF3DF2", "spark": "#FFFFFF"},
+		"text": "#FF7AD9", "tint": "#FF7AD9", "glow": "#FF3DF2", "spark": "#FFFFFF", "tint_k": 0.35, "glow_k": 0.5},
 ]
 
 
@@ -92,6 +92,16 @@ static func tint_color(variant: int) -> Color:
 
 static func glow_color(variant: int) -> Color:
 	return Color.html(String(VARIANTS[clamp_variant(variant)]["glow"]))
+
+
+## Доля оттенка в цвете материала зверя (0-1): у радуги меньше, чтобы не терять исходные цвета вида.
+static func tint_k(variant: int) -> float:
+	return float(VARIANTS[clamp_variant(variant)]["tint_k"])
+
+
+## Сила свечения материала зверя (множитель emission): умеренная, чтобы не заливать модель плоским цветом.
+static func glow_k(variant: int) -> float:
+	return float(VARIANTS[clamp_variant(variant)]["glow_k"])
 
 
 static func spark_color(variant: int) -> Color:

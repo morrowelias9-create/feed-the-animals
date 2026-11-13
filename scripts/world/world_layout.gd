@@ -6,9 +6,10 @@ extends RefCounted
 ## В Rect2 поле x это мировой X, поле y это мировой Z.
 ## Размеры оценены по скриншотам оригинала с опорой на рост аватара 1.8 м (точность примерно +-25%).
 
-# Двор: общая площадка на 5 участков, стены с трёх сторон, спереди обрыв
-const YARD_HALF_W: float = 65.0          # внутренняя ширина двора 130 м
-const YARD_DEPTH: float = 56.0           # z от 0 до 56
+# Двор: общая площадка на 3 участка (свой и два соседних), стены с трёх сторон, спереди обрыв.
+# Раньше было 5 участков и ширина 130 м; двор сжат: пустого места по бокам больше нет.
+const YARD_HALF_W: float = 38.0          # внутренняя ширина двора 76 м (участки до +-35, по бокам полоса 3 м под декор)
+const YARD_DEPTH: float = 48.0           # z от 0 до 48 (загон до 38 и до 8 м расширений)
 const YARD_WALL_T: float = 4.0
 
 # Край земли (оранжевая клетчатая площадка) и обрыв
@@ -27,27 +28,28 @@ const CORRIDOR_WALL_T: float = 12.0
 const WALL_BOTTOM_Y: float = -8.0
 const WALL_TOP_Y: float = 10.0
 
-# Участки игроков: 5 в ряд, свой по центру
-const PLOT_COUNT: int = 5
-const PLAYER_PLOT: int = 2
+# Участки игроков: 3 в ряд, свой по центру
+const PLOT_COUNT: int = 3
+const PLAYER_PLOT: int = 1
 const PLOT_W: float = 22.0
-const PLOT_GAP: float = 3.0
-const PLOT_Z_FRONT: float = 26.0         # передняя линия загона
-const PLOT_Z_BACK: float = 46.0          # задняя линия загона (глубина 20)
+const PLOT_GAP: float = 2.0
+const PLOT_Z_FRONT: float = 18.0         # передняя линия загона (раньше 26: лобби сжато, как в Roblox)
+const PLOT_Z_BACK: float = 38.0          # задняя линия загона (глубина 20)
 const PEN_GATE_W: float = 6.0            # проём в передней ограде
 
 # Места зверей на своём участке: 4 колонки x 4 ряда, порядок заполнения по массивам
 const SLOT_COUNT: int = 16
 const SLOT_COL_X: Array[float] = [-2.75, 2.75, -8.25, 8.25]   # от центра участка
-const SLOT_ROW_Z: Array[float] = [28.5, 33.5, 38.5, 43.5]
+const SLOT_ROW_Z: Array[float] = [PLOT_Z_FRONT + 2.5, PLOT_Z_FRONT + 7.5, PLOT_Z_FRONT + 12.5, PLOT_Z_FRONT + 17.5]
 
 # Турник (T14): одно место перед своим загоном, новый турник заменяет старый на этом же месте.
 # Зона тренировки 6x6 м. Диск покупки (T15a) всегда в одной точке рядом с турником.
 const BAR_X: float = -7.0
-const BAR_Z: float = 18.0
+const BAR_Z: float = 14.0
 const BAR_ZONE_SIZE: float = 6.0
-const BUY_PAD_X: float = -7.0
-const BUY_PAD_Z: float = 12.5
+# Диск покупки стоит сбоку от турника (слева), а не на пути от входа к лавке: проходя мимо, купить случайно нельзя.
+const BUY_PAD_X: float = -12.2
+const BUY_PAD_Z: float = 14.0
 const BUY_PAD_RADIUS: float = 1.2
 
 # Проход в свой загон (игрок ходит внутри, как и звери): только через проём в передней ограде.
@@ -59,16 +61,17 @@ const SIGN_X: float = 7.0
 const SIGN_Z: float = PLOT_Z_FRONT
 const SIGN_ZONE_SIZE: float = 3.0
 const SIGN_PAD_RADIUS: float = 1.2
-const SIGN_PAD_DISTANCE: float = 4.0
+const SIGN_PAD_DISTANCE: float = 2.2   # диск ближе к ограде: путь от входа к палатке проходит мимо него с запасом
 
 # Лавка продажи (T12a): слева от загона игрока, на дворе перед участком. Зона входа 3x3 м вокруг точки.
-const SELL_STAND_X: float = -17.0
-const SELL_STAND_Z: float = 18.0
+# Стоит в ряд с игроком у входа, ближе к краю двора: путь от точки появления идёт мимо турника и диска расширения.
+const SELL_STAND_X: float = -15.0
+const SELL_STAND_Z: float = 7.0
 const SELL_ZONE_SIZE: float = 3.0
 
 # Палатка еды (T15): зеркально лавке, справа от загона игрока. Зона входа 3x3 м вокруг точки.
-const FOOD_TENT_X: float = 17.0
-const FOOD_TENT_Z: float = 18.0
+const FOOD_TENT_X: float = 15.0
+const FOOD_TENT_Z: float = 7.0
 const FOOD_ZONE_SIZE: float = 3.0
 
 # Арки с названиями зон и их подписи
@@ -77,9 +80,18 @@ const ARCH_BEAM_H: float = 5.0
 const ARCH_BEAM_T: float = 1.5
 
 # Спавн и границы игрока (ходит по двору перед загонами)
-const SPAWN_Z: float = 20.0
+const SPAWN_Z: float = 9.0
 const PLAYER_Z_MIN: float = 0.0
 const PLAYER_MARGIN: float = 2.0
+
+
+## Номера участков соседей: все, кроме своего (с юга на север слева направо).
+static func neighbor_plot_indices() -> Array[int]:
+	var result: Array[int] = []
+	for i in PLOT_COUNT:
+		if i != PLAYER_PLOT:
+			result.append(i)
+	return result
 
 
 static func spawn_position() -> Vector3:
