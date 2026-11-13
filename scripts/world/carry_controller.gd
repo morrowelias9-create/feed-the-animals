@@ -1,7 +1,7 @@
 class_name CarryController
 extends Node3D
 ## Перенос пойманного зверя, маркер свободного размещения и возврат в рюкзак.
-## Маркер и кнопка «Поставить» работают только пока игрок стоит внутри своего загона; снаружи подсказка зовёт зайти.
+## Размещение — тапом по свободному месту своего загона (T37), маркер работает, пока игрок стоит внутри загона.
 
 const MARKER_RADIUS := 0.8
 
@@ -16,7 +16,6 @@ var current_uid := -1
 var pending_uid := -1
 var _held: AnimalView
 var _marker: MeshInstance3D
-var _put_button: Button
 var _back_button: Button
 var _message: Label
 var _inside: bool = false              # игрок сейчас в своём загоне
@@ -67,14 +66,13 @@ func take(uid: int) -> void:
 		if player.avatar != null:
 			player.avatar.set_carrying(true)
 	_attach_held(animal)
-	_put_button.visible = true
 	_back_button.visible = true
 	_message.visible = true
 	_set_inside(_player_in_pen(), true)
 	if hud != null:
 		hud.set_mode(false)
 		hud.set_throw_meter_enabled(false)
-		hud.set_hint("Сначала поставь зверя")
+		hud.set_hint_visible(false)
 
 
 func put_away() -> void:
@@ -90,12 +88,12 @@ func put_away() -> void:
 		if player.avatar != null:
 			player.avatar.set_carrying(false)
 	_marker.visible = false
-	_put_button.visible = false
 	_back_button.visible = false
 	_message.visible = false
 	_refresh_hotbar()
 	if hud != null:
 		hud.set_throw_meter_enabled(true)
+		hud.set_hint_visible(true)
 		hud.set_mode(true)
 
 
@@ -103,17 +101,19 @@ func place_at_cursor() -> bool:
 	if not is_carrying():
 		return false
 	if not _player_in_pen():
-		_show_message(Loc.t("carry_enter_pen"))
+		var tutorial_done: bool = int(Save.data.get("tutorial_step", 0)) >= 5
+		if not tutorial_done:
+			_show_message(Loc.t("carry_enter_pen"))
 		return false
 	if Game.placed_count() >= Game.total_slots():
-		_show_message("Загон полон")
+		_show_message(Loc.t("pen_full"))
 		return false
 	var point := _target_point()
 	if not WorldLayout.pen_rect_for_level(int(Save.data.get("slots_level", 0)), 1.5).has_point(Vector2(point.x, point.z)):
 		return false
 	var uid := current_uid
 	if not Game.place(uid, point):
-		_show_message("Загон полон")
+		_show_message(Loc.t("pen_full"))
 		return false
 	if _held != null:
 		_held.queue_free()
@@ -124,7 +124,6 @@ func place_at_cursor() -> bool:
 		if player.avatar != null:
 			player.avatar.set_carrying(false)
 	_marker.visible = false
-	_put_button.visible = false
 	_back_button.visible = false
 	_message.visible = false
 	if slot_manager != null:
@@ -132,6 +131,7 @@ func place_at_cursor() -> bool:
 	_refresh_hotbar()
 	if hud != null:
 		hud.set_throw_meter_enabled(true)
+		hud.set_hint_visible(true)
 		hud.set_mode(true)
 	return true
 
@@ -149,14 +149,18 @@ func _player_in_pen() -> bool:
 	return player != null and WorldLayout.in_player_pen(player.position, Game.slots_level())
 
 
-# Маркер и «Поставить» доступны только в загоне; текст подсказки меняется вместе с этим.
+# Маркер доступен только в загоне; текст подсказки меняется вместе с этим.
+# После завершения обучения (T37) не показываем инструкцию «Зайди в загон...».
 func _set_inside(value: bool, force: bool = false) -> void:
 	if value == _inside and not force:
 		return
 	_inside = value
 	_marker.visible = value
-	_put_button.disabled = not value
-	_message.text = Loc.t("carry_hint") if value else Loc.t("carry_enter_pen")
+	var tutorial_done: bool = int(Save.data.get("tutorial_step", 0)) >= 5
+	if value:
+		_message.text = Loc.t("carry_hint")
+	else:
+		_message.text = "" if tutorial_done else Loc.t("carry_enter_pen")
 
 
 func _target_point() -> Vector3:
@@ -222,17 +226,11 @@ func _build_controls() -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "CarryControls"
 	add_child(layer)
-	_put_button = Button.new()
-	_put_button.text = Loc.t("carry_place")
-	_put_button.custom_minimum_size = Vector2(150, 64)
-	_put_button.position = Vector2(960, 620)
-	_put_button.visible = false
-	_put_button.pressed.connect(place_at_cursor)
-	layer.add_child(_put_button)
+	# Кнопки «Поставить» больше нет: зверь ставится тапом по свободному месту загона (T37).
 	_back_button = Button.new()
 	_back_button.text = Loc.t("carry_back")
 	_back_button.custom_minimum_size = Vector2(150, 64)
-	_back_button.position = Vector2(960, 690)
+	_back_button.position = Vector2(960, 620)
 	_back_button.visible = false
 	_back_button.pressed.connect(put_away)
 	layer.add_child(_back_button)

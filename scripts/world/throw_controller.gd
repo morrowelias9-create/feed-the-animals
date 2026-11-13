@@ -223,8 +223,10 @@ func _return_to_free() -> void:
 	_unlock_player()
 	if carry_controller != null and carry_controller.is_carrying():
 		hud.set_mode(false)
-		hud.set_hint("Сначала поставь зверя")
+		# T37: подсказка «Сначала поставь зверя» убрана; размещение показывает маркер в загоне.
+		hud.set_hint_visible(false)
 	else:
+		hud.set_hint_visible(true)
 		hud.set_mode(true)
 	_meter.stop()
 	state_changed.emit(state)

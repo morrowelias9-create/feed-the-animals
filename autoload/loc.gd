@@ -39,10 +39,10 @@ const T := {
 	"reveal_tap": {"ru": "Нажмите, чтобы продолжить", "en": "Tap to continue"},
 	"reveal_size": {"ru": "Размер: %s x%s", "en": "Size: %s x%s", "tr": "Boyut: %s x%s"},
 	"reveal_new": {"ru": "Новинка", "en": "New"},
-	"carry_hint": {"ru": "Выбери место и нажми «Поставить»", "en": "Pick a spot and tap “Place”"},
-	"carry_place": {"ru": "Поставить", "en": "Place"},
+	"carry_hint": {"ru": "Нажми на свободное место в загоне", "en": "Tap a free spot in the pen"},
 	"carry_back": {"ru": "В рюкзак", "en": "Backpack"},
 	"carry_enter_pen": {"ru": "Зайди в загон, чтобы поставить зверя", "en": "Enter the pen to place the animal"},
+	"pen_full": {"ru": "Загон полон", "en": "The pen is full"},
 
 	# Окно «Животные» (T12) и лавка (T12a)
 	"animals_title": {"ru": "Животные", "en": "Animals"},

@@ -14,6 +14,7 @@ const SOUND_BTN_SIZE: float = 48.0
 
 var _full: bool = true
 var _throw_meter_enabled: bool = true
+var _hint_visible: bool = true           # T37: подсказку внизу можно скрыть (пока зверь в руках)
 
 var _goal: Label
 var _hint: Label
@@ -68,6 +69,14 @@ func set_goal(text: String) -> void:
 
 func set_hint(text: String) -> void:
 	_hint.text = text
+
+
+## T37: скрывает подсказку внизу, не меняя её текст (пока зверь в руках, текст броска не нужен).
+func set_hint_visible(on: bool) -> void:
+	if _hint_visible == on:
+		return
+	_hint_visible = on
+	_update_visibility()
 
 
 ## Пульсация подсказки внизу «Нажмите, чтобы бросить!» (обучение, шаг 1).
@@ -141,17 +150,12 @@ func _on_strength_changed(value: int) -> void:
 
 
 func _on_language_changed() -> void:
-	_goal.text = Loc.t("goal_buy_bar")
+	# Цель обучения обновляет TutorialController: здесь её не трогаем, иначе после обучения она вернётся (T37).
 	_hint.text = Loc.t("hint_throw")
 	var index_button: Button = _buttons["index"]
 	index_button.text = Loc.t("index")
 	var shop_button: Button = _buttons["shop"]
 	shop_button.text = Loc.t("shop")
-
-
-## Возвращает CanvasLayer для 2D подписей зверей.
-func get_label_layer() -> CanvasLayer:
-	return _label_layer
 	var animals_button: Button = _buttons["animals"]
 	animals_button.text = Loc.t("animals")
 	# T22: кнопка буста и таймер
@@ -163,6 +167,11 @@ func get_label_layer() -> CanvasLayer:
 		var sound_on: bool = sound_bank.is_enabled() if sound_bank != null else true
 		_update_sound_button(sound_on)
 	_update_boost_display()
+
+
+## Возвращает CanvasLayer для 2D подписей зверей.
+func get_label_layer() -> CanvasLayer:
+	return _label_layer
 
 
 # T22: обработчик изменения буста
@@ -506,7 +515,7 @@ func _build_throw_meter() -> void:
 
 func _update_visibility() -> void:
 	_goal.visible = _full
-	_hint.visible = not _full
+	_hint.visible = not _full and _hint_visible
 	_strength.visible = true
 	_money.visible = _full
 	_income.visible = _full
