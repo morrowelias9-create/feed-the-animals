@@ -366,12 +366,13 @@ func _test_variants() -> void:
 	_check("искры бриллианта не больше 12 частиц, есть декор, большого диска нет",
 		sparks != null and sparks.amount <= 12 and fx.get_node_or_null("Decor") != null and fx.get_node_or_null("GlowDisc") == null)
 	# T32: у каждой мутации свой декор в бюджете, у обычного зверя его нет; разные габариты (малыш, гигант, высокий)
-	var decor_ok: bool = VariantDecor.get_mesh(0, AABB()) == null
+	var no_cands: Array[Dictionary] = []
+	var decor_ok: bool = VariantDecor.build(0, no_cands, AABB(), "t")["mesh"] == null
 	var boxes: Array[AABB] = [AABB(Vector3(-0.1, 0.0, -0.15), Vector3(0.2, 0.2, 0.3)),
 		AABB(Vector3(-1.5, 0.0, -2.5), Vector3(3.0, 3.0, 5.0)), AABB(Vector3(-0.3, 0.0, -0.4), Vector3(0.6, 2.5, 0.8))]
 	for vv in range(1, VariantData.count()):
 		for bx in boxes:
-			var tris: int = VariantDecor.tri_count(VariantDecor.get_mesh(vv, bx))
+			var tris: int = VariantDecor.tri_count(VariantDecor.build(vv, no_cands, bx, "t")["mesh"] as ArrayMesh)
 			if tris <= 0 or tris > VariantDecor.MAX_TRIS:
 				decor_ok = false
 	_check("декор мутаций 1-5: от 1 до %d треугольников на любых габаритах, у обычного нет" % VariantDecor.MAX_TRIS, decor_ok)
@@ -741,26 +742,28 @@ func _test_bars() -> void:
 	_check("у каждого турника есть цвет и ключ названия", colors_ok)
 
 	# Ходьба по двору и по своему загону (вход только через проём).
+	# Координаты — относительно передней линии загона: двор сжимается, абсолютные Z ломаются.
 	var pen: Rect2 = WorldLayout.pen_rect_for_level(0)
 	var cx: float = pen.get_center().x
-	var in_gate: Vector3 = WorldLayout.clamp_player(Vector3(cx, 0.0, 20.0), Vector3(cx, 0.0, 30.0), 0)
-	_check("через проём можно зайти в загон", _near(in_gate.z, 30.0) and _near(in_gate.x, cx))
-	var by_fence: Vector3 = WorldLayout.clamp_player(Vector3(-30.0, 0.0, 25.0), Vector3(-30.0, 0.0, 27.0), 0)
-	_check("мимо проёма в загон не пройти (стоит у ограды)", by_fence.z < WorldLayout.PLOT_Z_FRONT)
-	var side_gate: Vector3 = WorldLayout.clamp_player(Vector3(8.0, 0.0, 25.0), Vector3(8.0, 0.0, 28.0), 0)
-	_check("у боковой части передней ограды тоже не пройти", side_gate.z < WorldLayout.PLOT_Z_FRONT)
-	var leave_fence: Vector3 = WorldLayout.clamp_player(Vector3(8.0, 0.0, 28.0), Vector3(8.0, 0.0, 20.0), 0)
-	_check("из загона наружу только через проём", leave_fence.z > WorldLayout.PLOT_Z_FRONT)
-	var leave_gate: Vector3 = WorldLayout.clamp_player(Vector3(cx, 0.0, 28.0), Vector3(cx, 0.0, 20.0), 0)
-	_check("из загона через проём можно выйти", _near(leave_gate.z, 20.0))
-	var side: Vector3 = WorldLayout.clamp_player(Vector3(0.0, 0.0, 30.0), Vector3(50.0, 0.0, 30.0), 0)
+	var front: float = WorldLayout.PLOT_Z_FRONT
+	var in_gate: Vector3 = WorldLayout.clamp_player(Vector3(cx, 0.0, front - 6.0), Vector3(cx, 0.0, front + 4.0), 0)
+	_check("через проём можно зайти в загон", _near(in_gate.z, front + 4.0) and _near(in_gate.x, cx))
+	var by_fence: Vector3 = WorldLayout.clamp_player(Vector3(-30.0, 0.0, front - 1.0), Vector3(-30.0, 0.0, front + 1.0), 0)
+	_check("мимо проёма в загон не пройти (стоит у ограды)", by_fence.z < front)
+	var side_gate: Vector3 = WorldLayout.clamp_player(Vector3(8.0, 0.0, front - 1.0), Vector3(8.0, 0.0, front + 2.0), 0)
+	_check("у боковой части передней ограды тоже не пройти", side_gate.z < front)
+	var leave_fence: Vector3 = WorldLayout.clamp_player(Vector3(8.0, 0.0, front + 2.0), Vector3(8.0, 0.0, front - 6.0), 0)
+	_check("из загона наружу только через проём", leave_fence.z > front)
+	var leave_gate: Vector3 = WorldLayout.clamp_player(Vector3(cx, 0.0, front + 2.0), Vector3(cx, 0.0, front - 6.0), 0)
+	_check("из загона через проём можно выйти", _near(leave_gate.z, front - 6.0))
+	var side: Vector3 = WorldLayout.clamp_player(Vector3(0.0, 0.0, front + 12.0), Vector3(50.0, 0.0, front + 12.0), 0)
 	_check("внутри загона игрок не выходит за боковую ограду", side.x <= pen.end.x - WorldLayout.PEN_INNER_MARGIN + 0.0001 and side.x > 0.0)
-	var back: Vector3 = WorldLayout.clamp_player(Vector3(0.0, 0.0, 40.0), Vector3(0.0, 0.0, 200.0), 0)
+	var back: Vector3 = WorldLayout.clamp_player(Vector3(0.0, 0.0, front + 12.0), Vector3(0.0, 0.0, 200.0), 0)
 	_check("внутри загона игрок не выходит за заднюю ограду", back.z <= pen.end.y - WorldLayout.PEN_INNER_MARGIN + 0.0001)
-	var yard: Vector3 = WorldLayout.clamp_player(Vector3(0.0, 0.0, 10.0), Vector3(500.0, 0.0, -50.0), 0)
+	var yard: Vector3 = WorldLayout.clamp_player(Vector3(0.0, 0.0, front - 8.0), Vector3(500.0, 0.0, -50.0), 0)
 	_check("двор: игрок не выходит за стены и за линию z = 0", yard.x <= WorldLayout.YARD_HALF_W and yard.z >= 0.0)
 	_check("in_player_pen: центр загона да, двор перед ним нет",
-		WorldLayout.in_player_pen(Vector3(0.0, 0.0, 35.0), 0) and not WorldLayout.in_player_pen(Vector3(0.0, 0.0, 20.0), 0))
+		WorldLayout.in_player_pen(Vector3(0.0, 0.0, front + 9.0), 0) and not WorldLayout.in_player_pen(Vector3(0.0, 0.0, front - 2.0), 0))
 
 
 func _test_slot_expansion() -> void:
