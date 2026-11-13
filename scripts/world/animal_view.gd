@@ -143,6 +143,11 @@ func model_height() -> float:
 	return _height
 
 
+## Габариты модели в системе AnimalView (для кадрирования катсцены).
+func model_bounds() -> AABB:
+	return ModelLoader.local_bounds(_model)
+
+
 ## Включает анимацию бега без перемещения (отладочная сцена «зоопарк»). false возвращает обычное поведение.
 func set_anim_running(on: bool) -> void:
 	_anim_force_run = on

@@ -45,7 +45,7 @@ const AD_AFTER_REWARDED_S: float = 180.0  # после rewarded не раньш�
 
 # Кинематика получения зверя (справочник R2, фазы A-C)
 const REVEAL_EYES_S: float = 1.6     # фаза A: камера из глаз зверя
-const REVEAL_SIDE_S: float = 1.2     # фаза B: вид сбоку, минимум до ожидания конца печати имени
+const REVEAL_PULLBACK_S: float = 2.4 # фаза B: плавный отъезд камеры от еды и раскрытие зверя (T34)
 const REVEAL_LETTER_S: float = 0.12  # интервал между буквами имени
 const REVEAL_AUTO_S: float = 8.0     # фаза C сама закроется через столько секунд
 const REVEAL_SCORE_S: float = 1.2    # фаза C: накрутка SCORE от 0 до luck (R2, T11b)

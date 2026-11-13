@@ -133,11 +133,10 @@ func active_popups() -> int:
 	return n
 
 
-## Масштаб зверя в загоне: учитывает базовый размер вида и мутацию размера.
-static func display_scale(animal_id: String, size_step: int = 0) -> float:
-	var base_size_m: float = float(AnimalData.by_id(animal_id).get("size_m", 1.2))
-	var size_mult: float = SizeData.visual_scale(size_step)
-	return base_size_m * size_mult
+## Масштаб зверя в загоне: только мутация размера. Базовый размер вида (size_m) уже применил ModelLoader
+## при подгонке модели, поэтому умножать на него второй раз нельзя (раньше носорог 3.5 м вырастал до 12 м).
+static func display_scale(_animal_id: String, size_step: int = 0) -> float:
+	return SizeData.visual_scale(size_step)
 
 
 ## Показывает «+$N» над случайным зверем. false, если звери не стоят или пул занят.

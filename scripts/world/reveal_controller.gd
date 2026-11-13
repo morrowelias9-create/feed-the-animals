@@ -1,15 +1,18 @@
 class_name RevealController
 extends Node3D
-## Кинематика получения зверя (шаг T10c, справочник R2 «Кинематика получения», R3, R6 «Экран награды»).
-## Фазы: A «глаза зверя» -> B «сбоку и имя» -> C «итог» -> D «выход». Камерой управляет через CameraRig.set_pose.
+## Кинематика получения зверя (шаги T10c и T34; справочник R2 «Кинематика получения», R3, R6 «Экран награды»).
+## Фазы: A «глаза зверя» -> B «отъезд и имя» -> C «итог» -> D «выход». Камерой управляет через CameraRig.set_pose.
+## В фазе B камера плавно отъезжает от еды и раскрывает стоящего рядом зверя: сначала лапы,
+## затем туловище и голова, затем весь зверь. Зверь стоит за едой головой к ней, камера обходит
+## его сбоку и держит крупно в кадре. Имя печатается по буквам во время отъезда.
 ## Зверь выбирается в start(), добавляется игроку в начале фазы C. Тап в A или B прыгает сразу к C.
 
 signal finished
 signal result_dismissed  # T23: тап «продолжить» в фазе итога (путь А межстраничной рекламы)
 
-enum Phase { NONE, EYES, SIDE, RESULT, EXIT }
+enum Phase { NONE, EYES, PULLBACK, RESULT, EXIT }
 
-const RUN_UP_M: float = 12.0            # стартовая дистанция камеры и зверя от еды
+const EYE_START_DIST: float = 12.0      # стартовая дистанция камеры фазы A
 const EYE_END_DIST: float = 1.2         # камера подходит к еде на столько
 const EYE_PITCH_FROM: float = -25.0
 const EYE_PITCH_TO: float = -40.0
@@ -18,15 +21,30 @@ const EYE_FOV_TO: float = 68.0
 const BOB_AMP_M: float = 0.12           # покачивание шагов по вертикали (для крупных пропорционально размеру)
 const ROLL_DEG: float = 3.0
 const STEP_HZ: float = 3.0
-const SIDE_FOV: float = 68.0
-const TO_RESULT_S: float = 0.4          # плавный переход к виду 3/4
-const RESULT_AZIMUTH_DEG: float = 35.0
+const PULLBACK_FOV: float = 68.0
+const PULLBACK_PAWS_SHARE: float = 0.32 # доля фазы B на подвод камеры к лапам (остальное — общий отъезд)
+
+# Кадр «весь зверь»: дистанция считается от высоты модели, а не от size_m вслепую.
+# d = REVEAL_DIST_PER_HEIGHT * height держит зверя крупно (~65-70% высоты кадра), еда — по центру снизу.
+const REVEAL_DIST_PER_HEIGHT: float = 1.10
+const FULL_CAM_HEIGHT_K: float = 0.30   # высота камеры от пола, доля высоты модели
+const FULL_TARGET_HEIGHT_K: float = 0.30 # высота точки взгляда, доля высоты модели
+const MIN_PULLBACK_EXTRA: float = 0.08  # отъезд от еды всегда чуть больше конца фазы A
+# Зверь стоит за едой вдоль коридора: голова у еды, корпус уходит вглубь.
+const ANIMAL_OFFSET_BASE: float = 0.15
+const ANIMAL_OFFSET_K: float = 0.45
+# Кадр «лапы»: камера сбоку и низко, смотрит на лапы у еды.
+const PAWS_DIST_SHARE: float = 0.60     # доля полной дистанции
+const PAWS_HEIGHT_K: float = 0.16
+const PAWS_TARGET_HEIGHT_K: float = 0.06
+const CAM_GROUND_CLEARANCE: float = 0.25
+const TO_RESULT_S: float = 0.4          # плавный поворот зверя в 3/4 (камера стоит на месте)
 const TAP_LOCK_S: float = 0.25          # после перехода тапы игнорируются
 const NAME_HOLD_S: float = 0.3          # пауза после конца печати имени
 const EXIT_EAT_S: float = 0.3           # зверь съедает еду
 const EXIT_S: float = 0.6               # весь выход
-const CAM_X_LIMIT: float = 28.5         # камера не выходит за толщу стен коридора (иначе стена загородит вид)
-const FOOD_SPIN: float = 1.0            # рад/с
+const CAM_X_LIMIT: float = 17.0         # камера не выходит за стену коридора (стена на x = +-18)
+const FOOD_SPIN: float = 0.0            # рад/с; на земле еда не крутится, FoodView сам поворачивает её к камере (T27b)
 
 var throw_controller: ThrowController
 
@@ -49,20 +67,22 @@ var _dist: float = 0.0
 
 var _land: Vector3 = Vector3.ZERO       # точка земли под едой
 var _floor_y: float = 0.0
-var _dir: Vector3 = Vector3(0.0, 0.0, 1.0)    # куда бежит зверь
-var _side: Vector3 = Vector3(-1.0, 0.0, 0.0)  # с какой стороны камера в фазах B и C
-var _stop: Vector3 = Vector3.ZERO       # где зверь останавливается
-var _run_from: Vector3 = Vector3.ZERO   # откуда он вбегает
+var _dir: Vector3 = Vector3(0.0, 0.0, 1.0)    # направление камеры фазы A (к еде)
+var _side: Vector3 = Vector3(-1.0, 0.0, 0.0)  # с какой стороны камера отъезжает в фазе B
+var _stop: Vector3 = Vector3.ZERO       # где стоит зверь рядом с едой
 var _view: AnimalView
 var _food: Node3D
+
+var _pb_paws_pos: Vector3 = Vector3.ZERO       # кадр «лапы»
+var _pb_paws_target: Vector3 = Vector3.ZERO
+var _pb_full_pos: Vector3 = Vector3.ZERO       # кадр «весь зверь»
+var _pb_full_target: Vector3 = Vector3.ZERO
+var _pb_from_pos: Vector3 = Vector3.ZERO       # конец фазы A
+var _pb_from_target: Vector3 = Vector3.ZERO
 
 var _cam_pos: Vector3 = Vector3.ZERO
 var _cam_target: Vector3 = Vector3.ZERO
 var _cam_fov: float = EYE_FOV_TO
-var _c_from_pos: Vector3 = Vector3.ZERO
-var _c_from_target: Vector3 = Vector3.ZERO
-var _c_to_pos: Vector3 = Vector3.ZERO
-var _c_to_target: Vector3 = Vector3.ZERO
 var _face_from: float = 0.0
 var _face_to: float = 0.0
 
@@ -133,7 +153,7 @@ func tap() -> void:
 	if _finished or _lock_t > 0.0:
 		return
 	match _phase:
-		Phase.EYES, Phase.SIDE:
+		Phase.EYES, Phase.PULLBACK:
 			_enter_result()
 		Phase.RESULT:
 			if not _ramp_done and not _skip_final:
@@ -179,8 +199,8 @@ func _process(delta: float) -> void:
 	match _phase:
 		Phase.EYES:
 			_update_eyes()
-		Phase.SIDE:
-			_update_side(delta)
+		Phase.PULLBACK:
+			_update_pullback(delta)
 		Phase.RESULT:
 			_update_result(delta)
 		Phase.EXIT:
@@ -190,15 +210,44 @@ func _process(delta: float) -> void:
 # ---------- Раскладка сцены ----------
 
 func _compute_layout() -> void:
-	# Зверь приходит из глубины коридора к игроку (+Z). Если еда упала на край земли, наоборот: от игрока к обрыву.
+	# Фаза A смотрит вдоль коридора: с края земли вглубь, иначе к игроку.
 	var on_ledge: bool = _land.z > -WorldLayout.LEDGE_D
 	_dir = Vector3(0.0, 0.0, -1.0) if on_ledge else Vector3(0.0, 0.0, 1.0)
-	# Камера сбоку так, чтобы зверь бежал по экрану слева направо.
-	_side = _dir.cross(Vector3.UP).normalized()
-	_stop = _land - _side * (0.25 * _size + 0.3) - _dir * (0.5 * _size + 0.2)
+	# Камера отъезжает вбок, к центру коридора, чтобы у неё было место до стены.
+	_side = Vector3(-1.0, 0.0, 0.0) if _land.x >= 0.0 else Vector3(1.0, 0.0, 0.0)
+	# Зверь стоит за едой вдоль коридора: голова у еды, корпус уходит вглубь.
+	_stop = _land + _dir * (ANIMAL_OFFSET_BASE + ANIMAL_OFFSET_K * _size)
 	_stop.y = _floor_y
-	_run_from = _stop - _dir * (4.5 * _size + 3.0)
-	_run_from.y = _floor_y
+
+
+## Кадры отъезда. Высота модели известна только после спавна, поэтому считаем в начале фазы B.
+## Дистанция подбирается так, чтобы зверь занимал большую часть кадра, а не терялся вдалеке.
+func _compute_pullback_frames() -> void:
+	var h: float = maxf(_view.model_height(), 0.35 * _size)
+	var bounds: AABB = _view.model_bounds()
+	var yaw: Basis = Basis(Vector3.UP, _view.rotation.y)
+	var extent_side: float = absf(yaw.x.dot(_side)) * bounds.size.x + absf(yaw.z.dot(_side)) * bounds.size.z
+	var half_depth: float = maxf(extent_side * 0.5, 0.15)
+	# Дистанция до ближнего бока зверя; камера ставится ещё на полширины дальше,
+	# чтобы близкий бок не раздувался перспективой.
+	var d_near: float = REVEAL_DIST_PER_HEIGHT * h
+	var d_cam: float = d_near + half_depth
+	d_cam = maxf(d_cam, EYE_END_DIST + MIN_PULLBACK_EXTRA)
+	d_cam = _side_distance(d_cam)
+
+	# Полный кадр: зверь по центру, еда остаётся внизу по центру кадра.
+	_pb_full_pos = _land + _side * d_cam
+	_pb_full_pos.y = _floor_y + maxf(0.25, FULL_CAM_HEIGHT_K * h)
+	_pb_full_target = _land.lerp(_stop, 0.32)
+	_pb_full_target.y = _floor_y + FULL_TARGET_HEIGHT_K * h
+
+	# Кадр «лапы»: ближе и ниже, смотрим на лапы у еды.
+	var d_paws: float = maxf(EYE_END_DIST, d_cam * PAWS_DIST_SHARE)
+	d_paws = minf(d_paws, d_cam)
+	_pb_paws_pos = _land + _side * d_paws
+	_pb_paws_pos.y = _floor_y + maxf(0.15, PAWS_HEIGHT_K * h)
+	_pb_paws_target = _stop
+	_pb_paws_target.y = _floor_y + PAWS_TARGET_HEIGHT_K * h
 
 
 # ---------- Фаза A: глаза зверя ----------
@@ -213,7 +262,7 @@ func _enter_eyes() -> void:
 func _update_eyes() -> void:
 	var u: float = clampf(_t / GameConfig.REVEAL_EYES_S, 0.0, 1.0)
 	var k: float = 1.0 - (1.0 - u) * (1.0 - u)    # ease_out
-	var d: float = lerpf(RUN_UP_M, EYE_END_DIST, k)
+	var d: float = lerpf(EYE_START_DIST, EYE_END_DIST, k)
 	var eye: float = maxf(0.35, 0.45 * _size)
 	var amp: float = BOB_AMP_M * maxf(1.0, _size / 1.2)
 	var pos: Vector3 = _land - _dir * d
@@ -223,36 +272,41 @@ func _update_eyes() -> void:
 	var roll: float = sin(TAU * STEP_HZ * 0.5 * _t) * ROLL_DEG
 	_set_pose(pos, pos + forward * 5.0, lerpf(EYE_FOV_FROM, EYE_FOV_TO, u), roll)
 	if _t >= GameConfig.REVEAL_EYES_S:
-		_enter_side()
+		_enter_pullback()
 
 
-# ---------- Фаза B: сбоку и имя ----------
+# ---------- Фаза B: отъезд камеры и имя ----------
 
-func _enter_side() -> void:
-	_phase = Phase.SIDE
+func _enter_pullback() -> void:
+	_phase = Phase.PULLBACK
 	_t = 0.0
 	_hold_t = 0.0
 	_lock_t = TAP_LOCK_S
-	_spawn_view(_run_from)
+	# Зверь уже стоит у еды, никуда не бежит: раскрываем его только камерой (T34).
+	_spawn_view(_stop)
+	_compute_pullback_frames()
 	_overlay.begin_typing(Loc.t("animal_" + _animal_id), GameConfig.REVEAL_LETTER_S)
-	if _view != null:
-		_view.set_anim_running(true)   # включаем анимацию бега (ноги, хвост, части)
-	_update_side(0.0)
+	_pb_from_pos = _cam_pos
+	_pb_from_target = _cam_target
+	_update_pullback(0.0)
 
 
-func _update_side(delta: float) -> void:
-	var u: float = clampf(_t / GameConfig.REVEAL_SIDE_S, 0.0, 1.0)
-	var k: float = 1.0 - (1.0 - u) * (1.0 - u)
-	var p: Vector3 = _run_from.lerp(_stop, k)
-	p.y = _floor_y + 0.06 * _size * absf(sin(TAU * STEP_HZ * _t)) * (1.0 - u)   # подскоки на бегу
-	_view.position = p
-	var cam_h: float = maxf(0.3, 0.5 * _size)
-	var pos: Vector3 = _land + _side * _side_distance(3.2 * _size)
-	pos.y = _floor_y + cam_h
-	var target: Vector3 = (_land + _stop) * 0.5
-	target.y = pos.y
-	_set_pose(pos, target, SIDE_FOV, 0.0)
-	if _t >= GameConfig.REVEAL_SIDE_S and _overlay.typing_done():
+## Плавный отъезд двумя отрезками: сначала к лапам, затем ко всему зверю.
+## Имя печатается всё это время; после раскрытия ждём конца печати и показываем итог.
+func _update_pullback(delta: float) -> void:
+	var u: float = clampf(_t / GameConfig.REVEAL_PULLBACK_S, 0.0, 1.0)
+	var pos: Vector3
+	var target: Vector3
+	if u <= PULLBACK_PAWS_SHARE:
+		var k: float = smoothstep(0.0, 1.0, u / PULLBACK_PAWS_SHARE)
+		pos = _pb_from_pos.lerp(_pb_paws_pos, k)
+		target = _pb_from_target.lerp(_pb_paws_target, k)
+	else:
+		var k: float = smoothstep(0.0, 1.0, (u - PULLBACK_PAWS_SHARE) / (1.0 - PULLBACK_PAWS_SHARE))
+		pos = _pb_paws_pos.lerp(_pb_full_pos, k)
+		target = _pb_paws_target.lerp(_pb_full_target, k)
+	_set_pose(pos, target, PULLBACK_FOV, 0.0)
+	if _t >= GameConfig.REVEAL_PULLBACK_S and _overlay.typing_done():
 		_hold_t += delta
 		if _hold_t >= NAME_HOLD_S:
 			_enter_result()
@@ -276,6 +330,10 @@ func _enter_result() -> void:
 	_next_step_t = 0.0
 	if _view == null:
 		_spawn_view(_stop)
+		_compute_pullback_frames()
+	if _cam_pos.distance_squared_to(_pb_full_pos) > 0.0004:
+		# Пропуск из фазы A или середины B: ставим камеру сразу в готовый кадр.
+		_set_pose(_pb_full_pos, _pb_full_target, PULLBACK_FOV, 0.0)
 	_view.position = _stop
 	if _view != null:
 		_view.set_anim_running(false)   # останавливаем анимацию бега, зверь стоит на месте
@@ -299,28 +357,20 @@ func _enter_result() -> void:
 		"size_step": _final_size,
 		"is_new": is_new,
 	})
-	# Вид 3/4 спереди: камера впереди зверя и сбоку, зверь поворачивается к ней.
-	var az: float = deg_to_rad(RESULT_AZIMUTH_DEG)
-	var cdir: Vector3 = _side * cos(az) + _dir * sin(az)
-	var dc: float = 4.0 * _size
-	if absf(cdir.x) > 0.01:
-		var limit_x: float = CAM_X_LIMIT if cdir.x > 0.0 else -CAM_X_LIMIT
-		dc = minf(dc, (limit_x - _stop.x) / cdir.x)
-	dc = maxf(dc, 1.5)
-	_c_to_pos = _stop + cdir * dc
-	_c_to_pos.y = _floor_y + 0.6 * _size
-	_c_to_target = _stop.lerp(_land, 0.35)
-	_c_to_target.y = _floor_y + 0.45 * _size
-	_c_from_pos = _cam_pos
-	_c_from_target = _cam_target
+	# Камера остаётся там, куда отъехала в фазе B: второго отъезда нет.
+	# Зверь сам поворачивается в 3/4 — между прежним взглядом на еду и камерой.
+	var to_cam: Vector3 = _cam_pos - _stop
+	to_cam.y = 0.0
+	if to_cam.length_squared() < 0.0001:
+		to_cam = _side
 	_face_from = _view.rotation.y
-	_face_to = _yaw_of(cdir)
+	_face_to = _yaw_of((-_dir + to_cam.normalized()).normalized())
 
 
 func _update_result(delta: float) -> void:
 	var k: float = smoothstep(0.0, 1.0, clampf(_t / TO_RESULT_S, 0.0, 1.0))
-	_set_pose(_c_from_pos.lerp(_c_to_pos, k), _c_from_target.lerp(_c_to_target, k), SIDE_FOV, 0.0)
-	_view.rotation.y = lerp_angle(_face_from, _face_to, k)
+	if _view != null:
+		_view.rotation.y = lerp_angle(_face_from, _face_to, k)
 	_update_score(delta)
 	_update_size(delta)
 	if _t >= GameConfig.REVEAL_AUTO_S:
@@ -401,10 +451,14 @@ func _spawn_view(at: Vector3) -> void:
 	_view.set_part_mode(AnimalBuilder.PART_FULL)   # T24f: один зверь на экране получения, до 12 мешей
 	_view.set_signs_visible(false)
 	_view.position = at
-	_view.rotation.y = _yaw_of(_dir)
+	# Зверь стоит за едой и смотрит на неё: голова у еды, корпус раскрывается сбоку.
+	_view.rotation.y = _yaw_of(-_dir)
 
 
 func _set_pose(pos: Vector3, target: Vector3, fov: float, roll: float) -> void:
+	# Страховка от пересечения камеры с землёй (у края земли пол коридора ниже двора).
+	var min_y: float = WorldLayout.ground_y(pos.z) + CAM_GROUND_CLEARANCE
+	pos.y = maxf(pos.y, min_y)
 	_cam_pos = pos
 	_cam_target = target
 	_cam_fov = fov

@@ -53,6 +53,13 @@ static func height_of(node: Node3D) -> float:
 	return 1.0
 
 
+## Габариты модели в системе её родителя (учитывает собственную подгонку scale/rotation).
+static func local_bounds(node: Node3D) -> AABB:
+	if node == null:
+		return AABB()
+	return _bounds(node, node.transform)
+
+
 ## Тип движения зверя из рецепта (hop, waddle, trot, slither, swim, idle) или пустая строка, если рецепта нет.
 ## AnimalView по нему анимирует корень модели.
 static func move_of(id: String) -> String:

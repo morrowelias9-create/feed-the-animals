@@ -18,7 +18,7 @@ const ANIMALS: Array[Dictionary] = [
 	{"id": "zebra", "name_key": "animal_zebra", "zone": 1, "rank": 2, "base_income": 40.0, "size_m": 1.2},
 	{"id": "antelope", "name_key": "animal_antelope", "zone": 1, "rank": 3, "base_income": 40.0, "size_m": 1.2},
 	{"id": "giraffe", "name_key": "animal_giraffe", "zone": 1, "rank": 4, "base_income": 40.0, "size_m": 2.2},
-	{"id": "ostrich", "name_key": "animal_ostrich", "zone": 1, "rank": 5, "base_income": 40.0, "size_m": 2.2},
+	{"id": "ostrich", "name_key": "animal_ostrich", "zone": 1, "rank": 5, "base_income": 40.0, "size_m": 1.5},
 	{"id": "rhino", "name_key": "animal_rhino", "zone": 1, "rank": 6, "base_income": 40.0, "size_m": 3.5},
 	{"id": "elephant", "name_key": "animal_elephant", "zone": 1, "rank": 7, "base_income": 40.0, "size_m": 5.0},
 	{"id": "lion", "name_key": "animal_lion", "zone": 1, "rank": 8, "base_income": 40.0, "size_m": 7.0},
