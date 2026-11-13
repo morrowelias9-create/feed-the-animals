@@ -340,6 +340,7 @@ func _build_arches(parent: Node3D) -> void:
 		_box(parent, Vector3(w, WorldLayout.ARCH_BEAM_H, WorldLayout.ARCH_BEAM_T),
 			Vector3(0.0, WorldLayout.ARCH_BEAM_Y, zz), _flat_mat(tint), "ArchBeam%d" % zone)
 		var label: Label3D = Label3D.new()
+		UiStyle.apply_font_3d(label)
 		label.name = "ArchLabel%d" % zone
 		label.pixel_size = 0.02
 		label.font_size = 128

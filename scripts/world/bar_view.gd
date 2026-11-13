@@ -29,6 +29,7 @@ func _ready() -> void:
 	_add_box("Crossbar", Vector3(POST_X * 2.0 + POST_SIZE.x, CROSSBAR_T, CROSSBAR_T), Vector3(0.0, CROSSBAR_Y, CROSSBAR_Z))
 
 	_label = Label3D.new()
+	UiStyle.apply_font_3d(_label)
 	_label.name = "BarLabel"
 	_label.pixel_size = 0.01
 	_label.font_size = 44

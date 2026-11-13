@@ -9,8 +9,17 @@ signal animals_pressed
 signal bonus_pressed               # T14: тап по пузырю-бонусу на турнике
 
 const BONUS_SIZE: float = 96.0
-const BOOST_BTN_SIZE: float = 96.0
-const SOUND_BTN_SIZE: float = 48.0
+const SOUND_BTN_SIZE: float = 64.0         # не меньше 64 пикселей (правило мобильности)
+const SIDE_BTN_SIZE: Vector2 = Vector2(128.0, 128.0)   # крупные кнопки «Индекс», «Магазин», «Животные» с подписью под иконкой
+const SIDE_MARGIN: float = 12.0
+const STATS_MARGIN: float = 18.0           # отступ левого нижнего блока от краёв экрана
+const STATS_WIDTH: float = 330.0           # правее начинается панель зверей (по центру), поэтому не шире
+const STAT_ICON_SIZE: float = 64.0
+const STRENGTH_FONT: int = 58
+const MONEY_FONT: int = 62
+const INCOME_FONT: int = 30
+const BOOST_BTN_W: float = 200.0           # кнопка буста: меньше прежней (220x56), чтобы не закрывать панель зверей
+const BOOST_BTN_H: float = 50.0
 
 var _full: bool = true
 var _throw_meter_enabled: bool = true
@@ -21,6 +30,10 @@ var _hint: Label
 var _strength: Label
 var _money: Label
 var _income: Label
+var _stats_box: VBoxContainer           # левый нижний блок: сила, деньги, доход, буст
+var _strength_row: Control
+var _money_row: Control
+var _income_row: Control
 var _buttons: Dictionary = {}
 var throw_meter: ThrowMeter
 var xp_bar: XpBar                       # T14: шкала «Уровень N x/y», видна только на тренировке
@@ -50,7 +63,6 @@ func _ready() -> void:
 	_build_texts()
 	_build_stats()
 	_build_buttons()
-	_build_boost()                      # T22
 	_build_throw_meter()
 	_build_training()
 	_refresh()
@@ -152,12 +164,9 @@ func _on_strength_changed(value: int) -> void:
 func _on_language_changed() -> void:
 	# Цель обучения обновляет TutorialController: здесь её не трогаем, иначе после обучения она вернётся (T37).
 	_hint.text = Loc.t("hint_throw")
-	var index_button: Button = _buttons["index"]
-	index_button.text = Loc.t("index")
-	var shop_button: Button = _buttons["shop"]
-	shop_button.text = Loc.t("shop")
-	var animals_button: Button = _buttons["animals"]
-	animals_button.text = Loc.t("animals")
+	UiStyle.set_caption(_buttons["index"] as Button, Loc.t("index"))
+	UiStyle.set_caption(_buttons["shop"] as Button, Loc.t("shop"))
+	UiStyle.set_caption(_buttons["animals"] as Button, Loc.t("animals"))
 	# T22: кнопка буста и таймер
 	if _boost_button != null:
 		_boost_button.text = Loc.t("boost_btn")
@@ -231,47 +240,89 @@ func _update_boost_timer() -> void:
 
 
 func _build_texts() -> void:
-	_goal = UiStyle.outline_label(Loc.t("goal_buy_bar"), 30, 6, UiStyle.COLOR_TEXT)
-	_goal.position = Vector2(0.0, 68.0)
-	_goal.size = Vector2(1280.0, 30.0)
+	_goal = UiStyle.outline_label(Loc.t("goal_buy_bar"), 38, 8, UiStyle.COLOR_TEXT)
+	_goal.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_goal.offset_top = 64.0
+	_goal.offset_bottom = 112.0
+	_goal.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_goal)
 
-	_hint = UiStyle.outline_label(Loc.t("hint_throw"), 33, 6, UiStyle.COLOR_TEXT)
-	_hint.position = Vector2(0.0, 562.0)
-	_hint.size = Vector2(1280.0, 34.0)
+	_hint = UiStyle.outline_label(Loc.t("hint_throw"), 42, 8, UiStyle.COLOR_TEXT)
+	_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_hint.offset_top = -170.0
+	_hint.offset_bottom = -118.0
+	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_hint)
 
 
+# Левый нижний угол (как в Roblox): сила, деньги, доход в секунду и кнопка буста x2. Всё в одном контейнере,
+# привязанном к углу, поэтому на любом соотношении сторон стоит в углу. Иконки показателей рисуются кодом (StatIcon),
+# позже заменяются файлами stat_strength.png и stat_money.png.
 func _build_stats() -> void:
-	# Компактный layout для 720p: сила (564-610), деньги (610-660), доход (660-686), кнопки (620-716) - но кнопки справа
-	_strength = UiStyle.outline_label(str(Game.strength()), 46, 6, UiStyle.COLOR_STRENGTH)
-	_strength.position = Vector2(20.0, 564.0)
-	_strength.size = Vector2(360.0, 46.0)
-	add_child(_strength)
+	_stats_box = VBoxContainer.new()
+	_stats_box.name = "Stats"
+	_stats_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stats_box.anchor_left = 0.0
+	_stats_box.anchor_right = 0.0
+	_stats_box.anchor_top = 1.0
+	_stats_box.anchor_bottom = 1.0
+	_stats_box.offset_left = STATS_MARGIN
+	_stats_box.offset_right = STATS_MARGIN + STATS_WIDTH
+	_stats_box.offset_top = -STATS_MARGIN
+	_stats_box.offset_bottom = -STATS_MARGIN
+	_stats_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_stats_box.add_theme_constant_override("separation", 0)
+	add_child(_stats_box)
 
-	_money = UiStyle.outline_label(NumFmt.money(Game.money()), 50, 6, UiStyle.COLOR_MONEY)
-	_money.position = Vector2(20.0, 612.0)
-	_money.size = Vector2(360.0, 50.0)
-	add_child(_money)
+	_strength = UiStyle.outline_label(str(Game.strength()), STRENGTH_FONT, 10, UiStyle.COLOR_STRENGTH)
+	_strength_row = _stat_row(StatIcon.KIND_STRENGTH, _strength)
+	_money = UiStyle.outline_label(NumFmt.money(Game.money()), MONEY_FONT, 10, UiStyle.COLOR_MONEY)
+	_money_row = _stat_row(StatIcon.KIND_MONEY, _money)
 
-	_income = UiStyle.outline_label(NumFmt.money(Game.income_per_sec()) + "/s", 26, 4, UiStyle.COLOR_MONEY)
-	_income.position = Vector2(20.0, 664.0)
-	_income.size = Vector2(360.0, 26.0)
-	add_child(_income)
+	_income = UiStyle.outline_label(NumFmt.money(Game.income_per_sec()) + "/s", INCOME_FONT, 7, UiStyle.COLOR_MONEY)
+	_income.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_income.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var income_row := HBoxContainer.new()
+	income_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var indent := Control.new()
+	indent.custom_minimum_size = Vector2(STAT_ICON_SIZE + 8.0, 0.0)
+	indent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	income_row.add_child(indent)
+	income_row.add_child(_income)
+	_income_row = income_row
+	_stats_box.add_child(income_row)
 
-	# T22: кнопка буста x2 и таймер справа от денег/дохода
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0.0, 8.0)
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stats_box.add_child(gap)
+
+	# T22: кнопка буста x2 и таймер (в этом же блоке, под деньгами)
 	_build_boost()
-	# T26: кнопка звука справа от буста
+	# T26: кнопка звука в правом верхнем углу
 	_build_sound()
+
+
+# Строка показателя: иконка и крупное число слева.
+func _stat_row(kind: String, value_label: Label) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(StatIcon.create(kind, STAT_ICON_SIZE))
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	value_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(value_label)
+	# порядок в блоке: сила, деньги, затем доход (добавляется в _build_stats)
+	_stats_box.add_child(row)
+	return row
 
 
 # T22: создаёт кнопку буста и таймер (правый верхний угол, над звуком)
 func _build_boost() -> void:
-	# Кнопка "х2 дохода за рекламу" (правый верхний угол, над звуком)
+	# Кнопка "х2 дохода за рекламу": левый нижний блок, под деньгами и доходом (T22, перенесена из правого верхнего угла)
 	_boost_button = Button.new()
 	_boost_button.name = "BoostButton"
-	const BOOST_BTN_W: float = 220.0
-	const BOOST_BTN_H: float = 56.0
+	_boost_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_boost_button.custom_minimum_size = Vector2(BOOST_BTN_W, BOOST_BTN_H)
 	_boost_button.size = Vector2(BOOST_BTN_W, BOOST_BTN_H)
 	_boost_button.focus_mode = Control.FOCUS_NONE
@@ -282,7 +333,7 @@ func _build_boost() -> void:
 	style.set_corner_radius_all(int(BOOST_BTN_H / 2.0))
 	for st in ["normal", "hover", "pressed", "focus", "disabled"]:
 		_boost_button.add_theme_stylebox_override(st, style)
-	_boost_button.add_theme_font_size_override("font_size", 18)
+	_boost_button.add_theme_font_size_override("font_size", 17)
 	for color_name in ["font_color", "font_hover_color", "font_pressed_color", "font_disabled_color"]:
 		_boost_button.add_theme_color_override(color_name, UiStyle.COLOR_TEXT)
 	_boost_button.add_theme_color_override("font_outline_color", UiStyle.COLOR_OUTLINE)
@@ -290,26 +341,23 @@ func _build_boost() -> void:
 	# Текст на двух строках
 	_boost_button.text = Loc.t("boost_btn")
 	_boost_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	# Позиция: справа сверху, над кнопкой звука
-	var margin: float = 16.0
-	_boost_button.position = Vector2(1280.0 - BOOST_BTN_W - margin, margin)
 	_boost_button.pressed.connect(_on_boost_pressed)
-	add_child(_boost_button)
+	_stats_box.add_child(_boost_button)
 
-	# Таймер буста "х2 MM:SS" — под кнопкой
+	# Таймер буста "х2 MM:SS" — на месте кнопки, пока буст идёт
 	_boost_timer = Label.new()
 	_boost_timer.name = "BoostTimer"
 	_boost_timer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_boost_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_boost_timer.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_boost_timer.add_theme_font_size_override("font_size", 22)
+	_boost_timer.add_theme_font_size_override("font_size", 28)
 	_boost_timer.add_theme_color_override("font_color", UiStyle.COLOR_MONEY)
 	_boost_timer.add_theme_color_override("font_outline_color", UiStyle.COLOR_OUTLINE)
 	_boost_timer.add_theme_constant_override("outline_size", 4)
-	_boost_timer.position = Vector2(1280.0 - BOOST_BTN_W - margin, margin + BOOST_BTN_H + 4.0)
-	_boost_timer.size = Vector2(BOOST_BTN_W, 32.0)
+	_boost_timer.custom_minimum_size = Vector2(BOOST_BTN_W, BOOST_BTN_H)
+	_boost_timer.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_boost_timer.visible = false
-	add_child(_boost_timer)
+	_stats_box.add_child(_boost_timer)
 
 	# Изначально: если буст не активен — кнопка видна БЕЗ пульсации, с лёгкой свето-анимацией
 	var active: bool = Game._boost_active()
@@ -343,14 +391,19 @@ func _build_sound() -> void:
 	for st in ["normal", "hover", "pressed", "focus"]:
 		_sound_button.add_theme_stylebox_override(st, style)
 	# Без текста — просто иконка динамика через unicode
-	_sound_button.add_theme_font_size_override("font_size", 22)
+	_sound_button.add_theme_font_size_override("font_size", 30)
 	for color_name in ["font_color", "font_hover_color", "font_pressed_color"]:
 		_sound_button.add_theme_color_override(color_name, UiStyle.COLOR_TEXT)
 	_sound_button.add_theme_color_override("font_outline_color", UiStyle.COLOR_OUTLINE)
 	_sound_button.add_theme_constant_override("outline_size", 2)
-	# Правый верхний угол с отступом
+	# Правый верхний угол с отступом (привязан к углу)
 	var margin: float = 16.0
-	_sound_button.position = Vector2(1280.0 - SOUND_BTN_SIZE - margin, margin)
+	_sound_button.anchor_left = 1.0
+	_sound_button.anchor_right = 1.0
+	_sound_button.offset_left = -(SOUND_BTN_SIZE + margin)
+	_sound_button.offset_right = -margin
+	_sound_button.offset_top = margin
+	_sound_button.offset_bottom = margin + SOUND_BTN_SIZE
 	_sound_button.pressed.connect(_on_sound_pressed)
 	add_child(_sound_button)
 	_update_sound_button(sound_on)
@@ -375,23 +428,29 @@ func _on_sound_pressed() -> void:
 
 func _build_buttons() -> void:
 	_buttons.clear()
-	var index_button: Button = UiStyle.make_icon_button("index", UiStyle.ICON_DIR + "index.png", Loc.t("index"), self)
-	index_button.position = Vector2(13.0, 253.0)
-	index_button.size = Vector2(94.0, 94.0)
+	var index_button: Button = _side_button("index", "index.png", Loc.t("index"), true, -190.0)
 	index_button.pressed.connect(_on_index_pressed)
-	_buttons["index"] = index_button
-
-	var shop_button: Button = UiStyle.make_icon_button("shop", UiStyle.ICON_DIR + "shop.png", Loc.t("shop"), self)
-	shop_button.position = Vector2(13.0, 370.0)
-	shop_button.size = Vector2(94.0, 94.0)
+	var shop_button: Button = _side_button("shop", "shop.png", Loc.t("shop"), true, -30.0)
 	shop_button.pressed.connect(_on_shop_pressed)
-	_buttons["shop"] = shop_button
-
-	var animals_button: Button = UiStyle.make_icon_button("animals", UiStyle.ICON_DIR + "animals.png", Loc.t("animals"), self)
-	animals_button.position = Vector2(1173.0, 313.0)
-	animals_button.size = Vector2(94.0, 94.0)
+	var animals_button: Button = _side_button("animals", "animals.png", Loc.t("animals"), false, -64.0)
 	animals_button.pressed.connect(_on_animals_pressed)
-	_buttons["animals"] = animals_button
+
+
+# Крупная кнопка у края экрана (слева или справа по центру по высоте) с подписью под иконкой.
+# top_offset это отступ верха кнопки от середины экрана по высоте.
+func _side_button(key: String, icon_file: String, caption: String, left: bool, top_offset: float) -> Button:
+	var button: Button = UiStyle.make_icon_button(key, UiStyle.ICON_DIR + icon_file, caption, self, SIDE_BTN_SIZE, caption)
+	button.anchor_top = 0.5
+	button.anchor_bottom = 0.5
+	button.anchor_left = 0.0 if left else 1.0
+	button.anchor_right = button.anchor_left
+	button.offset_left = SIDE_MARGIN if left else -(SIDE_MARGIN + SIDE_BTN_SIZE.x)
+	button.offset_right = button.offset_left + SIDE_BTN_SIZE.x
+	button.offset_top = top_offset
+	button.offset_bottom = top_offset + SIDE_BTN_SIZE.y
+	button.pivot_offset = SIDE_BTN_SIZE / 2.0
+	_buttons[key] = button
+	return button
 
 
 # ---------- Тренировка на турнике (T14) ----------
@@ -516,9 +575,9 @@ func _build_throw_meter() -> void:
 func _update_visibility() -> void:
 	_goal.visible = _full
 	_hint.visible = not _full and _hint_visible
-	_strength.visible = true
-	_money.visible = _full
-	_income.visible = _full
+	_strength_row.visible = true
+	_money_row.visible = _full
+	_income_row.visible = _full
 	if throw_meter != null:
 		throw_meter.visible = not _full and _throw_meter_enabled
 	for key in _buttons:

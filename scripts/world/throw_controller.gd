@@ -48,6 +48,7 @@ var _perfect: bool = false
 
 func _ready() -> void:
 	var toast := Label3D.new()
+	UiStyle.apply_font_3d(toast)
 	toast.name = "LandToast"
 	toast.visible = false
 	toast.font_size = 48

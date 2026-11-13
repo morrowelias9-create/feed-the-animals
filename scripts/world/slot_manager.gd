@@ -13,6 +13,9 @@ const POPUP_POOL: int = 8
 const POPUP_EVERY_S: float = 2.0
 const POPUP_LIFE_S: float = 1.2
 const POPUP_RISE_M: float = 1.5
+const POPUP_FONT_SIZE: int = 96         # шрифт растеризуется крупно: текст чёткий и при приближении
+const POPUP_OUTLINE: int = 20
+const POPUP_PIXEL_SIZE: float = 0.0055  # метры на пиксель: «+$N» около полуметра высотой у среднего зверя
 const REVEAL_STATE: String = "REVEAL"  # ThrowController.STATE_REVEAL, без ссылки на класс (тесты с `-s`)
 
 # Части замка: смещение центра и размер (тело, две стойки дужки, перекладина).
@@ -161,6 +164,7 @@ func show_income_popup() -> bool:
 	var head: Vector3 = view.position + Vector3(0.0, (view.model_height() + 1.3) * scale_k, 0.0)
 	var label: Label3D = _popup_nodes[idx]
 	label.text = "+" + NumFmt.money(view.income * POPUP_EVERY_S)
+	label.pixel_size = POPUP_PIXEL_SIZE * clampf(0.55 + 0.45 * view.model_height() * scale_k, 0.8, 2.2)   # крупнее у больших зверей
 	label.position = head
 	label.modulate = Color(UiStyle.COLOR_MONEY, 1.0)
 	label.visible = true
@@ -282,12 +286,16 @@ static func _ease_out_back(k: float) -> float:
 func _build_popups() -> void:
 	for i in POPUP_POOL:
 		var l: Label3D = Label3D.new()
+		UiStyle.apply_font_3d(l)
 		l.name = "IncomePopup%d" % i
-		l.font_size = 18
-		l.outline_size = 6
+		l.font_size = POPUP_FONT_SIZE
+		l.outline_size = POPUP_OUTLINE
+		l.pixel_size = POPUP_PIXEL_SIZE
 		l.outline_modulate = Color(0.0, 0.0, 0.0, 1.0)
 		l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		l.fixed_size = true
+		l.fixed_size = false   # размер в мире: с расстоянием уменьшается, как подписи зверей (раньше был постоянным на экране и размазанным)
+		l.shaded = false
+		l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 		l.no_depth_test = true
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		l.visible = false

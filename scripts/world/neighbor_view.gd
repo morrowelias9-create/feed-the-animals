@@ -71,6 +71,7 @@ func setup(opponent_id: String, plot_index: int, session: Dictionary) -> void:
 
 func _setup_name_label() -> void:
 	_name_label = Label3D.new()
+	UiStyle.apply_font_3d(_name_label)
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_name_label.label_settings = LabelSettings.new()
@@ -87,6 +88,7 @@ func _update_name_label() -> void:
 
 func _setup_free_sign() -> void:
 	_free_sign = Label3D.new()
+	UiStyle.apply_font_3d(_free_sign)
 	_free_sign.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_free_sign.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_free_sign.label_settings = LabelSettings.new()

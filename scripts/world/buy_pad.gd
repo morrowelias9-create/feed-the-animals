@@ -150,6 +150,7 @@ func _build_labels() -> void:
 
 func _make_label(node_name: String, font_size: int, outline: int, height: float) -> Label3D:
 	var label: Label3D = Label3D.new()
+	UiStyle.apply_font_3d(label)
 	label.name = node_name
 	label.pixel_size = 0.01
 	label.font_size = font_size

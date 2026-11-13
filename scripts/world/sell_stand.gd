@@ -98,6 +98,7 @@ func _build_floor_mark() -> void:
 
 func _build_label() -> void:
 	_label = Label3D.new()
+	UiStyle.apply_font_3d(_label)
 	_label.name = "StandLabel"
 	_label.pixel_size = 0.01
 	_label.font_size = 96
