@@ -107,6 +107,7 @@ func action_pressed() -> void:
 	_food.rotation = Vector3.ZERO
 	_food.launch_arc(from, to, height, ThrowCalc.flight_time(dist))
 	_food.set_color(_food_color())
+	_food.set_food(int(Save.data.get("food_selected", 0)))   # T27b: модель еды вместо шарика
 	camera_rig.follow_food(_food)
 	player.avatar.play_throw()
 	state = STATE_THROWING
