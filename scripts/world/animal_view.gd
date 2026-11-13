@@ -2,21 +2,24 @@ class_name AnimalView
 extends Node3D
 ## Модель зверя + подпись из трёх строк над головой (шаги T10/T10b, справочник R4/R6/R8):
 ## Вариант (его цветом, мелко), название цветом редкости, доход зелёным.
-## Подписи — 2D UI Label, проецируемые из 3D позиции (чёрткий векторный текст с обводкой).
+## Подписи — Label3D (billboard) над головой, как надписи у палаток: текст чёткий, уменьшается с расстоянием и привязан к высоте модели.
 ## Шаг T24d (R8 §5.5, режим А): корень модели анимируется кодом по типу движения из рецепта.
 ## Анимация меняет только transform модели внутри AnimalView, позицию и логику run_to/eat она не трогает.
 ## Шаг T24f: три режима модели. Режим А (по умолчанию, один меш), лёгкий (до 3 частей, звери загона) и полный
 ## (до 12 частей, экран получения). У частей свои повороты вокруг суставов, у корня модели прежняя анимация режима А.
 
-const SIGN_GAP: Array[float] = [1.0, 0.55, 0.12]   # высота строк над головой: вариант, имя, доход
+const SIGN_GAP: Array[float] = [1.0, 0.62, 0.26]   # высота центров строк над макушкой (до масштаба подписи): вариант, имя, доход
 const FLOAT_SIZE_S: float = 0.8           # длительность всплытия названия размера
 const ANIM_BLEND_PER_S: float = 5.0       # скорость перехода между покоем и бегом (доля в секунду)
 const PART_WHOLE: String = "whole"        # режим А: один MeshInstance3D на зверя
 
-# Подписи 2D UI
-const LABEL_MAX_DIST: float = 80.0       # макс. дистанция показа подписей (метры)
-const LABEL_FADE_START: float = 50.0     # дистанция начала затухания
-const LABEL_BASE_SIZE: float = 28.0      # базовый размер шрифта (пиксели)
+# Подписи Label3D: шрифт растеризуется крупно (чёткость), а видимый размер задаёт pixel_size (метры на пиксель).
+const LABEL_MAX_DIST: float = 80.0       # дальше этого расстояния подписи не показываются
+const LABEL_FONT_SIZE: int = 96          # пикселей шрифта в текстуре
+const LABEL_PIXEL_SIZE: float = 0.0035   # имя получается высотой около 0.34 м
+const LABEL_OUTLINE: int = 20            # толщина чёрной обводки в пикселях текстуры
+const LABEL_SCALE_MIN: float = 0.8       # масштаб подписи по высоте зверя: от 0.8 у мелких
+const LABEL_SCALE_MAX: float = 2.2       # до 2.2 у самых больших, чтобы не терялась на фоне туши
 
 var animal_id: String = ""
 var variant: int = 0
@@ -42,21 +45,15 @@ var _anim_force_run: bool = false       # для отладочной сцены
 var _part_mode: String = PART_WHOLE     # whole, AnimalBuilder.PART_LIGHT или AnimalBuilder.PART_FULL
 var _parts: Array[Dictionary] = []      # части модели: {node, role, pivot, axis}; пусто в режиме А
 
-# 2D UI подписи (создаются в CanvasLayer HUD, не дети AnimalView)
-var _label_variant: Label
-var _label_name: Label
-var _label_income: Label
-var _label_size: Label
-
-# Внутренние позиции для проецирования (мировые координаты относительно зверя)
-var _sign_pos_variant: Vector3 = Vector3(0.0, 1.0 + SIGN_GAP[0], 0.0)
-var _sign_pos_name: Vector3 = Vector3(0.0, 1.0 + SIGN_GAP[1], 0.0)
-var _sign_pos_income: Vector3 = Vector3(0.0, 1.0 + SIGN_GAP[2], 0.0)
-var _sign_pos_size: Vector3 = Vector3(0.0, 1.0 + SIGN_GAP[1] + 0.9, 0.0)
+# Подписи Label3D: дети узла Signs, который стоит над макушкой модели (создаются в ensure_ui_labels)
+var _sign_root: Node3D
+var _label_variant: Label3D
+var _label_name: Label3D
+var _label_income: Label3D
+var _label_size: Label3D
 
 var _float_t: float = -1.0          # секунд с начала всплытия, -1 если не показываем
 var _float_step: int = 0
-var _float_start_y: float = 0.0     # начальная Y для анимации всплытия
 
 
 func _ready() -> void:
@@ -120,6 +117,7 @@ func _make_model() -> void:
 	_model.name = "Model"
 	add_child(_model)
 	_height = ModelLoader.height_of(_model)
+	_layout_signs()
 	_model_base = _model.transform
 	_move = ModelLoader.move_of(animal_id)
 
@@ -241,8 +239,6 @@ func _animate(delta: float) -> void:
 	var rot_basis: Basis = Basis.from_euler(Vector3(pitch, yaw, roll))
 	var scale_basis: Basis = Basis.from_scale(Vector3(squash_xz, stretch, squash_xz))
 	_model.transform = Transform3D(rot_basis * scale_basis, Vector3(0.0, off_y, 0.0)) * _model_base
-	if _fx != null and is_instance_valid(_fx):
-		_fx.position.y = off_y   # декор мутации подпрыгивает вместе с телом
 	if not _parts.is_empty():
 		_animate_parts(amp)
 
@@ -328,36 +324,59 @@ func _wave_basis(axis: String, angle: float) -> Basis:
 func _rebuild_fx() -> void:
 	if _fx != null and is_instance_valid(_fx):
 		_fx.queue_free()
-	_fx = ModelLoader.make_variant_fx(variant, _size_m, AABB(), _model, _model_base, animal_id)
+	_fx = ModelLoader.make_variant_fx(variant, _size_m)
 	add_child(_fx)
 
 
-## Создаёт 2D UI подписи в CanvasLayer HUD (экранные, векторные, с обводкой).
-## Вызывать один раз при инициализации зверя (из SlotManager после add_child).
-func ensure_ui_labels(hud: Node) -> void:
+## Создаёт подписи Label3D над зверем (вызывает SlotManager после add_child). Параметр hud оставлен
+## для совместимости вызова, подписи в экранном слое больше не живут.
+func ensure_ui_labels(_hud: Node = null) -> void:
 	if _label_variant != null:
 		return
-	var layer: CanvasLayer = hud.get_label_layer()
-	# Вариант (золото/бриллиант/...)
-	_label_variant = UiStyle.outline_label("", int(LABEL_BASE_SIZE * 0.85), 3, Color.WHITE)
-	_label_variant.name = "SignVariant_" + animal_id
-	layer.add_child(_label_variant)
-	# Имя (цвет редкости)
-	_label_name = UiStyle.outline_label("", int(LABEL_BASE_SIZE), 3, AnimalData.rarity_color(0))
-	_label_name.name = "SignName_" + animal_id
-	layer.add_child(_label_name)
-	# Доход (зелёный)
-	_label_income = UiStyle.outline_label("", int(LABEL_BASE_SIZE * 0.85), 3, UiStyle.COLOR_MONEY)
-	_label_income.name = "SignIncome_" + animal_id
-	layer.add_child(_label_income)
-	# Размер (всплывающий, скрыт по умолчанию)
-	_label_size = UiStyle.outline_label("", int(LABEL_BASE_SIZE * 1.15), 4, UiStyle.COLOR_MONEY)
-	_label_size.name = "SignSize_" + animal_id
+	_sign_root = Node3D.new()
+	_sign_root.name = "Signs"
+	add_child(_sign_root)
+	_label_variant = _make_sign("SignVariant", 0.85, Color.WHITE)
+	_label_name = _make_sign("SignName", 1.0, AnimalData.rarity_color(0))
+	_label_income = _make_sign("SignIncome", 0.85, UiStyle.COLOR_MONEY)
+	_label_size = _make_sign("SignSize", 1.15, UiStyle.COLOR_MONEY)
 	_label_size.visible = false
-	layer.add_child(_label_size)
+	_layout_signs()
 
 
-## Обновляет тексты и видимость 2D подписей.
+# Одна строка подписи: billboard, чёткий текст с обводкой, без тени и освещения.
+func _make_sign(label_name: String, size_k: float, color: Color) -> Label3D:
+	var l := Label3D.new()
+	UiStyle.apply_font_3d(l)
+	l.name = label_name
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.font_size = LABEL_FONT_SIZE
+	l.pixel_size = LABEL_PIXEL_SIZE * size_k
+	l.outline_size = LABEL_OUTLINE
+	l.outline_modulate = Color(0.0, 0.0, 0.0, 1.0)
+	l.modulate = color
+	l.shaded = false
+	l.double_sided = true
+	l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	l.render_priority = 2
+	l.outline_render_priority = 1
+	_sign_root.add_child(l)
+	return l
+
+
+# Ставит подписи над макушкой: корень Signs на высоте модели, масштаб растёт с высотой зверя.
+func _layout_signs() -> void:
+	if _sign_root == null:
+		return
+	_sign_root.position = Vector3(0.0, _height, 0.0)
+	_sign_root.scale = Vector3.ONE * clampf(0.55 + 0.45 * _height, LABEL_SCALE_MIN, LABEL_SCALE_MAX)
+	_label_variant.position = Vector3(0.0, SIGN_GAP[0], 0.0)
+	_label_name.position = Vector3(0.0, SIGN_GAP[1], 0.0)
+	_label_income.position = Vector3(0.0, SIGN_GAP[2], 0.0)
+	_label_size.position = Vector3(0.0, SIGN_GAP[0] + 0.6, 0.0)
+
+
+## Обновляет тексты и видимость подписей.
 func update_ui_labels() -> void:
 	if _label_variant == null:
 		return
@@ -381,100 +400,19 @@ func float_size(step: int) -> void:
 	_float_t = 0.0
 	if _label_size == null:
 		return
-	_label_size.visible = step > 0
+	_label_size.visible = step > 0 and _signs_visible
 	if step > 0:
 		_label_size.text = _t("size_" + str(step)) + "!"
 		_label_size.modulate.a = 1.0
-		_float_start_y = 0.0
+		_label_size.position = Vector3(0.0, SIGN_GAP[0] + 0.6, 0.0)
 
 
+# Каждый кадр от SlotManager: подписи прячутся дальше LABEL_MAX_DIST и у зверя, которого не должно быть видно.
+# Положение подписей задаёт сама сцена (дети зверя), проекция в экран больше не нужна.
 func _update_ui_positions(camera: Camera3D) -> void:
-	if _label_variant == null:
+	if _sign_root == null or camera == null:
 		return
-	if not _signs_visible:
-		_label_variant.visible = false
-		_label_name.visible = false
-		_label_income.visible = false
-		if _label_size != null:
-			_label_size.visible = false
-		return
-	
-	# Проверка дистанции: скрываем, если зверь слишком далеко
-	var base_pos: Vector3 = global_position
-	var cam_pos: Vector3 = camera.global_position
-	# Fallback: если камера в странном месте, пробуем камеру вьюпорта
-	if cam_pos == Vector3.ZERO:
-		var vp_cam: Camera3D = get_viewport().get_camera_3d()
-		if vp_cam != null:
-			cam_pos = vp_cam.global_position
-	var dist: float = base_pos.distance_to(cam_pos)
-	if dist > LABEL_MAX_DIST:
-		_label_variant.visible = false
-		_label_name.visible = false
-		_label_income.visible = false
-		if _label_size != null:
-			_label_size.visible = false
-		return
-	
-	# Затухание на дальних дистанциях
-	var alpha: float = 1.0
-	if dist > LABEL_FADE_START:
-		alpha = clampf(1.0 - (dist - LABEL_FADE_START) / (LABEL_MAX_DIST - LABEL_FADE_START), 0.0, 1.0)
-		if alpha <= 0.0:
-			_label_variant.visible = false
-			_label_name.visible = false
-			_label_income.visible = false
-			if _label_size != null:
-				_label_size.visible = false
-			return
-	
-	# Проецируем мировые позиции в экранные координаты
-	var viewport := get_viewport()
-	var vars: Array[Vector3] = [_sign_pos_variant, _sign_pos_name, _sign_pos_income]
-	var labels: Array[Label] = [_label_variant, _label_name, _label_income]
-	var vp_size: Vector2 = viewport.get_visible_rect().size
-	var margin: float = 50.0
-	
-	# Направление взгляда камеры (в Godot камера смотрит по -Z)
-	var cam_forward: Vector3 = -camera.global_basis.z
-	
-	for i in 3:
-		var world_pos: Vector3 = base_pos + vars[i]
-		# Проверяем, что точка ПЕРЕД камерой (dot product > 0)
-		var to_point: Vector3 = world_pos - cam_pos
-		if to_point.dot(cam_forward) <= 0.0:
-			labels[i].visible = false
-			continue
-		var screen_pos: Vector2 = camera.unproject_position(world_pos)
-		# Проверяем, что точка на экране (с небольшим запасом)
-		if screen_pos.x >= -margin and screen_pos.x <= vp_size.x + margin \
-			and screen_pos.y >= -margin and screen_pos.y <= vp_size.y + margin:
-			labels[i].position = screen_pos
-			labels[i].visible = true
-			labels[i].modulate.a = alpha
-		else:
-			labels[i].visible = false
-	
-	# Размер (всплывающий)
-	if _label_size != null and _float_t >= 0.0 and _float_step > 0:
-		var life: float = clampf(_float_t / FLOAT_SIZE_S, 0.0, 1.0)
-		var world_pos: Vector3 = base_pos + _sign_pos_size + Vector3.UP * (1.5 * smoothstep(0.0, 1.0, life))
-		# Проверяем, что точка ПЕРЕД камерой
-		var to_point: Vector3 = world_pos - cam_pos
-		if to_point.dot(cam_forward) <= 0.0:
-			_label_size.visible = false
-		else:
-			var screen_pos: Vector2 = camera.unproject_position(world_pos)
-			if screen_pos.x >= -margin and screen_pos.x <= vp_size.x + margin \
-				and screen_pos.y >= -margin and screen_pos.y <= vp_size.y + margin:
-				_label_size.position = screen_pos
-				_label_size.modulate.a = (1.0 - life) * alpha
-				_label_size.visible = true
-			else:
-				_label_size.visible = false
-		if life >= 1.0:
-			_float_t = -1.0
-			_label_size.visible = false
+	_sign_root.visible = _signs_visible and global_position.distance_to(camera.global_position) <= LABEL_MAX_DIST
 
 
 func _update_float(delta: float) -> void:
@@ -484,7 +422,7 @@ func _update_float(delta: float) -> void:
 	var life: float = clampf(_float_t / FLOAT_SIZE_S, 0.0, 1.0)
 	if _float_step > 0 and _label_size != null:
 		_label_size.text = _t("size_" + str(_float_step)) + "!"
-		# позиция обновится в _update_ui_positions
+		_label_size.position = Vector3(0.0, SIGN_GAP[0] + 0.6 + 1.2 * smoothstep(0.0, 1.0, life), 0.0)
 		_label_size.modulate.a = 1.0 - life
 	if life >= 1.0:
 		_float_t = -1.0
@@ -492,11 +430,12 @@ func _update_float(delta: float) -> void:
 			_label_size.visible = false
 
 
-## Удаляет 2D подписи из CanvasLayer (при деспавне зверя).
+## Убирает подписи зверя (при деспавне).
 func clear_ui_labels() -> void:
-	for l in [_label_variant, _label_name, _label_income, _label_size]:
-		if l != null and is_instance_valid(l):
-			l.queue_free()
+	if _sign_root != null and is_instance_valid(_sign_root):
+		remove_child(_sign_root)
+		_sign_root.queue_free()
+	_sign_root = null
 	_label_variant = null
 	_label_name = null
 	_label_income = null
