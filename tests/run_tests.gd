@@ -807,9 +807,9 @@ func _test_zone_look() -> void:
 	var water: StandardMaterial3D = null
 	if ocean_floor != null:
 		water = ocean_floor.material_override as StandardMaterial3D
-	_check("T17: пол Океана это вода простым материалом без текстуры",
-		water != null and water.albedo_texture == null
-		and water.albedo_color.is_equal_approx(Color.html(String(ZoneData.ZONES[4]["ground"]))))
+	# T27: вода осталась простым материалом (без шейдера) цвета зоны, но с лёгкой нарисованной рябью.
+	_check("T17: пол Океана это вода простым материалом цвета зоны",
+		water != null and water.albedo_color.is_equal_approx(Color.html(String(ZoneData.ZONES[4]["ground"]))))
 	world.free()
 
 
