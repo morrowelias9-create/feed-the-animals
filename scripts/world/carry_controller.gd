@@ -33,7 +33,7 @@ func is_carrying() -> bool:
 	return current_uid >= 0
 
 
-func _on_animal_received(animal: Dictionary) -> void:
+func _on_animal_received(animal: Dictionary, _is_new: bool = false) -> void:
 	if int(animal.get("sold", 0)) == 1:
 		return
 	pending_uid = int(animal.get("uid", -1))

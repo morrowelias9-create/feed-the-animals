@@ -38,8 +38,6 @@ const CAM_GROUND_CLEARANCE: float = 0.25
 const TO_RESULT_S: float = 0.4          # плавный поворот зверя в 3/4 (камера стоит на месте)
 const TAP_LOCK_S: float = 0.25          # после перехода тапы игнорируются
 const NAME_HOLD_S: float = 0.3          # пауза после конца печати имени
-const EXIT_EAT_S: float = 0.3           # зверь съедает еду
-const EXIT_S: float = 0.6               # весь выход
 const TELEPORT_FADE_IN_S: float = 0.3   # T36: белое затемнение перед переносом к загону
 const TELEPORT_FADE_OUT_S: float = 0.45 # T36: возврат из белого после переноса
 const CAM_X_LIMIT: float = 17.0         # камера не выходит за стену коридора (стена на x = +-18)
@@ -52,13 +50,11 @@ var _camera_rig: CameraRig
 var _white_layer: CanvasLayer          # T36: белое затемнение поверх всего экрана
 var _white: ColorRect
 var _white_tween: Tween
-var _exit_fade_started: bool = false
 var _phase: Phase = Phase.NONE
 var _t: float = 0.0
 var _lock_t: float = 0.0
 var _hold_t: float = 0.0
 var _finished: bool = true
-var _flashed: bool = false
 
 var _animal_id: String = ""
 var _variant: int = 0
@@ -213,7 +209,7 @@ func _process(delta: float) -> void:
 		Phase.RESULT:
 			_update_result(delta)
 		Phase.EXIT:
-			_update_exit()
+			pass   # T36: экран уже закрывается белым, видимых обновлений в фазе выхода нет
 
 
 # ---------- Раскладка сцены ----------
@@ -458,32 +454,9 @@ func _update_size(delta: float) -> void:
 func _enter_exit() -> void:
 	_phase = Phase.EXIT
 	_t = 0.0
-	_flashed = false
-	_exit_fade_started = false
-	# Камера возвращается к игроку; сам игрок переедет к загону под белым затемнением (T36).
-	_camera_rig.set_scripted(false)
-	_camera_rig.return_to_player(EXIT_S)
-
-
-func _update_exit() -> void:
-	var eat: float = clampf(_t / EXIT_EAT_S, 0.0, 1.0)
-	if _food != null and is_instance_valid(_food):
-		_food.scale = Vector3.ONE * (1.0 - eat)
-	if _view != null:
-		_view.position = _stop.lerp(_stop + (_land - _stop) * 0.35, eat)
-		if _t >= EXIT_EAT_S:
-			if not _flashed:
-				_flashed = true
-				_overlay.flash(0.8)
-			var shrink: float = 1.0 - clampf((_t - EXIT_EAT_S) / (EXIT_S - EXIT_EAT_S), 0.0, 1.0)
-			_view.scale = Vector3.ONE * maxf(shrink, 0.001)
-	var fade: float = 1.0 - clampf(_t / EXIT_S, 0.0, 1.0)
-	_overlay.set_fade(fade)
-	_overlay.set_vignette(fade)
-	# T36: после видимого выхода экран плавно закрывается белым, под ним персонаж
-	# переносится к проёму загона, и белое так же плавно уходит.
-	if not _exit_fade_started and _t >= EXIT_S:
-		_start_teleport_fade()
+	# T36: фаза выхода сразу закрывается белым. Камера остаётся в кадре итога,
+	# а зверь и еда не уменьшаются на глазах игрока — всё это скрыто затемнением.
+	_start_teleport_fade()
 
 
 # ---------- Общее ----------
@@ -506,7 +479,6 @@ func _build_teleport_fade() -> void:
 ## T36: экран плавно закрывается белым, затем под полностью белым кадром персонаж
 ## переносится к проёму своего загона и белое плавно уходит.
 func _start_teleport_fade() -> void:
-	_exit_fade_started = true
 	_white.visible = true
 	_white.color.a = 0.0
 	_kill_white_tween()
@@ -532,6 +504,9 @@ func _on_screen_covered() -> void:
 ## чтобы после затемнения игрок увидел себя перед загоном. Позиция ставится мгновенно,
 ## пока экран полностью белый; управление в этот момент выключено.
 func _teleport_to_pen() -> void:
+	# Камера в любом случае перестаёт быть сценарной, иначе она застынет в кадре итога.
+	if _camera_rig != null:
+		_camera_rig.set_scripted(false)
 	if throw_controller == null or throw_controller.player == null:
 		return
 	var player: Player = throw_controller.player
@@ -541,7 +516,6 @@ func _teleport_to_pen() -> void:
 	if _camera_rig != null:
 		# Камера со стороны двора смотрит на игрока и загон, а не на обрыв.
 		_camera_rig.yaw_deg = 180.0
-		_camera_rig.set_scripted(false)
 		_camera_rig.snap_to_target()
 		if _camera_rig.camera != null:
 			_camera_rig.camera.fov = CameraRig.FOV
@@ -560,7 +534,6 @@ func _kill_white_tween() -> void:
 
 
 func _reset_teleport_fade() -> void:
-	_exit_fade_started = false
 	_kill_white_tween()
 	if _white != null:
 		_white.visible = false

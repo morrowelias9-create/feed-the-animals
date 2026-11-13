@@ -253,7 +253,7 @@ func _end_reveal() -> void:
 	_lock_player()
 
 
-# Камеру к игроку вернула сама кинематика (return_to_player), здесь только выбираем следующее состояние.
+# Камеру к игроку поставила кинематика при переносе к загону (T36), здесь только выбираем следующее состояние.
 func _finish_cooldown() -> void:
 	if carry_controller != null and carry_controller.is_carrying():
 		_return_to_free()
