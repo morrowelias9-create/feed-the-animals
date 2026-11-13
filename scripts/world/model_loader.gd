@@ -53,6 +53,13 @@ static func height_of(node: Node3D) -> float:
 	return 1.0
 
 
+## Фактическая высота модели вида после нормализации, метры (без мутации размера).
+## Строит прототип при первом запросе, чтобы камеру кинематики можно было рассчитать до спавна зверя.
+static func height_for(id: String) -> float:
+	_get_proto(id)
+	return float(_heights.get(id, 1.0))
+
+
 ## Габариты модели в системе её родителя (учитывает собственную подгонку scale/rotation).
 static func local_bounds(node: Node3D) -> AABB:
 	if node == null:

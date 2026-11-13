@@ -24,11 +24,8 @@ const STEP_HZ: float = 3.0
 const PULLBACK_FOV: float = 68.0
 const PULLBACK_PAWS_SHARE: float = 0.32 # доля фазы B на подвод камеры к лапам (остальное — общий отъезд)
 
-# Кадр «весь зверь»: дистанция считается от высоты модели, а не от size_m вслепую.
-# d = REVEAL_DIST_PER_HEIGHT * height держит зверя крупно (~65-70% высоты кадра), еда — по центру снизу.
-const REVEAL_DIST_PER_HEIGHT: float = 1.10
-const FULL_CAM_HEIGHT_K: float = 0.30   # высота камеры от пола, доля высоты модели
-const FULL_TARGET_HEIGHT_K: float = 0.30 # высота точки взгляда, доля высоты модели
+# Кадр «весь зверь»: дистанция и высоты считаются от фактической высоты модели (T35, RevealCamera).
+const RESULT_CAM_FOLLOW: float = 4.0     # скорость подстройки кадра итога под рост зверя (1/с)
 const MIN_PULLBACK_EXTRA: float = 0.08  # отъезд от еды всегда чуть больше конца фазы A
 # Зверь стоит за едой вдоль коридора: голова у еды, корпус уходит вглубь.
 const ANIMAL_OFFSET_BASE: float = 0.15
@@ -63,6 +60,8 @@ var _size_step: int = 0
 var _rarity: int = 0
 var _income: float = 0.0
 var _size: float = 1.2
+var _model_h: float = 1.0            # T35: фактическая высота модели после нормализации, метры
+var _half_depth_k: float = 0.1       # T35: полширины зверя на единицу высоты (для кадра итога с ростом)
 var _dist: float = 0.0
 
 var _land: Vector3 = Vector3.ZERO       # точка земли под едой
@@ -124,6 +123,8 @@ func start(zone: int, dist: float, land_pos: Vector3, food: Node3D, perfect: boo
 	var data: Dictionary = AnimalData.by_id(_animal_id)
 	_rarity = AnimalData.rank_to_rarity(int(data.get("rank", 1)))
 	_size = float(data.get("size_m", 1.2))
+	# T35: камера считается от фактической высоты модели, а не только от базового size_m.
+	_model_h = maxf(ModelLoader.height_for(_animal_id), 0.35 * _size)
 	_income = Economy.income(_animal_id, _variant, _size_step)
 	_luck = int(roll.get("luck", 0))
 	_final_luck = _luck
@@ -228,26 +229,48 @@ func _compute_pullback_frames() -> void:
 	var yaw: Basis = Basis(Vector3.UP, _view.rotation.y)
 	var extent_side: float = absf(yaw.x.dot(_side)) * bounds.size.x + absf(yaw.z.dot(_side)) * bounds.size.z
 	var half_depth: float = maxf(extent_side * 0.5, 0.15)
-	# Дистанция до ближнего бока зверя; камера ставится ещё на полширины дальше,
-	# чтобы близкий бок не раздувался перспективой.
-	var d_near: float = REVEAL_DIST_PER_HEIGHT * h
-	var d_cam: float = d_near + half_depth
-	d_cam = maxf(d_cam, EYE_END_DIST + MIN_PULLBACK_EXTRA)
-	d_cam = _side_distance(d_cam)
-
-	# Полный кадр: зверь по центру, еда остаётся внизу по центру кадра.
-	_pb_full_pos = _land + _side * d_cam
-	_pb_full_pos.y = _floor_y + maxf(0.25, FULL_CAM_HEIGHT_K * h)
-	_pb_full_target = _land.lerp(_stop, 0.32)
-	_pb_full_target.y = _floor_y + FULL_TARGET_HEIGHT_K * h
+	# T35: полширина на единицу высоты — чтобы кадр итога можно было пересчитать при росте зверя.
+	_half_depth_k = half_depth / maxf(h, 0.001)
+	var full: Dictionary = _full_frame(h)
+	_pb_full_pos = full["pos"]
+	_pb_full_target = full["target"]
 
 	# Кадр «лапы»: ближе и ниже, смотрим на лапы у еды.
+	var d_cam: float = EYE_END_DIST + MIN_PULLBACK_EXTRA
+	var d_near: float = RevealCamera.DIST_PER_HEIGHT * h
+	d_cam = _side_distance(maxf(d_near + _half_depth_k * h, d_cam))
 	var d_paws: float = maxf(EYE_END_DIST, d_cam * PAWS_DIST_SHARE)
 	d_paws = minf(d_paws, d_cam)
 	_pb_paws_pos = _land + _side * d_paws
 	_pb_paws_pos.y = _floor_y + maxf(0.15, PAWS_HEIGHT_K * h)
 	_pb_paws_target = _stop
 	_pb_paws_target.y = _floor_y + PAWS_TARGET_HEIGHT_K * h
+
+
+## T35: кадр «весь зверь» для заданной высоты модели. Зверь по центру, еда остаётся внизу по центру кадра.
+func _full_frame(h: float) -> Dictionary:
+	var d_cam: float = RevealCamera.full_distance(h, _half_depth_k)
+	d_cam = maxf(d_cam, EYE_END_DIST + MIN_PULLBACK_EXTRA)
+	d_cam = _side_distance(d_cam)
+	var pos: Vector3 = _land + _side * d_cam
+	pos.y = _floor_y + RevealCamera.full_cam_height(h)
+	var target: Vector3 = _land.lerp(_stop, 0.32)
+	target.y = _floor_y + RevealCamera.full_target_height(h)
+	return {"pos": pos, "target": target}
+
+
+## T35: высота экземпляра с учётом текущей ступени мутации роста (для плавного кадра итога).
+func _current_height() -> float:
+	if _final_size <= 0:
+		return _model_h
+	return _model_h * SizeData.visual_scale(_size_k)
+
+
+## T35: высота экземпляра на финальной ступени мутации роста (для фазы A «глаза зверя»).
+func _final_height() -> float:
+	if _final_size <= 0:
+		return _model_h
+	return _model_h * SizeData.visual_scale(_final_size)
 
 
 # ---------- Фаза A: глаза зверя ----------
@@ -263,8 +286,9 @@ func _update_eyes() -> void:
 	var u: float = clampf(_t / GameConfig.REVEAL_EYES_S, 0.0, 1.0)
 	var k: float = 1.0 - (1.0 - u) * (1.0 - u)    # ease_out
 	var d: float = lerpf(EYE_START_DIST, EYE_END_DIST, k)
-	var eye: float = maxf(0.35, 0.45 * _size)
-	var amp: float = BOB_AMP_M * maxf(1.0, _size / 1.2)
+	var h: float = maxf(_final_height(), 0.35 * _size)
+	var eye: float = RevealCamera.eye_height(h)
+	var amp: float = BOB_AMP_M * maxf(1.0, h / 1.2)
 	var pos: Vector3 = _land - _dir * d
 	pos.y = _floor_y + eye + sin(TAU * STEP_HZ * _t) * amp
 	var pitch: float = deg_to_rad(lerpf(EYE_PITCH_FROM, EYE_PITCH_TO, u))
@@ -373,8 +397,19 @@ func _update_result(delta: float) -> void:
 		_view.rotation.y = lerp_angle(_face_from, _face_to, k)
 	_update_score(delta)
 	_update_size(delta)
+	_update_growth_camera(delta)
 	if _t >= GameConfig.REVEAL_AUTO_S:
 		_enter_exit()
+
+
+## T35: при мутации роста кадр итога плавно отъезжает вслед за зверем, взгляд остаётся на еде.
+## Без мутации камера стоит там, куда отъехала в фазе B.
+func _update_growth_camera(delta: float) -> void:
+	if _final_size <= 0:
+		return
+	var frame: Dictionary = _full_frame(_current_height())
+	var k: float = clampf(delta * RESULT_CAM_FOLLOW, 0.0, 1.0)
+	_set_pose(_cam_pos.lerp(frame["pos"], k), _cam_target.lerp(frame["target"], k), PULLBACK_FOV, 0.0)
 
 
 ## Накрутка SCORE: от 0 до _final_luck за REVEAL_SCORE_S с ease_out, тик звука type ≤ 15/с.

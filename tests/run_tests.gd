@@ -76,6 +76,8 @@ func _run_all() -> void:
 	_test_parts()
 	_test_part_modes()
 	_test_parts_animation()
+	print("== T35: высота камеры по размеру зверя")
+	_test_reveal_camera()
 
 	_restore_save(backup)
 	print("")
@@ -1265,3 +1267,26 @@ func _test_recipe_animation() -> void:
 	var rest_k: float = model.scale.y / base.basis.get_scale().y
 	_check("в покое остаётся только дыхание (в пределах 3%% масштаба): %.3f" % rest_k, absf(rest_k - 1.0) < 0.03)
 	view.free()
+
+
+## T35: камера кинематики считается от фактической высоты модели и её мутации роста.
+func _test_reveal_camera() -> void:
+	var rabbit_h: float = ModelLoader.height_for("rabbit")
+	var bear_h: float = ModelLoader.height_for("bear")
+	_check("T35: высота модели растёт с размером вида", rabbit_h > 0.0 and bear_h > rabbit_h)
+	_check("T35: у маленького зверя глаза ниже, чем у крупного",
+		RevealCamera.eye_height(rabbit_h) < RevealCamera.eye_height(bear_h))
+	_check("T35: высота глаз не уходит под землю",
+		_near(RevealCamera.eye_height(0.0), RevealCamera.EYE_HEIGHT_MIN))
+	_check("T35: высота глаз ограничена сверху",
+		_near(RevealCamera.eye_height(1000.0), RevealCamera.EYE_HEIGHT_MAX))
+	var grown_h: float = bear_h * SizeData.visual_scale(GameConfig.SIZE_MAX)
+	_check("T35: мутация роста поднимает камеру кадра итога",
+		RevealCamera.full_cam_height(grown_h) > RevealCamera.full_cam_height(bear_h))
+	var step4_h: float = bear_h * SizeData.visual_scale(4)
+	_check("T35: рост x4 поднимает камеру выше, чем у обычного зверя",
+		RevealCamera.full_cam_height(step4_h) > RevealCamera.full_cam_height(bear_h))
+	_check("T35: высота камеры итога ограничена сверху",
+		RevealCamera.full_cam_height(10000.0) <= RevealCamera.FULL_CAM_HEIGHT_MAX + 0.0001)
+	_check("T35: дистанция кадра растёт вместе с высотой модели",
+		RevealCamera.full_distance(bear_h, 0.1) > RevealCamera.full_distance(rabbit_h, 0.1))
