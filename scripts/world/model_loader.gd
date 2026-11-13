@@ -7,7 +7,7 @@ extends RefCounted
 
 const ANIMALS_DIR: String = "res://assets/models/animals/"
 const SPARKS_MAX: int = 12
-const GLOW_ENERGY: float = 1.2
+const GLOW_ENERGY: float = 1.0   # множитель на VariantData.glow_k
 
 static var _protos: Dictionary = {}      # id -> прототип Node3D (не в дереве)
 static var _heights: Dictionary = {}     # id -> высота модели в метрах после подгонки
@@ -98,17 +98,28 @@ static func apply_variant(node: Node3D, variant: int) -> void:
 			mi.material_override = _variant_material(base, v)
 
 
-## Эффекты варианта: искры (до 12 частиц) и у бриллианта светящийся диск под ногами.
-## Пустой узел для обычного зверя или при выключенных эффектах.
-static func make_variant_fx(variant: int, size_m: float) -> Node3D:
+## Эффекты варианта (T32): декор-кристаллы на теле зверя (один MeshInstance3D "Decor", привязан к габаритам bounds
+## в системе AnimalView) и до 12 искр. Большого круга под зверем больше нет: он перекрывал загон у крупных зверей.
+## Пустой узел для обычного зверя. Декор виден и при выключенных частицах, искры только при GameConfig.FX_ENABLED.
+static func make_variant_fx(variant: int, size_m: float, bounds: AABB = AABB()) -> Node3D:
 	var root := Node3D.new()
 	root.name = "VariantFx"
 	var v: int = VariantData.clamp_variant(variant)
-	if v == VariantData.NONE or not GameConfig.FX_ENABLED:
+	if v == VariantData.NONE:
 		return root
-	root.add_child(_make_sparks(v, size_m))
-	if v == VariantData.DIAMOND:
-		root.add_child(_make_disc(v, size_m))
+	var box: AABB = bounds
+	if box.size == Vector3.ZERO:
+		box = AABB(Vector3(-size_m * 0.35, 0.0, -size_m * 0.5), Vector3(size_m * 0.7, size_m * 0.8, size_m))
+	var decor_mesh: ArrayMesh = VariantDecor.get_mesh(v, box)
+	if decor_mesh != null:
+		var decor := MeshInstance3D.new()
+		decor.name = "Decor"
+		decor.mesh = decor_mesh
+		decor.material_override = VariantDecor.material()
+		decor.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(decor)
+	if GameConfig.FX_ENABLED:
+		root.add_child(_make_sparks(v, size_m, box))
 	return root
 
 
@@ -315,27 +326,27 @@ static func _variant_material(base: Material, variant: int) -> Material:
 		mat = (base as StandardMaterial3D).duplicate() as StandardMaterial3D
 	else:
 		mat = StandardMaterial3D.new()
-	mat.albedo_color = mat.albedo_color.lerp(VariantData.tint_color(variant), 0.7)
+	mat.albedo_color = mat.albedo_color.lerp(VariantData.tint_color(variant), VariantData.tint_k(variant))
 	mat.emission_enabled = true
 	mat.emission = VariantData.glow_color(variant)
-	mat.emission_energy_multiplier = GLOW_ENERGY
+	mat.emission_energy_multiplier = GLOW_ENERGY * VariantData.glow_k(variant)
 	_variant_mats[key] = mat
 	return mat
 
 
-static func _make_sparks(variant: int, size_m: float) -> CPUParticles3D:
+static func _make_sparks(variant: int, size_m: float, box: AABB) -> CPUParticles3D:
 	var sparks := CPUParticles3D.new()
 	sparks.name = "Sparks"
 	sparks.amount = SPARKS_MAX if variant == VariantData.DIAMOND else 8
 	sparks.lifetime = 1.3
 	sparks.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-	sparks.emission_sphere_radius = maxf(size_m * 0.45, 0.2)
+	sparks.emission_sphere_radius = maxf(maxf(box.size.x, box.size.z) * 0.5, 0.2)
 	sparks.direction = Vector3.UP
 	sparks.spread = 20.0
 	sparks.gravity = Vector3.ZERO
 	sparks.initial_velocity_min = 0.4
 	sparks.initial_velocity_max = 0.9
-	sparks.position = Vector3(0.0, size_m * 0.4, 0.0)
+	sparks.position = box.get_center()
 	var quad := QuadMesh.new()
 	var q: float = clampf(size_m * 0.07, 0.07, 0.3)
 	quad.size = Vector2(q, q)
@@ -351,26 +362,3 @@ static func _make_sparks(variant: int, size_m: float) -> CPUParticles3D:
 	sparks.scale_amount_curve = fade
 	sparks.emitting = true
 	return sparks
-
-
-static func _make_disc(variant: int, size_m: float) -> MeshInstance3D:
-	var disc := MeshInstance3D.new()
-	disc.name = "GlowDisc"
-	var mesh := CylinderMesh.new()
-	var r: float = maxf(size_m * 0.75, 0.4)
-	mesh.top_radius = r
-	mesh.bottom_radius = r
-	mesh.height = 0.02
-	mesh.radial_segments = 24
-	mesh.rings = 1
-	disc.mesh = mesh
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	var c: Color = VariantData.glow_color(variant)
-	c.a = 0.45
-	mat.albedo_color = c
-	disc.material_override = mat
-	disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	disc.position = Vector3(0.0, 0.04, 0.0)
-	return disc
