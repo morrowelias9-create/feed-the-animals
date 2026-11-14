@@ -189,9 +189,9 @@ func _final_view_scale() -> float:
 	return SizeData.visual_scale(_final_size)
 
 
-## Множитель удачи SCORE: «Идеально!» даёт 1.25, обычный бросок — 1.0.
+## Множитель удачи SCORE: «Идеально!» даёт 1.25, обычный бросок — 1.0 (число в SpawnRoller, одна формула на игру).
 static func _luck_mult(perfect: bool) -> float:
-	return 1.25 if perfect else 1.0
+	return SpawnRoller.PERFECT_LUCK_MULT if perfect else 1.0
 
 
 func _process(delta: float) -> void:

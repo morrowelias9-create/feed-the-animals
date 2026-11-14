@@ -35,10 +35,10 @@ static func dist_at_z(z: float) -> float:
 	return (lo + hi) * 0.5
 
 
-## Удача броска целиком (SCORE): round(dist * удача еды * 1.25 за «Идеально!»).
+## Удача броска целиком (SCORE): та же формула, что на экране награды (SpawnRoller.luck_of).
 static func luck_total(dist: float, food_luck: float, perfect: bool) -> int:
-	var mult: float = FlightData.PERFECT_LUCK_MULT if perfect else 1.0
-	return roundi(maxf(dist, 0.0) * food_luck * mult)
+	var mult: float = SpawnRoller.PERFECT_LUCK_MULT if perfect else 1.0
+	return SpawnRoller.luck_of(dist, food_luck, mult)
 
 
 ## Сколько удачи «накоплено» к моменту, когда еда пролетела d из dist метров (линейно по расстоянию).

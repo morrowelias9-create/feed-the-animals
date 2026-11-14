@@ -2,7 +2,8 @@ class_name ThrowMeter
 extends Control
 ## Шкала броска (T48, справочник R6): горизонтальная капсула с сегментами по открытым биомам.
 ## Ползунок ходит слева направо и обратно; остановка в сегменте старого биома бросает еду в этот биом,
-## правый (самый широкий) сегмент это «максимальная дальность». Логика сегментов в ThrowScale.
+## правый (самый широкий) сегмент это «максимальная дальность». Никаких надписей на шкале нет:
+## биомы показывают иконки над сегментами. Логика сегментов в ThrowScale.
 
 const BAR_MAX_W: float = 1200.0
 const BAR_MARGIN: float = 80.0          # минимум свободного места по краям экрана (суммарно)
@@ -11,26 +12,21 @@ const CAPSULE_H: float = 60.0
 const CAPSULE_RADIUS: int = 30
 const CAPSULE_PAD: float = 4.0          # отступ цветных сегментов от чёрной подложки
 const DIVIDER_W: float = 5.0
-const ICON_D: float = 44.0
-const ICON_Y: float = 440.0
+const ICON_D: float = 52.0
+const ICON_Y: float = 438.0
 const ICON_ACTIVE_SCALE: float = 1.25
 const SLIDER_W: float = 14.0
 const SLIDER_H: float = 84.0
 const BACKING_W: float = 26.0
 const BACKING_H: float = 96.0
 const SLIDER_CENTER_Y: float = 500.0
-const LABEL_Y: float = 395.0
-const LABEL_FONT_SIZE: int = 34
-const LABEL_OUTLINE: int = 6
 const BACKING_COLOR: Color = Color(1.0, 1.0, 1.0, 0.25)
-const ANIM_PERIOD: float = 2.6          # туда-обратно, секунд (раньше 1.4)
+const ANIM_PERIOD: float = 5.2          # туда-обратно, секунд (было 1.4, потом 2.6)
 
 var _open: int = 1
 var _dmax: float = 0.0
 var _widths: Array[float] = [1.0]
 var _starts: Array[float] = [0.0]
-var _from: Array[float] = [0.0]         # начало дальности каждого сегмента, м
-var _to: Array[float] = [0.0]           # конец дальности каждого сегмента, м
 var _boxes: Array[StyleBoxFlat] = []    # цветные сегменты, создаются один раз в configure
 var _sb_outer: StyleBoxFlat
 var _sb_backing: StyleBoxFlat
@@ -39,9 +35,6 @@ var _sb_slider: StyleBoxFlat
 var _v: float = 0.0
 var _t: float = 0.0
 var _running: bool = false
-var _label: Label
-var _label_key: int = -1                # (мини-зона, метры): текст пересобирается только при смене
-var _label_size: Vector2 = Vector2.ZERO
 var _x0: float = 0.0                    # левый край капсулы, считается по ширине экрана
 var _bar_w: float = BAR_MAX_W
 
@@ -63,11 +56,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	set_process(false)
-	_label = UiStyle.outline_label("", LABEL_FONT_SIZE, LABEL_OUTLINE, UiStyle.COLOR_TEXT)
-	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_label)
 	resized.connect(queue_redraw)
-	Loc.language_changed.connect(_on_language_changed)
 
 
 ## Задать число сегментов (открытых биомов) и максимальную дальность. Вызывается перед start().
@@ -77,21 +66,9 @@ func configure(open_zones: int, dmax: float) -> void:
 	_dmax = maxf(dmax, 0.0)
 	_widths = ThrowScale.segment_widths(_open)
 	_starts = ThrowScale.segment_starts(_open)
-	_from.clear()
-	_to.clear()
 	_boxes.clear()
 	for i in _open:
-		var zone: int = clampi(i, 0, ZoneData.count() - 1)
-		var from_m: float = float(ZoneData.ZONES[zone]["start_m"])
-		var to_m: float
-		if i < _open - 1:
-			to_m = float(ZoneData.ZONES[zone]["end_m"]) - ThrowScale.END_EPS
-		else:
-			to_m = maxf(_dmax, from_m)
-		_from.append(from_m)
-		_to.append(to_m)
-		_boxes.append(_make_segment_box(i, zone))
-	_label_key = -1
+		_boxes.append(_make_segment_box(i, clampi(i, 0, ZoneData.count() - 1)))
 	queue_redraw()
 
 
@@ -114,9 +91,7 @@ func start() -> void:
 	_running = true
 	_t = 0.0
 	_v = 0.0
-	_label_key = -1
 	set_process(true)
-	_update_label()
 	queue_redraw()
 
 
@@ -151,13 +126,7 @@ func _process(delta: float) -> void:
 	if tri > 1.0:
 		tri = 2.0 - tri
 	_v = tri
-	_update_label()
 	queue_redraw()   # перерисовка только пока ползунок движется
-
-
-func _layout() -> void:
-	_bar_w = minf(BAR_MAX_W, size.x - BAR_MARGIN)
-	_x0 = (size.x - _bar_w) * 0.5
 
 
 # Номер сегмента для положения x по кэшированным границам (без выделения массивов в кадре).
@@ -169,18 +138,9 @@ func _segment_index(x: float) -> int:
 	return result
 
 
-# То же, что ThrowScale.distance_at, но по кэшу: вызывается каждый кадр для подписи.
-func _dist_cached(v: float) -> float:
-	var x: float = clampf(v, 0.0, 1.0)
-	var i: int = _segment_index(x)
-	var t: float = 0.0
-	if _widths[i] > 0.0:
-		t = clampf((x - _starts[i]) / _widths[i], 0.0, 1.0)
-	return _from[i] + t * (_to[i] - _from[i])
-
-
 func _draw() -> void:
-	_layout()
+	_bar_w = minf(BAR_MAX_W, size.x - BAR_MARGIN)
+	_x0 = (size.x - _bar_w) * 0.5
 	var inner_x: float = _x0 + CAPSULE_PAD
 	var inner_w: float = _bar_w - CAPSULE_PAD * 2.0
 	var seg_y: float = CAPSULE_Y + CAPSULE_PAD
@@ -198,29 +158,3 @@ func _draw() -> void:
 	var sx: float = inner_x + _v * inner_w
 	draw_style_box(_sb_backing, Rect2(sx - BACKING_W * 0.5, SLIDER_CENTER_Y - BACKING_H * 0.5, BACKING_W, BACKING_H))
 	draw_style_box(_sb_slider, Rect2(sx - SLIDER_W * 0.5, SLIDER_CENTER_Y - SLIDER_H * 0.5, SLIDER_W, SLIDER_H))
-
-
-# Подпись над ползунком: «Название мини-зоны  187 м». Текст пересобирается только при смене значения.
-func _update_label() -> void:
-	if _label == null:
-		return
-	_layout()
-	var dist: float = _dist_cached(_v)
-	var zone: int = ZoneData.zone_at(dist)
-	var mini: int = MiniZoneData.index_at(dist)
-	var key: int = (zone * MiniZoneData.PER_ZONE + mini) * 100000 + int(dist)
-	if key != _label_key:
-		_label_key = key
-		_label.text = Loc.t(MiniZoneData.name_key(zone, mini)) + "  " + str(int(dist)) + " " + Loc.t("unit_m")
-		_label_size = _label.get_minimum_size()
-		_label.size = _label_size
-	var inner_x: float = _x0 + CAPSULE_PAD
-	var sx: float = inner_x + _v * (_bar_w - CAPSULE_PAD * 2.0)
-	var lx: float = clampf(sx - _label_size.x * 0.5, _x0, maxf(_x0, _x0 + _bar_w - _label_size.x))
-	_label.position = Vector2(lx, LABEL_Y - _label_size.y * 0.5)
-
-
-func _on_language_changed() -> void:
-	_label_key = -1
-	_update_label()
-	queue_redraw()

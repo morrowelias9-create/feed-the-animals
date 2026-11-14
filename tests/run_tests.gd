@@ -44,6 +44,10 @@ func _run_all() -> void:
 	print("== T44: шкала сегментов и мини-зоны")
 	_test_throw_scale()
 	_test_mini_zones()
+	print("== T48: шкала броска")
+	_test_throw_meter()
+	print("== T40: полёт еды")
+	_test_throw_path()
 	_test_economy()
 	print("== T02: выбор зверя (10000 бросков)")
 	_test_roller()
@@ -317,6 +321,56 @@ func _test_throw_scale() -> void:
 	_check("max_distance(276) это 4 * 296 = 1184 м", _near(ThrowScale.max_distance(276), 1184.0))
 	_check("open_zones: 0 м это 1 биом, начало Саванны это 2",
 		ThrowScale.open_zones(0.0) == 1 and ThrowScale.open_zones(float(z1["start_m"])) == 2)
+
+
+# ---------- T48: шкала броска в ThrowMeter ----------
+
+func _test_throw_meter() -> void:
+	var meter := ThrowMeter.new()
+	var z2: Dictionary = ZoneData.ZONES[2]
+	var dmax3: float = float(z2["start_m"]) + 50.0
+	meter.configure(3, dmax3)
+	_check("ThrowMeter: distance_for(0.0) это 0", _near(meter.distance_for(0.0), 0.0))
+	_check("ThrowMeter: distance_for(0.5) это начало Пустыни",
+		_near(meter.distance_for(0.5), float(z2["start_m"])))
+	_check("ThrowMeter: distance_for(1.0) это dmax", _near(meter.distance_for(1.0), dmax3))
+	_check("ThrowMeter: 0.2499 остаётся в Лесу", ZoneData.zone_at(meter.distance_for(0.2499)) == 0)
+	meter.configure(1, 80.0)
+	_check("ThrowMeter: один биом, distance_for(1.0) равно 80", _near(meter.distance_for(1.0), 80.0))
+	var same: bool = true
+	for n: int in [1, 3, 5]:
+		var dmax_n: float = float(ZoneData.ZONES[mini(n, ZoneData.count()) - 1]["start_m"]) + 40.0
+		meter.configure(n, dmax_n)
+		for k in range(11):
+			var v: float = float(k) / 10.0
+			if not _near(meter.distance_for(v), ThrowScale.distance_at(v, n, dmax_n)):
+				same = false
+	_check("ThrowMeter.distance_for совпадает с ThrowScale.distance_at (n = 1, 3, 5)", same)
+	meter.free()
+
+
+# ---------- T40: полёт еды ----------
+
+func _test_throw_path() -> void:
+	_check("arc_height(20) это минимум дуги", _near(ThrowPath.arc_height(20.0), FlightData.ARC_MIN_M))
+	_check("arc_height(2000) это максимум дуги", _near(ThrowPath.arc_height(2000.0), FlightData.ARC_MAX_M))
+	_check("flight_time(0) это база", _near(ThrowPath.flight_time(0.0), FlightData.TIME_BASE_S))
+	_check("flight_time(5000) это максимум", _near(ThrowPath.flight_time(5000.0), FlightData.TIME_MAX_S))
+	var inverse_ok: bool = true
+	for d: float in [10.0, 200.0, 700.0, 1500.0, 2000.0]:
+		if absf(ThrowPath.dist_at_z(-WorldLayout.landing_dist(d)) - d) > 0.5:
+			inverse_ok = false
+	_check("dist_at_z возвращает дальность по точке приземления (допуск 0.5 м)", inverse_ok)
+	_check("luck_at: 0, 50 и 25 из 50",
+		ThrowPath.luck_at(100, 0.0, 50.0) == 0 and ThrowPath.luck_at(100, 50.0, 50.0) == 100
+		and ThrowPath.luck_at(100, 25.0, 50.0) == 50)
+	_check("luck_total: 200 без «Идеально!» и 250 с ним",
+		ThrowPath.luck_total(100.0, 2.0, false) == 200 and ThrowPath.luck_total(100.0, 2.0, true) == 250)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1
+	var roll: Dictionary = SpawnRoller.roll(300.0, 4, [], rng, SpawnRoller.PERFECT_LUCK_MULT)
+	_check("SCORE в полёте и на экране награды это одно число",
+		int(roll["luck"]) == ThrowPath.luck_total(300.0, FoodData.luck(4), true))
 
 
 # ---------- T44: мини-зоны ----------

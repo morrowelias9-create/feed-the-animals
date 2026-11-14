@@ -66,7 +66,7 @@ func begin(dist: float, luck_total: int) -> void:
 	_banner.modulate.a = 1.0
 	_luck_box.modulate.a = 1.0
 	_flash.color.a = 0.0
-	_hint_label.visible = int(Save.data.get("throws", 0)) < HINT_THROWS
+	_hint_label.visible = int(Save.data.get("throws", 0)) < HINT_THROWS and _hint_label.text != "flight_luck_hint"
 	_set_luck(0)
 
 
@@ -136,7 +136,9 @@ func _on_mini(zone: int, mini: int, food_pos: Vector3) -> void:
 
 func _set_luck(n: int) -> void:
 	_luck_shown = n
-	_luck_label.text = Loc.t("flight_luck") % n
+	var fmt: String = Loc.t("flight_luck")
+	# Если ключа ещё нет в Loc.T, Loc.t отдаёт сам ключ: показываем просто число, без ошибки форматирования.
+	_luck_label.text = fmt % n if fmt.contains("%") else str(n)
 
 
 func _pop(peak: float) -> void:

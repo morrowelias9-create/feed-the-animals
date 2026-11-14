@@ -7,6 +7,13 @@ extends RefCounted
 const SIGMA: float = 1.4
 const LAST_WEIGHT_DIV: float = 50.0      # последний пойманный зверь реже примерно в 50 раз
 const PREV_WEIGHT_DIV: float = 2.5       # предпоследний реже в 2.5 раза
+const PERFECT_LUCK_MULT: float = 1.25    # «Идеально!»: множитель удачи SCORE (R3, редакция 3)
+
+
+## Удача броска (SCORE): round(dist * удача еды * множитель «Идеально!»).
+## Единая формула для счётчика в полёте (ThrowPath.luck_total) и экрана награды (roll ниже).
+static func luck_of(dist: float, food_luck: float, luck_mult: float = 1.0) -> int:
+	return int(roundf(maxf(dist, 0.0) * food_luck * maxf(luck_mult, 0.0)))
 
 
 ## Доля пути по зоне: 0 в начале, 1 в конце.
@@ -84,7 +91,7 @@ static func roll(dist: float, food_tier: int, history: Array, rng: RandomNumberG
 		animal = AnimalData.at_rank(zone, 1)
 	var animal_id: String = String(animal.get("id", ""))
 
-	var luck: int = int(roundf(maxf(dist, 0.0) * FoodData.luck(food_tier) * maxf(luck_mult, 0.0)))
+	var luck: int = luck_of(dist, FoodData.luck(food_tier), luck_mult)
 	var lm: float = clampf(float(luck) / float(z["luck_ref"]), 0.6, 2.0)
 	var variant: int = VariantData.roll(rng.randf(), lm)
 
