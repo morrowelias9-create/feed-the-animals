@@ -10,6 +10,7 @@ const STRIPE_W: float = 0.4
 const STRIPE_LEN: float = 1.7
 const AWNING_TILT: float = 0.38          # наклон навеса вперёд (радианы), передний край ниже
 const COUNTER_SIZE: Vector3 = Vector3(2.6, 1.0, 1.0)
+const VENDOR_Z: float = -1.4                 # продавец стоит за прилавком (T42), лицом к игроку
 
 var player: Player
 var throw_controller: Node
@@ -26,6 +27,7 @@ func _ready() -> void:
 	_build_counter()
 	_build_posts()
 	_build_awning()
+	_build_vendor()
 	_build_floor_mark()
 	_build_label()
 	Loc.language_changed.connect(_update_label)
@@ -77,6 +79,16 @@ func _build_awning() -> void:
 		var stripe: MeshInstance3D = _add_box(Vector3(stripe_x, 2.3, -0.05), Vector3(STRIPE_W, 0.08, STRIPE_LEN),
 				red if i % 2 == 0 else white, "Stripe%d" % i)
 		stripe.rotation.x = AWNING_TILT
+
+
+# Продавец-грибочек (T42): стоит на пеньке за прилавком, чуть повёрнут к центру двора.
+func _build_vendor() -> void:
+	var vendor: MushroomVendor = MushroomVendor.new()
+	vendor.name = "Vendor"
+	vendor.variant = MushroomBuilder.VARIANT_ORANGE
+	vendor.yaw = 0.14
+	vendor.position = Vector3(0.0, 0.0, VENDOR_Z)
+	add_child(vendor)
 
 
 # Жёлтая плоская отметка на земле: границы зоны входа 3x3.
