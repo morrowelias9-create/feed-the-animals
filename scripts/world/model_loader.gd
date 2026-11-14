@@ -345,34 +345,57 @@ static func _variant_material(base: Material, variant: int) -> Material:
 	return mat
 
 
-# Мерцание жилы: мелкие вспышки появляются и гаснут в точках гроздей (без движения), до SPARKS_MAX частиц.
+# Круглая мягкая точка для частиц (вместо квадратов): белый диск с плавным краем, строится один раз.
+static var _dot_tex: ImageTexture = null
+
+
+static func _dot_texture() -> ImageTexture:
+	if _dot_tex == null:
+		var n: int = 32
+		var img := Image.create_empty(n, n, false, Image.FORMAT_RGBA8)
+		var c: float = (float(n) - 1.0) * 0.5
+		for y in n:
+			for x in n:
+				var d: float = Vector2(float(x) - c, float(y) - c).length() / c
+				var a: float = pow(clampf(1.0 - d, 0.0, 1.0), 0.7)   # мягкий край, яркая середина
+				img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a))
+		_dot_tex = ImageTexture.create_from_image(img)
+	return _dot_tex
+
+
+# Свечение жилы: маленькие круглые мерцающие точки плавно поднимаются от гроздей и гаснут, в том числе когда зверь
+# стоит на месте. До SPARKS_MAX частиц, без GPUParticles3D. Точки излучения лежат на гроздях (в системе AnimalView).
 static func _make_sparks(variant: int, h: float, points: PackedVector3Array) -> CPUParticles3D:
 	var sparks := CPUParticles3D.new()
 	sparks.name = "Sparks"
 	sparks.amount = mini(SPARKS_MAX, maxi(points.size() * 2, 4))
-	sparks.lifetime = 1.1
-	sparks.lifetime_randomness = 0.5
+	sparks.lifetime = 1.8
+	sparks.lifetime_randomness = 0.4
 	sparks.explosiveness = 0.0
 	sparks.randomness = 1.0
 	sparks.emission_shape = CPUParticles3D.EMISSION_SHAPE_POINTS
 	sparks.emission_points = points
 	sparks.direction = Vector3.UP
-	sparks.spread = 0.0
+	sparks.spread = 35.0
 	sparks.gravity = Vector3.ZERO
-	sparks.initial_velocity_min = 0.0
-	sparks.initial_velocity_max = 0.0
+	sparks.initial_velocity_min = h * 1.2
+	sparks.initial_velocity_max = h * 2.4
 	var quad := QuadMesh.new()
-	var q: float = clampf(h * 0.9, 0.04, 0.3)
+	var q: float = clampf(h * 0.55, 0.03, 0.18)
 	quad.size = Vector2(q, q)
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.albedo_texture = _dot_texture()
 	mat.albedo_color = VariantData.spark_color(variant)
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.disable_receive_shadows = true
 	quad.material = mat
 	sparks.mesh = quad
 	var twinkle := Curve.new()
 	twinkle.add_point(Vector2(0.0, 0.0))
-	twinkle.add_point(Vector2(0.5, 1.0))
+	twinkle.add_point(Vector2(0.3, 1.0))
 	twinkle.add_point(Vector2(1.0, 0.0))
 	sparks.scale_amount_curve = twinkle
 	sparks.emitting = true

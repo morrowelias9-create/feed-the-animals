@@ -239,6 +239,8 @@ func _animate(delta: float) -> void:
 	var rot_basis: Basis = Basis.from_euler(Vector3(pitch, yaw, roll))
 	var scale_basis: Basis = Basis.from_scale(Vector3(squash_xz, stretch, squash_xz))
 	_model.transform = Transform3D(rot_basis * scale_basis, Vector3(0.0, off_y, 0.0)) * _model_base
+	if _fx != null and is_instance_valid(_fx):
+		_fx.position.y = off_y   # декор мутации подпрыгивает вместе с телом
 	if not _parts.is_empty():
 		_animate_parts(amp)
 
@@ -324,7 +326,7 @@ func _wave_basis(axis: String, angle: float) -> Basis:
 func _rebuild_fx() -> void:
 	if _fx != null and is_instance_valid(_fx):
 		_fx.queue_free()
-	_fx = ModelLoader.make_variant_fx(variant, _size_m)
+	_fx = ModelLoader.make_variant_fx(variant, _size_m, AABB(), _model, _model_base, animal_id)
 	add_child(_fx)
 
 

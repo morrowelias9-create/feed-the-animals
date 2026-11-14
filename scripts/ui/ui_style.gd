@@ -12,8 +12,8 @@ const COLOR_STRENGTH: Color = Color("#4DB8FF")
 const COLOR_MONEY: Color = Color("#55E05A")
 
 const FONT_PATH := "res://assets/ui/fonts/Nunito-Black.ttf"   # единый шрифт интерфейса (Nunito Black, SIL OFL, кириллица)
-const CAPTION_FONT_SIZE: int = 28
-const CAPTION_OUTLINE: int = 8
+const CAPTION_FONT_SIZE: int = 24
+const CAPTION_OUTLINE: int = 7
 
 const BUTTON_SIZE: Vector2 = Vector2(94.0, 94.0)
 const BUTTON_FONT_SIZE: int = 21
