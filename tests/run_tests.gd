@@ -462,25 +462,29 @@ func _test_game_money() -> void:
 	_check("старт: деньги 0", _near(_game.money(), 0.0))
 	_check("spend без денег даёт false", not _game.spend(1.0))
 	_check("buy_food без денег: false, ничего не изменилось",
-		not _game.buy_food(1) and int(_save.data["food_unlocked"]) == 0 and _near(_game.money(), 0.0))
+		not _game.buy_food(1) and int(_save.data["food_unlocked"]) == 0 and _near(_game.money(), 0.0) and _save.data["food_owned"].size() == 0)
 	_check("buy_bar без денег: false", not _game.buy_bar() and int(_save.data["bars_owned"]) == 0)
 	_check("buy_slots без денег: false", not _game.buy_slots() and int(_save.data["slots_level"]) == 0)
 	_game.add_money(-5.0)
 	_check("add_money с отрицательным числом игнорируется", _near(_game.money(), 0.0))
 	_game.add_money(1000.0)
-	_check("buy_food(2) с нарушенным порядком: false, деньги целы",
-		not _game.buy_food(2) and _near(_game.money(), 1000.0) and int(_save.data["food_unlocked"]) == 0)
-	_check("buy_food(1) покупает яблоко за 30", _game.buy_food(1) and _near(_game.money(), 970.0)
-		and int(_save.data["food_unlocked"]) == 1)
-	_check("повторная покупка той же еды: false", not _game.buy_food(1) and _near(_game.money(), 970.0))
+	# T38: теперь можно купить любую доступную еду (зона 0 всегда доступна)
+	_check("buy_food(2) мёдовые соты (зона 0): true, деньги списались",
+		_game.buy_food(2) and _near(_game.money(), 800.0) and int(_save.data["food_unlocked"]) == 2 and _save.data["food_owned"].has(2))
+	_check("buy_food(1) яблоко (зона 0): true, деньги списались",
+		_game.buy_food(1) and _near(_game.money(), 770.0) and int(_save.data["food_unlocked"]) == 2 and _save.data["food_owned"].has(1))
+	_check("повторная покупка той же еды: false", not _game.buy_food(1) and _near(_game.money(), 770.0))
+	# Тьер 3 (пучок травы, зона 1) недоступен — зона закрыта
+	_game.select_food(3)
+	_check("select_food недоступной еды игнорируется", int(_save.data["food_selected"]) == 0)
 	_game.select_food(2)
-	_check("select_food непокупленной еды игнорируется", int(_save.data["food_selected"]) == 0)
+	_check("select_food купленной еды работает", int(_save.data["food_selected"]) == 2)
 	_game.select_food(1)
-	_check("select_food купленной еды работает", int(_save.data["food_selected"]) == 1)
-	_check("spend(60) списывает", _game.spend(60.0) and _near(_game.money(), 910.0))
-	_check("buy_slots за 600: слотов становится 6", _game.buy_slots() and _near(_game.money(), 310.0)
+	_check("select_food другой купленной еды работает", int(_save.data["food_selected"]) == 1)
+	_check("spend(60) списывает", _game.spend(60.0) and _near(_game.money(), 710.0))
+	_check("buy_slots за 600: слотов становится 6", _game.buy_slots() and _near(_game.money(), 110.0)
 		and _game.total_slots() == 6)
-	_check("buy_bar за 1: первый турник куплен, деньги 309", _game.buy_bar() and _near(_game.money(), 309.0)
+	_check("buy_bar за 1: первый турник куплен, деньги 109", _game.buy_bar() and _near(_game.money(), 109.0)
 		and int(_save.data["bars_owned"]) == 1)
 
 
@@ -888,13 +892,14 @@ func _test_shop_logic() -> void:
 	var starter: Dictionary = ShopLogic.grant(s, "starter", 10.0)
 	_check("T24a: starter: следующая еда, следующий турник и 10 минут дохода",
 		bool(starter["food"]) and bool(starter["bar"]) and int(s["food_unlocked"]) == 1 and int(s["bars_owned"]) == 1
-		and _near(float(s["money"]), 6000.0) and _near(float(starter["money"]), 6000.0) and bool(s["starter_claimed"]))
+		and s["food_owned"].has(1) and _near(float(s["money"]), 6000.0) and _near(float(starter["money"]), 6000.0) and bool(s["starter_claimed"]))
 	var again: Dictionary = ShopLogic.grant(s, "starter", 10.0)
 	_check("T24a: starter второй раз не выдаёт бонусы",
 		not bool(again["changed"]) and int(s["food_unlocked"]) == 1 and int(s["bars_owned"]) == 1 and _near(float(s["money"]), 6000.0))
 	var maxed: Dictionary = _save.DEFAULTS.duplicate(true)
 	maxed["food_unlocked"] = FoodData.count() - 1
 	maxed["bars_owned"] = UpgradeData.BARS.size()
+	maxed["food_owned"] = Array(range(FoodData.count()))
 	var maxed_result: Dictionary = ShopLogic.grant(maxed, "starter", 0.0)
 	_check("T24a: starter при всей купленной еде и всех турниках даёт только деньги (минимум $100)",
 		not bool(maxed_result["food"]) and not bool(maxed_result["bar"])

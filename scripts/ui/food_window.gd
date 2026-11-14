@@ -1,12 +1,11 @@
 class_name FoodWindow
 extends WindowBase
-## Окно палатки еды (T15, справочники R3, R4, R6): горизонтальная прокрутка карточек еды.
+## Окно палатки еды (T15, T38, справочники R3, R4, R6): горизонтальная прокрутка карточек еды.
 ## Карточка: иконка (файл assets/ui/icons/food_<id>.png, а пока его нет цветной кружок), название,
 ## «Зона N», цена и кнопка «Купить», «Выбрать» или «Выбрано»; внизу «Целится в: ранг K зоны Z».
-## Купить можно только следующую по порядку (Game.buy_food это проверяет); следующая видна в цвете,
-## дальше идут силуэты с названием «???». Карточки строятся один раз, потом обновляются на месте,
-## поэтому прокрутка не прыгает, когда меняются деньги.
-## До T24a кнопка HUD «Магазин» открывает это же окно.
+## T38: можно купить любую доступную еду (зона разблокирована), порядок свободный.
+## Доступная еда видна в цвете, недоступная (закрытая зона) — силуэты с названием «???».
+## Карточки строятся один раз, потом обновляются на месте, поэтому прокрутка не прыгает, когда меняются деньги.
 
 const CARD_W: float = 220.0
 const ICON_SIZE: float = 120.0
@@ -123,23 +122,23 @@ func _build_card(tier: int) -> void:
 	})
 
 
-# Состояние каждой карточки: куплена, можно купить следующей или силуэт.
+# Состояние каждой карточки: куплена, доступна для покупки или недоступна (зона закрыта).
 func _update_cards() -> void:
-	var unlocked: int = Game.food_unlocked()
 	var selected: int = Game.food_selected()
 	var money: float = Game.money()
 	for tier in _cards.size():
 		var food: Dictionary = FoodData.FOODS[tier]
 		var card: Dictionary = _cards[tier]
-		var owned: bool = tier <= unlocked
-		var is_next: bool = tier == unlocked + 1
-		var shown: bool = owned or is_next
+		var owned: bool = Game.is_food_owned(tier)
+		var available: bool = Game.is_food_available(tier)
+		var can_buy: bool = Game.can_buy_food(tier)
 		var price: float = FoodData.price(tier)
 
-		(card["icon"] as StyleBoxFlat).bg_color = Color.html(String(food["color"])) if shown else COLOR_SILHOUETTE
+		# Иконка и название: цветные если доступна, силуэт если зона закрыта
+		(card["icon"] as StyleBoxFlat).bg_color = Color.html(String(food["color"])) if available else COLOR_SILHOUETTE
 		if card["tex"] != null:
-			(card["tex"] as TextureRect).modulate = Color.WHITE if shown else Color.BLACK
-		(card["name"] as Label).text = Loc.t(String(food["name_key"])) if shown else Loc.t("food_unknown")
+			(card["tex"] as TextureRect).modulate = Color.WHITE if available else Color.BLACK
+		(card["name"] as Label).text = Loc.t(String(food["name_key"])) if available else Loc.t("food_unknown")
 		(card["zone"] as Label).text = Loc.t("food_zone") % (int(food["zone"]) + 1)
 		(card["aims"] as Label).text = Loc.t("food_aims") % [int(food["aim_rank"]), int(food["zone"]) + 1]
 
@@ -148,7 +147,11 @@ func _update_cards() -> void:
 			price_label.text = ""
 		else:
 			price_label.text = NumFmt.money(price)
-			price_label.add_theme_color_override("font_color", UiStyle.COLOR_MONEY if money >= price else COLOR_PRICE_BAD)
+			# Цена зелёная если хватает денег, красная если нет (только для доступной еды)
+			if available:
+				price_label.add_theme_color_override("font_color", UiStyle.COLOR_MONEY if money >= price else COLOR_PRICE_BAD)
+			else:
+				price_label.add_theme_color_override("font_color", COLOR_SUB)
 
 		var button: Button = card["button"] as Button
 		if owned and tier == selected:
@@ -157,9 +160,12 @@ func _update_cards() -> void:
 		elif owned:
 			button.text = Loc.t("food_select")
 			button.disabled = false
+		elif available:
+			button.text = Loc.t("food_buy")
+			button.disabled = not can_buy
 		else:
 			button.text = Loc.t("food_buy")
-			button.disabled = not is_next or money < price
+			button.disabled = true
 
 		var frame: StyleBoxFlat = card["frame"] as StyleBoxFlat
 		var is_selected: bool = owned and tier == selected
@@ -167,25 +173,30 @@ func _update_cards() -> void:
 		frame.set_border_width_all(5 if is_selected else 3)
 
 
-# Прокручивает к карточке, которую можно купить следующей (или к последней, если всё куплено).
+# Прокручивает к первой доступной некупленной еде (или к последней, если всё куплено).
 func _focus_current() -> void:
-	var tier: int = mini(Game.food_unlocked() + 1, _cards.size() - 1)
+	var target_tier: int = _cards.size() - 1
+	for tier in _cards.size():
+		if Game.is_food_available(tier) and not Game.is_food_owned(tier):
+			target_tier = tier
+			break
 	await get_tree().process_frame
 	if is_instance_valid(_scroll):
-		_scroll.ensure_control_visible(_cards[tier]["panel"] as Control)
+		_scroll.ensure_control_visible(_cards[target_tier]["panel"] as Control)
 
 
 func _on_button(tier: int) -> void:
-	var unlocked: int = Game.food_unlocked()
 	var food_name: String = Loc.t(String(FoodData.FOODS[tier]["name_key"]))
-	if tier <= unlocked:
+	if Game.is_food_owned(tier):
 		Game.select_food(tier)
 		show_toast(Loc.t("food_selected_toast") % food_name)
-	elif tier == unlocked + 1:
+	elif Game.is_food_available(tier):
 		if Game.buy_food(tier):
 			show_toast(Loc.t("food_bought_toast") % food_name)
 		else:
 			show_toast(Loc.t("food_no_money"))
+	else:
+		show_toast(Loc.t("food_zone_locked"))
 
 
 func _on_game_changed() -> void:

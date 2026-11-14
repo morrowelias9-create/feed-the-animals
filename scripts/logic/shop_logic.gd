@@ -45,8 +45,14 @@ static func grant(data: Dictionary, product_id: String, income_per_sec: float) -
 		result["changed"] = true
 	if int(product.get("food", 0)) > 0:
 		var unlocked: int = int(data.get("food_unlocked", 0))
+		var owned: Array = data.get("food_owned", [])
 		if unlocked + 1 < FoodData.count():
-			data["food_unlocked"] = unlocked + 1
+			var next_tier: int = unlocked + 1
+			data["food_unlocked"] = next_tier
+			if not owned.has(next_tier):
+				owned.append(next_tier)
+				owned.sort()
+			data["food_owned"] = owned
 			result["food"] = true
 			result["changed"] = true
 	if int(product.get("bar", 0)) > 0:

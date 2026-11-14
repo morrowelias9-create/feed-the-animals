@@ -49,6 +49,9 @@ var _index_pulse_tween: Tween
 var _index_has_reward: bool = false
 var _hint_pulse_tween: Tween            # T19: пульс подсказки внизу (шаг обучения 1)
 var _shop_pulse_tween: Tween            # T19: пульс кнопки «Магазин» (шаг обучения 2)
+# T38: уведомление о доступной покупке еды
+var _food_notice: Label
+var _food_notice_tween: Tween
 
 # CanvasLayer для 2D подписей зверей (над HUD, под модальными окнами)
 var _label_layer: CanvasLayer
@@ -72,6 +75,9 @@ func _ready() -> void:
 		Game.strength_changed.connect(_on_strength_changed)
 	if not Game.boost_changed.is_connected(_on_boost_changed):
 		Game.boost_changed.connect(_on_boost_changed)
+	# T38: уведомление о доступной еде
+	if not Game.food_affordable.is_connected(_on_food_affordable):
+		Game.food_affordable.connect(_on_food_affordable)
 	Loc.language_changed.connect(_on_language_changed)
 
 
@@ -178,6 +184,19 @@ func _on_language_changed() -> void:
 	_update_boost_display()
 
 
+# T38: показывает уведомление о доступной покупке еды.
+func _on_food_affordable(tier: int) -> void:
+	var food_name: String = Loc.t(String(FoodData.FOODS[tier]["name_key"]))
+	var text: String = Loc.t("food_affordable_notice") % food_name
+	_food_notice.text = text
+	_food_notice.modulate.a = 1.0
+	if _food_notice_tween != null and _food_notice_tween.is_valid():
+		_food_notice_tween.kill()
+	_food_notice_tween = create_tween()
+	_food_notice_tween.tween_interval(3.0)  # показываем 3 секунды
+	_food_notice_tween.tween_property(_food_notice, "modulate:a", 0.0, 0.5)
+
+
 ## Возвращает CanvasLayer для 2D подписей зверей.
 func get_label_layer() -> CanvasLayer:
 	return _label_layer
@@ -246,6 +265,16 @@ func _build_texts() -> void:
 	_goal.offset_bottom = 112.0
 	_goal.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_goal)
+
+	# T38: уведомление о доступной покупке еды (верхний центр, под целью)
+	_food_notice = UiStyle.outline_label("", 32, 6, UiStyle.COLOR_MONEY)
+	_food_notice.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_food_notice.offset_top = 120.0
+	_food_notice.offset_bottom = 168.0
+	_food_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_food_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_food_notice.modulate.a = 0.0
+	add_child(_food_notice)
 
 	_hint = UiStyle.outline_label(Loc.t("hint_throw"), 42, 8, UiStyle.COLOR_TEXT)
 	_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)

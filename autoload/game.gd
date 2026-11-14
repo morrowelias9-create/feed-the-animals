@@ -14,6 +14,8 @@ signal xp_changed                # опыт силы изменился (шка�
 signal animal_received(animal: Dictionary, is_new: bool)   # {uid, animal_id, variant, placed}, у сразу проданного ещё sold = 1
 signal boost_changed
 signal notice(key: String, args: Array)      # короткие сообщения игроку
+# T38: уведомление о доступной покупке еды
+signal food_affordable(tier: int)  # денег достаточно для еды tier
 # T23: нужен для показа предупреждения перед межстраничной рекламой (путь Б).
 signal backup_ad_warning_needed
 # T24b: мультиплеер
@@ -214,6 +216,7 @@ func add_money(x: float) -> void:
 		return
 	Save.data["money"] = _f("money") + x
 	money_changed.emit(_f("money"))
+	_check_food_affordability()
 	Save.save_data()
 
 
@@ -239,6 +242,23 @@ func tick(delta: float) -> void:
 	if _money_signal_t >= MONEY_SIGNAL_INTERVAL:
 		_money_signal_t = 0.0
 		money_changed.emit(_f("money"))
+	_check_food_affordability()
+
+
+## T38: проверяет, хватает ли денег на доступную некупленную еду, и эмитит сигнал уведомления.
+## Уведомление показывается один раз на каждый тип еды до покупки.
+func _check_food_affordability() -> void:
+	var money: float = _f("money")
+	var notified: Array = _arr("food_notified")
+	for tier in FoodData.count():
+		if is_food_owned(tier):
+			continue
+		if not is_food_available(tier):
+			continue
+		var price: float = FoodData.price(tier)
+		if money >= price and not notified.has(tier):
+			notified.append(tier)
+			food_affordable.emit(tier)
 
 
 # ---------- Сила ----------
@@ -355,6 +375,7 @@ func add_animal(animal_id: String, variant: int, size: int = 0) -> Dictionary:
 	if sold_money > 0.0:
 		Save.data["money"] = _f("money") + sold_money
 		money_changed.emit(_f("money"))
+		_check_food_affordability()
 
 	_income_dirty = true
 	inventory_changed.emit()
@@ -470,6 +491,7 @@ func sell(uid: int) -> float:
 	Save.data["money"] = _f("money") + price
 	_income_dirty = true
 	money_changed.emit(_f("money"))
+	_check_food_affordability()
 	inventory_changed.emit()
 	Save.save_data()
 	return price
@@ -517,6 +539,7 @@ func sell_extras() -> float:
 		Save.data["money"] = _f("money") + total
 		_income_dirty = true
 		money_changed.emit(_f("money"))
+		_check_food_affordability()
 		inventory_changed.emit()
 		Save.save_data()
 	return total
@@ -568,6 +591,7 @@ func sell_backpack() -> float:
 	if total > 0.0:
 		Save.data["money"] = _f("money") + total
 		money_changed.emit(_f("money"))
+		_check_food_affordability()
 		inventory_changed.emit()
 		Save.save_data()
 	return total
@@ -575,13 +599,50 @@ func sell_backpack() -> float:
 
 # ---------- Покупки ----------
 
-## Покупает еду тира tier, только следующую по порядку. Выбирать её нужно отдельно.
+## T38: проверяет, доступна ли еда для покупки (зона разблокирована достижением дальности).
+## Зона 0 (Лес) всегда доступна. Остальные зоны доступны, если max_reachable_zone >= zone.
+func is_food_available(tier: int) -> bool:
+	if tier < 0 or tier >= FoodData.count():
+		return false
+	var zone: int = FoodData.zone_of(tier)
+	if zone == 0:
+		return true
+	return _get_max_reachable_zone() >= zone
+
+## T38: проверяет, куплена ли еда.
+func is_food_owned(tier: int) -> bool:
+	if tier < 0 or tier >= FoodData.count():
+		return false
+	var owned: Array = _arr("food_owned")
+	return owned.has(tier)
+
+## T38: максимальная зона, достижимая текущей силой (0-4).
+func _get_max_reachable_zone() -> int:
+	var dist: float = GameConfig.DIST_K * float(_i("strength"))
+	return ZoneData.zone_at(dist)
+
+## T38: проверяет, можно ли купить еду (доступна, не куплена, хватает денег).
+func can_buy_food(tier: int) -> bool:
+	if not is_food_available(tier):
+		return false
+	if is_food_owned(tier):
+		return false
+	var price: float = FoodData.price(tier)
+	return _f("money") >= price
+
+## Покупает еду тира tier, если она доступна и хватает денег. Порядок покупки свободный.
 func buy_food(tier: int) -> bool:
-	if tier != _i("food_unlocked") + 1 or tier >= FoodData.count():
+	if not can_buy_food(tier):
 		return false
 	if not _take(float(FoodData.FOODS[tier]["price"])):
 		return false
-	Save.data["food_unlocked"] = tier
+	var owned: Array = _arr("food_owned")
+	if not owned.has(tier):
+		owned.append(tier)
+		owned.sort()
+	var current_max: int = _i("food_unlocked")
+	if tier > current_max:
+		Save.data["food_unlocked"] = tier
 	food_changed.emit()
 	Save.save_data()
 	return true
@@ -589,7 +650,11 @@ func buy_food(tier: int) -> bool:
 
 ## Выбирает купленную еду (влияет на шанс редкости).
 func select_food(tier: int) -> void:
-	if tier < 0 or tier > _i("food_unlocked") or tier == _i("food_selected"):
+	if tier < 0 or tier >= FoodData.count():
+		return
+	if not is_food_owned(tier):
+		return
+	if tier == _i("food_selected"):
 		return
 	Save.data["food_selected"] = tier
 	food_changed.emit()
@@ -639,6 +704,7 @@ func claim_zone_reward(zone: int) -> float:
 	claimed.append(zone)
 	Save.data["money"] = _f("money") + reward
 	money_changed.emit(_f("money"))
+	_check_food_affordability()
 	Save.save_data()
 	return reward
 
@@ -651,6 +717,7 @@ func claim_offline(mult: float = 1.0) -> float:
 	var gain: float = offline_pending * mult
 	Save.data["money"] = _f("money") + gain
 	money_changed.emit(_f("money"))
+	_check_food_affordability()
 	offline_pending = 0.0
 	Save.save_data()
 	return gain
@@ -667,6 +734,7 @@ func grant_purchase(product_id: String, token: String = "") -> Dictionary:
 	if bool(result["changed"]):
 		if float(result["money"]) > 0.0:
 			money_changed.emit(_f("money"))
+			_check_food_affordability()
 		if bool(result["food"]):
 			food_changed.emit()
 		if bool(result["bar"]):

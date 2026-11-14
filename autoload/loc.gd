@@ -159,6 +159,9 @@ const T := {
 	"food_bought_toast": {"ru": "Куплено: %s", "en": "Bought: %s"},
 	"food_selected_toast": {"ru": "Выбрано: %s", "en": "Selected: %s"},
 	"food_no_money": {"ru": "Не хватает денег", "en": "Not enough money"},
+	"food_zone_locked": {"ru": "Зона закрыта", "en": "Zone locked"},
+	# T38: уведомление о доступной покупке еды
+	"food_affordable_notice": {"ru": "Можно купить: %s", "en": "Can buy: %s"},
 
 	# Табличка расширения участка (T16)
 	"expand_capacity": {"ru": "%d > %d", "en": "%d > %d", "tr": "%d > %d"},

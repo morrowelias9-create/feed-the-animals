@@ -70,7 +70,7 @@ func _step_completed(step: int) -> bool:
 		1:
 			return _throws() >= 1
 		2:
-			return int(Save.data.get("food_unlocked", 0)) >= _apple_tier
+			return Game.is_food_owned(_apple_tier)
 		3:
 			return int(Save.data.get("reps", 0)) >= REPS_GOAL
 		4:
@@ -102,7 +102,7 @@ func _update_shop_pulse() -> void:
 	hud.set_shop_pulse(want)
 
 
-# Стрелки: шаг 0 — к линии броска; шаг 2 — к палатке еды (когда хватает денег и яблоко не куплено);
+# Стрелки: шаг 0 — к линии броска; шаг 2 — к палатке еды (когда яблоко доступно для покупки и ещё не куплено);
 # шаг 3 — к диску покупки турника, потом к самому турнику.
 func _update_arrows_target() -> void:
 	if _arrows == null:
@@ -113,7 +113,7 @@ func _update_arrows_target() -> void:
 			_point_arrows(Vector3(center.x, 0.0, center.y))
 		2:
 			# Показываем стрелки к палатке еды, только если яблоко доступно для покупки и ещё не куплено.
-			if int(Save.data.get("food_unlocked", 0)) < _apple_tier and Game.money() >= _apple_price():
+			if Game.is_food_available(_apple_tier) and not Game.is_food_owned(_apple_tier) and Game.money() >= _apple_price():
 				_point_arrows(WorldLayout.food_tent_position())
 			elif _arrows.is_active():
 				_arrows.hide_guide()
