@@ -55,6 +55,7 @@ func _process(delta: float) -> void:
 func start() -> void:
 	_migrate_animals()
 	_migrate_variants()
+	ZoneProgress.ensure_migrated()
 	await _load_remote_config()
 	_loaded = true
 	_income_dirty = true
@@ -247,6 +248,7 @@ func tick(delta: float) -> void:
 
 ## T38: проверяет, хватает ли денег на доступную некупленную еду, и эмитит сигнал уведомления.
 ## Уведомление показывается один раз на каждый тип еды до покупки.
+## Уведомляется только о еде из уже достигнутых зон.
 func _check_food_affordability() -> void:
 	var money: float = _f("money")
 	var notified: Array = _arr("food_notified")
@@ -259,6 +261,7 @@ func _check_food_affordability() -> void:
 		if money >= price and not notified.has(tier):
 			notified.append(tier)
 			food_affordable.emit(tier)
+			return  # только первое уведомление за проверку
 
 
 # ---------- Сила ----------
@@ -599,15 +602,13 @@ func sell_backpack() -> float:
 
 # ---------- Покупки ----------
 
-## T38: проверяет, доступна ли еда для покупки (зона разблокирована достижением дальности).
-## Зона 0 (Лес) всегда доступна. Остальные зоны доступны, если max_reachable_zone >= zone.
+## Проверяет, доступна ли еда для покупки (зона достигнута фактическим броском).
+## Зона 0 (Лес) всегда доступна. Остальные зоны доступны, если игрок реально долетал до них.
 func is_food_available(tier: int) -> bool:
 	if tier < 0 or tier >= FoodData.count():
 		return false
 	var zone: int = FoodData.zone_of(tier)
-	if zone == 0:
-		return true
-	return _get_max_reachable_zone() >= zone
+	return ZoneProgress.has_reached_zone(zone)
 
 ## T38: проверяет, куплена ли еда.
 func is_food_owned(tier: int) -> bool:
@@ -646,6 +647,17 @@ func buy_food(tier: int) -> bool:
 	food_changed.emit()
 	Save.save_data()
 	return true
+
+
+## Регистрирует фактическое достижение зоны при приземлении еды.
+## Вызывается из ThrowController._land().
+## Возвращает true, если прогресс зон изменился (открылась новая зона).
+func record_zone_reached(zone: int) -> bool:
+	var changed: bool = ZoneProgress.record_reached_zone(zone)
+	if changed:
+		food_changed.emit()
+		_check_food_affordability()
+	return changed
 
 
 ## Выбирает купленную еду (влияет на шанс редкости).
