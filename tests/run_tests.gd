@@ -41,6 +41,9 @@ func _run_all() -> void:
 	_test_num_fmt()
 	print("== T02: бросок и экономика")
 	_test_throw_calc()
+	print("== T44: шкала сегментов и мини-зоны")
+	_test_throw_scale()
+	_test_mini_zones()
 	_test_economy()
 	print("== T02: выбор зверя (10000 бросков)")
 	_test_roller()
@@ -148,11 +151,15 @@ func _restore_save(backup: Dictionary) -> void:
 func _test_data() -> void:
 	_check("5 зон", ZoneData.count() == 5)
 	_check("zone_at: 0 м и меньше это зона 0", ZoneData.zone_at(0.0) == 0 and ZoneData.zone_at(-5.0) == 0)
-	_check("zone_at: 119.9 это Лес, 120 это Саванна",
-		ZoneData.zone_at(119.9) == 0 and ZoneData.zone_at(120.0) == 1)
-	_check("zone_at: границы 320, 700, 1100",
-		ZoneData.zone_at(320.0) == 2 and ZoneData.zone_at(700.0) == 3 and ZoneData.zone_at(1100.0) == 4)
-	_check("zone_at: дальше 1400 м это Океан", ZoneData.zone_at(5000.0) == 4)
+	_check("zone_at: 179.9 это Лес, 180 это Саванна",
+		ZoneData.zone_at(179.9) == 0 and ZoneData.zone_at(180.0) == 1)
+	_check("zone_at: границы 480, 1050, 1650",
+		ZoneData.zone_at(480.0) == 2 and ZoneData.zone_at(1050.0) == 3 and ZoneData.zone_at(1650.0) == 4)
+	_check("zone_at: дальше 2100 м это Океан", ZoneData.zone_at(5000.0) == 4)
+	_check("зоны идут подряд: start_m следующей равен end_m предыдущей",
+		_zones_continuous())
+	_check("конец последней зоны равен длине коридора",
+		_near(float(ZoneData.ZONES[ZoneData.count() - 1]["end_m"]), WorldLayout.CORRIDOR_LEN))
 	_check("15 видов еды", FoodData.count() == 15)
 	_check("40 зверей", AnimalData.ANIMALS.size() == 40)
 	var ids: Dictionary = {}
@@ -232,6 +239,133 @@ func _test_throw_calc() -> void:
 		and _near(ThrowCalc.flight_time(10000.0), 3.0))
 
 
+func _zones_continuous() -> bool:
+	for i in range(ZoneData.count() - 1):
+		if not _near(float(ZoneData.ZONES[i]["end_m"]), float(ZoneData.ZONES[i + 1]["start_m"])):
+			return false
+	return true
+
+
+# ---------- T44: шкала сегментов ----------
+
+func _test_throw_scale() -> void:
+	var w1: Array[float] = ThrowScale.segment_widths(1)
+	var w2: Array[float] = ThrowScale.segment_widths(2)
+	var w3: Array[float] = ThrowScale.segment_widths(3)
+	var w4: Array[float] = ThrowScale.segment_widths(4)
+	var w10: Array[float] = ThrowScale.segment_widths(10)
+	_check("segment_widths(1) это [1.0]", w1.size() == 1 and _near(w1[0], 1.0))
+	_check("segment_widths(2) это 0.25 и 0.75", w2.size() == 2 and _near(w2[0], 0.25) and _near(w2[1], 0.75))
+	_check("segment_widths(3) это 0.25, 0.25, 0.5",
+		w3.size() == 3 and _near(w3[0], 0.25) and _near(w3[1], 0.25) and _near(w3[2], 0.5))
+	_check("segment_widths(4) это 0.2, 0.2, 0.2, 0.4",
+		w4.size() == 4 and _near(w4[0], 0.2) and _near(w4[2], 0.2) and _near(w4[3], 0.4))
+	_check("segment_widths(10): девять по 1/11 и последний 2/11",
+		w10.size() == 10 and _near(w10[0], 1.0 / 11.0) and _near(w10[8], 1.0 / 11.0) and _near(w10[9], 2.0 / 11.0))
+	var sums_ok: bool = true
+	for n in range(1, 13):
+		var total: float = 0.0
+		for w in ThrowScale.segment_widths(n):
+			total += w
+		if not _near(total, 1.0, 0.000001):
+			sums_ok = false
+	_check("сумма ширин сегментов равна 1 для n от 1 до 12", sums_ok)
+	_check("n = 0 и n = -3 ведут себя как n = 1",
+		ThrowScale.segment_widths(0) == w1 and ThrowScale.segment_widths(-3) == w1)
+	var st3: Array[float] = ThrowScale.segment_starts(3)
+	_check("segment_starts(3) это 0, 0.25, 0.5",
+		st3.size() == 3 and _near(st3[0], 0.0) and _near(st3[1], 0.25) and _near(st3[2], 0.5))
+	_check("segment_at при n = 3: границы и выход за шкалу",
+		ThrowScale.segment_at(0.0, 3) == 0 and ThrowScale.segment_at(0.249, 3) == 0
+		and ThrowScale.segment_at(0.25, 3) == 1 and ThrowScale.segment_at(0.5, 3) == 2
+		and ThrowScale.segment_at(1.0, 3) == 2 and ThrowScale.segment_at(-1.0, 3) == 0
+		and ThrowScale.segment_at(2.0, 3) == 2 and ThrowScale.segment_at(NAN, 3) == 0)
+	var z0: Dictionary = ZoneData.ZONES[0]
+	var z1: Dictionary = ZoneData.ZONES[1]
+	var z2: Dictionary = ZoneData.ZONES[2]
+	var dmax: float = float(z2["start_m"]) + 50.0
+	_check("distance_at при n = 3: начала сегментов и максимум",
+		_near(ThrowScale.distance_at(0.0, 3, dmax), float(z0["start_m"]))
+		and _near(ThrowScale.distance_at(0.25, 3, dmax), float(z1["start_m"]))
+		and _near(ThrowScale.distance_at(0.5, 3, dmax), float(z2["start_m"]))
+		and _near(ThrowScale.distance_at(1.0, 3, dmax), dmax))
+	_check("distance_at: чуть левее границы остаётся в Лесу",
+		ThrowScale.distance_at(0.2499, 3, dmax) < float(z0["end_m"])
+		and ZoneData.zone_at(ThrowScale.distance_at(0.2499, 3, dmax)) == 0)
+	var monotone: bool = true
+	var in_range: bool = true
+	var prev: float = -1.0
+	for k in range(201):
+		var d: float = ThrowScale.distance_at(float(k) / 200.0, 3, dmax)
+		if d < prev:
+			monotone = false
+		if d < 0.0 or d > dmax + 0.0001:
+			in_range = false
+		prev = d
+	_check("distance_at не убывает и лежит в 0…dmax (n = 3)", monotone and in_range)
+	var forest_max: float = float(z0["end_m"]) * 0.5
+	_check("distance_at(1.0, 1, dmax) равно dmax", _near(ThrowScale.distance_at(1.0, 1, forest_max), forest_max))
+	var mid_ok: bool = true
+	for i in range(4):
+		var starts5: Array[float] = ThrowScale.segment_starts(5)
+		var widths5: Array[float] = ThrowScale.segment_widths(5)
+		var mid: float = starts5[i] + widths5[i] * 0.5
+		if ZoneData.zone_at(ThrowScale.distance_at(mid, 5, 4000.0)) != i:
+			mid_ok = false
+	_check("середина старого сегмента (n = 5) даёт бросок в свой биом", mid_ok)
+	_check("is_perfect(v): 0.95 да, 0.949 нет", ThrowScale.is_perfect(0.95) and not ThrowScale.is_perfect(0.949))
+	_check("max_distance(276) это 4 * 296 = 1184 м", _near(ThrowScale.max_distance(276), 1184.0))
+	_check("open_zones: 0 м это 1 биом, начало Саванны это 2",
+		ThrowScale.open_zones(0.0) == 1 and ThrowScale.open_zones(float(z1["start_m"])) == 2)
+
+
+# ---------- T44: мини-зоны ----------
+
+func _test_mini_zones() -> void:
+	_check("PER_ZONE равно 6, SHADE по числу мини-зон", MiniZoneData.PER_ZONE == 6 and MiniZoneData.SHADE.size() == 6)
+	_check("name_key(0, 0) это mini_forest_1, name_key(4, 5) это mini_ocean_6",
+		MiniZoneData.name_key(0, 0) == "mini_forest_1" and MiniZoneData.name_key(4, 5) == "mini_ocean_6")
+	var idx_ok: bool = true
+	var bounds_ok: bool = true
+	for z in ZoneData.count():
+		var s: float = float(ZoneData.ZONES[z]["start_m"])
+		var e: float = float(ZoneData.ZONES[z]["end_m"])
+		if MiniZoneData.index_at(s) != 0 or MiniZoneData.index_at((s + e) * 0.5) != 3 or MiniZoneData.index_at(e - 0.01) != 5:
+			idx_ok = false
+		if not _near(MiniZoneData.start_m(z, 0), s) or not _near(MiniZoneData.end_m(z, 5), e) \
+				or not _near(MiniZoneData.end_m(z, 2), MiniZoneData.start_m(z, 3)):
+			bounds_ok = false
+	_check("index_at в начале, середине и конце каждой зоны даёт 0, 3, 5", idx_ok)
+	_check("start_m и end_m мини-зон стыкуются и совпадают с границами зоны", bounds_ok)
+	var mono: bool = true
+	var prog_ok: bool = true
+	var prev_g: int = -1
+	var d: float = 0.0
+	while d < float(ZoneData.ZONES[ZoneData.count() - 1]["end_m"]) + 100.0:
+		var g: int = MiniZoneData.global_index(d)
+		if g < prev_g:
+			mono = false
+		prev_g = g
+		var p: float = MiniZoneData.progress_in(d)
+		if p < 0.0 or p > 1.0:
+			prog_ok = false
+		d += 1.7
+	_check("global_index растёт монотонно", mono)
+	_check("progress_in всегда в пределах 0…1", prog_ok)
+	_check("count() равно зонам * 6", MiniZoneData.count() == ZoneData.count() * 6)
+	var loc_ok: bool = true
+	var loc_node: Node = root.get_node_or_null("Loc")
+	if loc_node == null:
+		loc_ok = false
+	else:
+		for z in ZoneData.count():
+			for j in 6:
+				var entry: Variant = loc_node.T.get(MiniZoneData.name_key(z, j), null)
+				if entry == null or String(entry.get("ru", "")) == "" or String(entry.get("en", "")) == "":
+					loc_ok = false
+	_check("все 30 названий мини-зон есть в Loc.T на ru и en", loc_ok)
+
+
 func _test_economy() -> void:
 	_check("income(frog) = 1.0", _near(Economy.income("frog", 0, 0), 1.0))
 	_check("income(bear) = 1.5^7 = 17.086", _near(Economy.income("bear", 0, 0), 17.0859375))
@@ -262,8 +396,13 @@ func _test_economy() -> void:
 	_check("T31: золотая белка с размером 1 ~ 4.67", _near(Economy.income("squirrel", 1, 1), 4.668171301876246))
 
 	_check("xp_needed(1) = 30.75", _near(Economy.xp_needed(1), 30.75))
-	_check("xp_needed(30) = 183.75 (начало Саванны)", _near(Economy.xp_needed(30), 183.75))
-	_check("xp_needed(100) = 1286.25 (начало Пустыни)", _near(Economy.xp_needed(100), 1286.25))
+	# Зона по силе определяется дальностью 4 * сила, границы берём из ZoneData (T45: Саванна с 180 м, Пустыня с 480 м).
+	var s_savanna: int = int(float(ZoneData.ZONES[1]["start_m"]) / GameConfig.DIST_K)
+	var s_desert: int = int(float(ZoneData.ZONES[2]["start_m"]) / GameConfig.DIST_K)
+	_check("xp_needed на силе начала Саванны (45) = 223.125", s_savanna == 45 and _near(Economy.xp_needed(s_savanna), 223.125))
+	_check("xp_needed на силе начала Пустыни (120) = 1470", s_desert == 120 and _near(Economy.xp_needed(s_desert), 1470.0))
+	_check("xp_needed: на силе перед границей зоны ещё множитель предыдущей зоны",
+		_near(Economy.xp_needed(s_savanna - 1), 30.0 * (1.0 + float(s_savanna - 1) / 40.0)))
 	_check("offline_gain(10000, 5) = 18000 (потолок 2 часа, половина дохода)",
 		_near(Economy.offline_gain(10000.0, 5.0), 18000.0))
 	_check("offline_gain(100, 10) = 500", _near(Economy.offline_gain(100.0, 10.0), 500.0))
@@ -294,7 +433,7 @@ func _test_roller() -> void:
 	var big: int = 0
 	var mutated: int = 0
 	for i in n:
-		var res2: Dictionary = SpawnRoller.roll(70.0, 0, [], rng)
+		var res2: Dictionary = SpawnRoller.roll(float(ZoneData.ZONES[0]["luck_ref"]), 0, [], rng)
 		if int(res2["size"]) > 0:
 			big += 1
 		if int(res2["variant"]) != VariantData.NONE:
@@ -306,7 +445,7 @@ func _test_roller() -> void:
 	_check("доля мутаций 14-17% (база 15%)", mut_pct >= 14.0 and mut_pct <= 17.0)
 	_check("сумма базовых шансов мутаций 15%", _near(VariantData.mutation_chance_sum(), 0.15))
 
-	var res3: Dictionary = SpawnRoller.roll(900.0, 10, [], rng)
+	var res3: Dictionary = SpawnRoller.roll(float(ZoneData.ZONES[3]["start_m"]) + 200.0, 10, [], rng)
 	_check("roll возвращает animal_id, variant, size, luck",
 		res3.has("animal_id") and res3.has("variant") and res3.has("size") and res3.has("luck")
 		and not String(res3["animal_id"]).is_empty())

@@ -21,7 +21,7 @@ const THROW_ZONE_Z: float = 3.0          # зона начала прицели�
 
 # Коридор с биомами внизу
 const CORRIDOR_HALF_W: float = 18.0      # ширина 36 м, равна ширине края земли
-const CORRIDOR_LEN: float = 1400.0
+const CORRIDOR_LEN: float = 2100.0
 const CORRIDOR_WALL_T: float = 12.0
 
 # Стены (общие высоты): от дна коридора до верха
