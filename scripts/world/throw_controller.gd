@@ -32,6 +32,7 @@ var hud: Hud
 var carry_controller: Node
 
 var _meter: ThrowMeter
+var _fx: FlightFx                      # T40: плашка биома, счётчик удачи, всплески
 var _food: FoodView
 var _reveal: RevealController
 var _toast: Label3D
@@ -44,6 +45,7 @@ var _land_pos: Vector3 = Vector3.ZERO
 var _dist: float = 0.0
 var _zone: int = 0
 var _perfect: bool = false
+var _flight_luck: int = 0              # T40: итоговая удача броска (то же число, что SCORE)
 
 
 func _ready() -> void:
@@ -59,6 +61,9 @@ func _ready() -> void:
 	toast.modulate = Color.WHITE
 	add_child(toast)
 	_toast = toast
+	_fx = FlightFx.new()
+	_fx.name = "FlightFx"
+	add_child(_fx)
 	_reveal = RevealController.new()
 	_reveal.name = "RevealController"
 	add_child(_reveal)
@@ -87,10 +92,10 @@ func action_pressed() -> void:
 		return
 	if state != STATE_AIMING or player == null or camera_rig == null:
 		return
+	# T48: дальность задаёт сегмент шкалы, на котором остановили ползунок.
 	var v: float = _meter.stop()
-	var eff: int = ThrowCalc.eff_power(Game.strength(), v)
-	var dist: float = ThrowCalc.distance(eff)
-	_perfect = ThrowCalc.is_perfect(ThrowCalc.bonus_of(v))
+	var dist: float = _meter.distance_for(v)
+	_perfect = ThrowScale.is_perfect(v)
 	_zone = ZoneData.zone_at(dist)
 	_dist = dist
 	# Бросок строго вперёд (-Z). Еда падает на землю в точке dist от линии: на краю земли или на пол коридора.
@@ -98,7 +103,8 @@ func action_pressed() -> void:
 	var land_z: float = -minf(WorldLayout.landing_dist(dist), WorldLayout.CORRIDOR_LEN - 12.0)
 	var to: Vector3 = Vector3(clampf(player.position.x, -LAND_X_LIMIT, LAND_X_LIMIT), 0.0, land_z)
 	to.y = WorldLayout.ground_y(to.z)
-	var height: float = clampf(dist * 0.15, 3.0, 60.0)
+	# T40: низкая почти прямая траектория вместо высокой широкой дуги.
+	var height: float = ThrowPath.arc_height(dist)
 	if _food == null:
 		_food = FoodView.new()
 		_food.name = "Food"
@@ -106,9 +112,11 @@ func action_pressed() -> void:
 	_food.visible = true
 	_food.scale = Vector3.ONE
 	_food.rotation = Vector3.ZERO
-	_food.launch_arc(from, to, height, ThrowCalc.flight_time(dist))
+	_food.launch_arc(from, to, height, ThrowPath.flight_time(dist))
 	_food.set_color(_food_color())
-	_food.set_food(int(Save.data.get("food_selected", 0)))   # T27b: модель еды вместо шарика
+	var food_idx: int = int(Save.data.get("food_selected", 0))
+	_food.set_food(food_idx)   # T27b: модель еды вместо шарика
+	_flight_luck = ThrowPath.luck_total(dist, _food_luck(food_idx), _perfect)
 	camera_rig.follow_food(_food)
 	player.avatar.play_throw()
 	state = STATE_THROWING
@@ -139,10 +147,13 @@ func _process(delta: float) -> void:
 			if _throw_t >= THROW_ANIM_S:
 				_throw_t = 0.0
 				state = STATE_FLIGHT
+				_fx.begin(_dist, _flight_luck)
 		STATE_FLIGHT:
 			hud.set_flight(true)
-			if _food != null and _food.is_landed():
-				_land()
+			if _food != null:
+				_fx.update(_food.global_position, delta)
+				if _food.is_landed():
+					_land()
 		STATE_LANDED:
 			_landed_t += delta
 			if _landed_t >= LANDED_S:
@@ -206,6 +217,9 @@ func _enter_aiming() -> void:
 	state = STATE_AIMING
 	_lock_player()
 	hud.set_mode(false)
+	# T48: число сегментов равно числу открытых биомов, правый сегмент это максимальная дальность.
+	var dmax: float = ThrowScale.max_distance(Game.strength())
+	_meter.configure(ThrowScale.open_zones(dmax), dmax)
 	_meter.start()
 	state_changed.emit(state)
 
@@ -289,6 +303,7 @@ func _land() -> void:
 	Game.record_zone_reached(zone)
 	_set_toast(true, dist)
 	_spawn_land_fx(position)
+	_fx.finish(position, zone, perfect)
 	landed.emit(dist, zone, perfect, position)
 	state = STATE_LANDED
 
@@ -299,7 +314,9 @@ func _set_toast(show: bool, dist: float = 0.0) -> void:
 	_toast.visible = show
 	_toast_t = 0.0
 	if show:
-		_toast.text = Loc.t("land_toast") % int(dist)
+		var mini: int = MiniZoneData.index_at(dist)
+		var toast_zone: int = ZoneData.zone_at(dist)
+		_toast.text = Loc.t("land_toast") % int(dist) + "\n" + Loc.t(MiniZoneData.name_key(toast_zone, mini))   # T40: мини-зона второй строкой
 		_toast.position = _land_pos + Vector3(0.0, TOAST_UP, 0.0)
 
 
@@ -325,6 +342,12 @@ func _spawn_land_fx(position: Vector3) -> void:
 	particles.emitting = true
 	# Одноразовый эффект убирается сам, иначе узлов становится больше с каждым броском.
 	get_tree().create_timer(1.0).timeout.connect(particles.queue_free)
+
+
+# Удача выбранной еды из FoodData (R3, редакция 3: luck = round(dist * food.luck * 1.25 за «Идеально!»)).
+func _food_luck(idx: int) -> float:
+	var food: Dictionary = FoodData.FOODS[clampi(idx, 0, FoodData.FOODS.size() - 1)]
+	return float(food.get("luck", 1.0))
 
 
 func _food_color() -> Color:
