@@ -8,6 +8,9 @@ const BOX_W: float = 320.0
 const TITLE_FONT: int = 28
 const TITLE_OUTLINE: int = 6
 const BAR_H: float = 14.0
+const LUCK_FONT: int = 20
+const LUCK_BAR_H: float = 10.0
+const LUCK_COLOR: Color = Color(1.0, 0.82, 0.25)
 const BAR_BACK: Color = Color(0.0, 0.0, 0.0, 0.55)
 const ANNOUNCE_TOP: float = 124.0          # под подсказкой цели (она занимает 64…112)
 const ANNOUNCE_FONT: int = 46
@@ -19,6 +22,11 @@ const FADE_OUT_S: float = 0.4
 var _box: VBoxContainer
 var _title: Label
 var _bar: Control
+var _luck_bar: Control
+var _luck_title: Label
+var _luck_fill: float = 0.0
+var _luck_ready: bool = false
+var _luck_style: StyleBoxFlat
 var _announce: VBoxContainer
 var _announce_name: Label
 var _announce_reward: Label
@@ -56,6 +64,20 @@ func _ready() -> void:
 	_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_bar.draw.connect(_draw_bar)
 	box.add_child(_bar)
+	# Шкала «до джекпота»: заполняется каждым броском, когда почти полная, следующий бросок джекпот.
+	_luck_title = UiStyle.outline_label("", LUCK_FONT, 5, UiStyle.COLOR_TEXT)
+	_luck_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_luck_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(_luck_title)
+	_luck_bar = Control.new()
+	_luck_bar.custom_minimum_size = Vector2(BOX_W, LUCK_BAR_H)
+	_luck_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_luck_bar.draw.connect(_draw_luck_bar)
+	box.add_child(_luck_bar)
+	_luck_title.visible = RollData.SHOW_JACKPOT_METER
+	_luck_bar.visible = RollData.SHOW_JACKPOT_METER
+	_luck_style = StyleBoxFlat.new()
+	_luck_style.set_corner_radius_all(int(LUCK_BAR_H / 2.0))
 
 	_announce = VBoxContainer.new()
 	_announce.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -75,7 +97,9 @@ func _ready() -> void:
 
 	Game.mini_zone_reached.connect(_on_mini_zone_reached)
 	Loc.language_changed.connect(_refresh)
+	Game.luck_state_changed.connect(_refresh_luck)
 	_refresh()
+	_refresh_luck()
 
 
 ## Скрывает строку и полосу слева вверху в режиме прицеливания; плашка «Новая местность» остаётся (она нужна в полёте).
@@ -117,3 +141,20 @@ func _on_mini_zone_reached(zone: int, index: int, reward: float) -> void:
 	_tween.tween_property(_announce, "modulate:a", 0.0, FADE_OUT_S)
 	_tween.tween_callback(func() -> void: _announce.visible = false)
 
+
+
+func _refresh_luck() -> void:
+	var prog: Dictionary = Game.jackpot_progress()
+	_luck_ready = bool(prog["ready"])
+	_luck_fill = clampf(float(prog["count"]) / float(prog["target"]), 0.0, 1.0)
+	_luck_title.text = Loc.t("luck_bar_ready") if _luck_ready else Loc.t("luck_bar_title")
+	_luck_title.add_theme_color_override("font_color", LUCK_COLOR if _luck_ready else UiStyle.COLOR_TEXT)
+	_luck_bar.queue_redraw()
+
+
+func _draw_luck_bar() -> void:
+	var full: Rect2 = Rect2(Vector2.ZERO, _luck_bar.size)
+	_luck_bar.draw_style_box(_back_style, full)
+	var w: float = maxf(_luck_bar.size.x * _luck_fill, LUCK_BAR_H)
+	_luck_style.bg_color = LUCK_COLOR
+	_luck_bar.draw_style_box(_luck_style, Rect2(Vector2.ZERO, Vector2(minf(w, _luck_bar.size.x), _luck_bar.size.y)))

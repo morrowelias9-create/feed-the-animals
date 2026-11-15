@@ -37,6 +37,8 @@ const T := {
 	"variant_ruby": {"ru": "Рубин", "en": "Ruby"},
 	"variant_rainbow": {"ru": "Радуга", "en": "Rainbow"},
 	"reveal_luck": {"ru": "Удача!", "en": "Lucky!"},
+	"luck_bar_title": {"ru": "До джекпота", "en": "Jackpot meter"},
+	"luck_bar_ready": {"ru": "Следующий бросок: джекпот!", "en": "Next throw: jackpot!"},
 	"reveal_score": {"ru": "SCORE %d", "en": "SCORE %d"},
 	"reveal_tap": {"ru": "Нажмите, чтобы продолжить", "en": "Tap to continue"},
 	"reveal_size": {"ru": "Размер: %s x%s", "en": "Size: %s x%s", "tr": "Boyut: %s x%s"},

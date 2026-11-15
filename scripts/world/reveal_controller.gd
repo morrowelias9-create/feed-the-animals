@@ -74,6 +74,7 @@ var _side: Vector3 = Vector3(-1.0, 0.0, 0.0)  # с какой стороны к�
 var _stop: Vector3 = Vector3.ZERO       # где стоит зверь рядом с едой
 var _view: AnimalView
 var _food: Node3D
+var _jackpot: bool = false        # этот бросок джекпот (внутренняя страховка): игроку показывается как обычная «Удача!»
 
 var _pb_paws_pos: Vector3 = Vector3.ZERO       # кадр «лапы»
 var _pb_paws_target: Vector3 = Vector3.ZERO
@@ -116,10 +117,8 @@ func start(zone: int, dist: float, land_pos: Vector3, food: Node3D, perfect: boo
 	_camera_rig = throw_controller.camera_rig if throw_controller != null else null
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
-	var history: Array = []
-	if Save.data.get("catch_history", []) is Array:
-		history = Save.data["catch_history"]
-	var roll: Dictionary = SpawnRoller.roll(dist, int(Save.data.get("food_selected", 0)), history, rng, _luck_mult(perfect))
+	var roll: Dictionary = Game.roll_catch(dist, int(Save.data.get("food_selected", 0)), rng, _luck_mult(perfect))
+	_jackpot = bool(roll.get("jackpot", false))
 	_animal_id = String(roll["animal_id"])
 	if _animal_id.is_empty():
 		_animal_id = "frog"
@@ -386,7 +385,7 @@ func _enter_result() -> void:
 	var is_new: bool = not found.has(_animal_id)
 	Game.add_animal(_animal_id, _variant, _size_step)
 	_view.set_variant(_variant, _income)
-	var lucky: bool = _final_size > 0 or _variant != VariantData.NONE or _rarity >= 3
+	var lucky: bool = _final_size > 0 or _variant != VariantData.NONE or _rarity >= 3 or _jackpot
 	if _variant != VariantData.NONE:
 		_overlay.flash(0.6)
 	_overlay.show_result({
@@ -396,6 +395,7 @@ func _enter_result() -> void:
 		"rarity": _rarity,
 		"income": _income,
 		"lucky": lucky,
+		"jackpot": _jackpot,
 		"size_step": _final_size,
 		"is_new": is_new,
 	})

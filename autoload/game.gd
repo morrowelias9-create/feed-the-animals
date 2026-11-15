@@ -7,6 +7,7 @@ extends Node
 signal money_changed(value: float)
 signal strength_changed(value: int)
 signal inventory_changed          # список зверей или их размещение изменились
+signal luck_state_changed         # обновились счётчики джекпота (шкала «до джекпота»)
 signal slots_changed
 signal food_changed               # куплена или выбрана еда
 signal bar_changed               # куплен турник
@@ -326,6 +327,40 @@ func init_mini_zone() -> void:
 		return
 	Save.data["mini_reached"] = MiniZoneData.global_index(float(_i("best_throw")))
 	Save.save_data()
+
+
+## Гарантия редкого зверя при входе в мини-зону: в старом сохранении уже пройденные мини-зоны не дают её.
+func _init_rare_mini() -> void:
+	if int(Save.data.get("rare_mini", -1)) < 0:
+		Save.data["rare_mini"] = maxi(int(Save.data.get("mini_reached", 0)), 0)
+
+
+
+## Бросок выбора зверя со страховкой, джекпотом и гарантией входа в мини-зону. Обновляет и сохраняет счётчики.
+## Результат как у SpawnRoller.roll, плюс «jackpot».
+func roll_catch(dist: float, food_tier: int, rng: RandomNumberGenerator, luck_mult: float = 1.0) -> Dictionary:
+	_init_rare_mini()
+	var st: Dictionary = {}
+	for key in ["pity_mid", "pity_high", "jackpot_count", "jackpot_at", "rare_mini"]:
+		st[key] = int(Save.data.get(key, 0))
+	LuckPity.ensure(st, rng)
+	var mini: int = MiniZoneData.global_index(dist)
+	var jackpot: bool = LuckPity.is_jackpot(st, mini)
+	var res: Dictionary = SpawnRoller.roll(dist, food_tier, _arr("catch_history"), rng, luck_mult,
+		{"state": st, "jackpot": jackpot, "found": _arr("found")})
+	LuckPity.after_roll(st, int(res.get("rank", 1)), jackpot, mini, rng)
+	for key in st:
+		Save.data[key] = st[key]
+	Save.save_data()
+	luck_state_changed.emit()
+	return res
+
+
+## Для шкалы «до удачи»: {count, target, ready} (ready это следующий бросок джекпот).
+func jackpot_progress() -> Dictionary:
+	var target: int = maxi(_i("jackpot_at"), 1)
+	var count: int = _i("jackpot_count")
+	return {"count": count, "target": target, "ready": count + 1 >= target}
 
 
 ## T46: вызывается каждый кадр полёта еды с текущей дальностью (метры от линии). Когда еда физически залетает

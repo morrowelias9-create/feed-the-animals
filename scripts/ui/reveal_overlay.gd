@@ -247,7 +247,7 @@ func show_result(info: Dictionary) -> void:
 	var rarity: int = int(info.get("rarity", 0))
 	var rarity_color: Color = AnimalData.rarity_color(rarity)
 	_result_on = true
-	_title.text = Loc.t("reveal_luck")
+	_title.text = Loc.t("reveal_luck")   # джекпот игроку не называем: для него это просто удача
 	_title.visible = bool(info.get("lucky", false))
 	_rays.visible = _title.visible
 	_rays.color = RAY_COLOR if variant != VariantData.NONE else rarity_color

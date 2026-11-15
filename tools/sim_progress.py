@@ -64,21 +64,65 @@ def mut_mult(rng, lm):
     return 1.0
 
 
-def roll(rng, dist, fi, hist):
+# Выбор зверя: те же числа, что scripts/data/roll_data.gd и scripts/logic/spawn_roller.gd
+SIGMA = 1.5
+CENTER_START, CENTER_START_SLOPE, CENTER_END, CENTER_END_SLOPE = 2.55, 0.10, 4.15, 0.10
+OLD_CENTER_START, OLD_CENTER_END = 1.4, 2.4
+LM_RAW_MIN, LM_RAW_MAX, LM_MIN, LM_MAX = 0.6, 2.0, 0.85, 1.35
+
+
+def rank_center(zone, fz, aim, f):
+    if fz < zone:
+        return OLD_CENTER_START + (OLD_CENTER_END - OLD_CENTER_START) * f
+    a = aim if fz == zone else 8
+    cs = CENTER_START + CENTER_START_SLOPE * (a - 5)
+    ce = CENTER_END + CENTER_END_SLOPE * (a - 5)
+    return cs + (ce - cs) * f
+
+
+def luck_mult(luck, zone):
+    raw = min(max(luck / LUCK_REF[zone], LM_RAW_MIN), LM_RAW_MAX)
+    return LM_MIN + (LM_MAX - LM_MIN) * (raw - LM_RAW_MIN) / (LM_RAW_MAX - LM_RAW_MIN)
+
+
+PITY_MID_RANK, PITY_MID_K, PITY_HIGH_RANK, PITY_HIGH_K = 4, 0.12, 6, 0.03
+JACKPOT_MIN, JACKPOT_MAX, JACKPOT_RANK_START, JACKPOT_RANK_END, JACKPOT_UPPER_WEIGHT = 25, 35, 4.0, 7.0, 0.5
+NEW_SPECIES_MULT = 2.5
+
+
+def roll(rng, dist, fi, hist, st=None, found=None):
     zone = zone_at(dist)
     f = min(max((dist - ZONE_START[zone]) / (ZONE_END[zone] - ZONE_START[zone]), 0.0), 1.0)
-    cap = 4 if f < 1 / 3 else (6 if f < 2 / 3 else 8)
+    mini = zone * 6 + min(5, int(f * 6))
+    if st is None:
+        st = {"pity_mid": 0, "pity_high": 0, "count": 0, "at": rng.randint(JACKPOT_MIN, JACKPOT_MAX), "rare_mini": mini}
+    if st["at"] <= 0:
+        st["at"] = rng.randint(JACKPOT_MIN, JACKPOT_MAX)
+    jackpot = mini > st["rare_mini"] or st["count"] + 1 >= st["at"]
+    jlow = min(max(round(JACKPOT_RANK_START + (JACKPOT_RANK_END - JACKPOT_RANK_START) * f), 1), 7)
     fz, aim, _, _ = FOODS[fi]
-    aim = aim if fz == zone else (1 if fz < zone else 8)
+    center = rank_center(zone, fz, aim, f)
     ws = []
-    for r in range(1, cap + 1):
-        w = 2.718281828459045 ** (-((r - aim) ** 2) / (2 * 1.4 ** 2))
+    for r in range(1, 9):
+        w = 2.718281828459045 ** (-((r - center) ** 2) / (2 * SIGMA ** 2))
+        ar = 1.0
         aid = (zone, r)
         if hist and hist[-1] == aid:
-            w /= 50
+            ar /= 50
         if len(hist) >= 2 and hist[-2] == aid:
-            w /= 2.5
+            ar /= 2.5
+        if jackpot:
+            w = ar * (1.0 if r == jlow else (JACKPOT_UPPER_WEIGHT if r == jlow + 1 else 0.0))
+        else:
+            w *= ar
+            if r >= PITY_MID_RANK:
+                w *= 1 + PITY_MID_K * st["pity_mid"]
+            if r >= PITY_HIGH_RANK:
+                w *= 1 + PITY_HIGH_K * st["pity_high"]
+        if found is not None and (zone, r) not in found:
+            w *= NEW_SPECIES_MULT
         ws.append(w)
+    cap = 8
     pick, acc, chosen = rng.random() * sum(ws), 0.0, cap
     for i, w in enumerate(ws):
         acc += w
@@ -86,10 +130,19 @@ def roll(rng, dist, fi, hist):
             chosen = i + 1
             break
     hist.append((zone, chosen))
+    st["rare_mini"] = max(st["rare_mini"], mini)
+    if jackpot:
+        st["count"], st["at"], st["pity_mid"], st["pity_high"] = 0, rng.randint(JACKPOT_MIN, JACKPOT_MAX), 0, 0
+    else:
+        st["count"] += 1
+        st["pity_mid"] = 0 if chosen >= PITY_MID_RANK else st["pity_mid"] + 1
+        st["pity_high"] = 0 if chosen >= PITY_HIGH_RANK else st["pity_high"] + 1
+    if found is not None:
+        found.add((zone, chosen))
     if len(hist) > 2:
         hist.pop(0)
     luck = round(dist * FOODS[fi][2])
-    lm = min(max(luck / LUCK_REF[zone], 0.6), 2.0)
+    lm = luck_mult(luck, zone)
     m = mut_mult(rng, lm)
     size, p = 0, SIZE_P0 * lm
     while size < SIZE_MAX and rng.random() < p:
@@ -112,6 +165,8 @@ class Sim:
         self.bar, self.food, self.slot_level = -1, 0, 0     # турников нет, пока не куплен первый ($1)
         self.owned = []
         self.hist = []
+        self.pst = {"pity_mid": 0, "pity_high": 0, "count": 0, "at": self.rng.randint(JACKPOT_MIN, JACKPOT_MAX), "rare_mini": 0}
+        self.found = set()
         self.max_zone = 0
         self.marks = {}
         self.sold_total = 0.0
@@ -172,7 +227,7 @@ class Sim:
                     if z > self.max_zone:
                         self.max_zone = z
                         self.mark(f"зона {ZONE_NAMES[z]} открыта броском")
-                    self.owned.append(roll(self.rng, dist, self.best_food(), self.hist))
+                    self.owned.append(roll(self.rng, dist, self.best_food(), self.hist, self.pst, self.found))
                     # лишние: игрок нажимает «продать лишних» (ранг 1-4 без мутаций и размера), остальное хранится;
                     # при переполнении 60 худший продаётся автоматически
                     if self.sell:

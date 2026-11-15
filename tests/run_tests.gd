@@ -62,6 +62,8 @@ func _run_all() -> void:
 	_test_game_xp_and_zone()
 	print("== T46: мини-зоны, награда за вход")
 	_test_mini_zone_game()
+	print("== Баланс: страховка и джекпот")
+	_test_luck_pity()
 	_test_game_limit()
 	print("== T11: загон игрока")
 	_test_slot_manager()
@@ -486,10 +488,41 @@ func _test_roller() -> void:
 		var res: Dictionary = SpawnRoller.roll(20.0, 2, [], rng)
 		if int(res["zone"]) != 0:
 			zone_ok = false
-		if int(res["rank"]) > 4:
+		if int(res["rank"]) < 1 or int(res["rank"]) > 8:
 			cap_ok = false
-	_check("передняя треть Леса: 10000 бросков, зверь всегда из зоны 0", zone_ok)
-	_check("передняя треть Леса: ранг никогда выше 4", cap_ok)
+	_check("начало Леса: 10000 бросков, зверь всегда из зоны 0", zone_ok)
+	_check("начало Леса: ранг всегда в пределах 1-8", cap_ok)
+	# Ровная редкость: центр колокола растёт по биому плавно, без ступеней, и зависит от еды.
+	var center_ok: bool = true
+	var prev_c: float = -1.0
+	for i in 21:
+		var cc: float = SpawnRoller.rank_center(0, 2, float(i) / 20.0)
+		if cc < prev_c or (prev_c >= 0.0 and cc - prev_c > 0.2):
+			center_ok = false
+		prev_c = cc
+	_check("центр колокола рангов растёт по биому плавно (шаг не больше 0.2 на 5 % пути)", center_ok)
+	_check("лучшая еда биома даёт центр выше, чем худшая, а еда прошлой зоны ниже всех",
+		SpawnRoller.rank_center(0, 2, 0.5) > SpawnRoller.rank_center(0, 0, 0.5)
+		and SpawnRoller.rank_center(1, 2, 0.5) < SpawnRoller.rank_center(1, 3, 0.5))
+	var lm_ok: bool = true
+	for zz in ZoneData.count():
+		for lk in [0.0, 50.0, 500.0, 5000.0, 1.0e9]:
+			var lmv: float = SpawnRoller.luck_mult_of(lk, zz)
+			if lmv < RollData.LM_MIN - 0.0001 or lmv > RollData.LM_MAX + 0.0001:
+				lm_ok = false
+	_check("множитель удачи lm всегда в узком диапазоне LM_MIN…LM_MAX", lm_ok)
+	var share_lo: float = 0.0
+	var share_hi: float = 0.0
+	var n2: int = 4000
+	for i in n2:
+		if int(SpawnRoller.roll(18.0, 2, [], rng)["rank"]) >= 6:
+			share_lo += 1.0
+		if int(SpawnRoller.roll(172.0, 2, [], rng)["rank"]) >= 6:
+			share_hi += 1.0
+	share_lo /= float(n2)
+	share_hi /= float(n2)
+	_check("соты: ранги 6+ в начале Леса редки (до 12 %), в конце умеренны (15–40 %), не лавина",
+		share_lo < 0.12 and share_hi > 0.15 and share_hi < 0.40)
 
 	_check("вес последнего пойманного делится на 50", _near(SpawnRoller.anti_repeat_mult(0, 1, ["frog"]), 0.02))
 	_check("вес предпоследнего делится на 2.5", _near(SpawnRoller.anti_repeat_mult(0, 1, ["frog", "bear"]), 0.4))
@@ -1567,3 +1600,80 @@ func _test_reveal_camera() -> void:
 		RevealCamera.full_cam_height(10000.0) <= RevealCamera.FULL_CAM_HEIGHT_MAX + 0.0001)
 	_check("T35: дистанция кадра растёт вместе с высотой модели",
 		RevealCamera.full_distance(bear_h, 0.1) > RevealCamera.full_distance(rabbit_h, 0.1))
+
+
+# Страховка от невезения, джекпот, гарантия входа в мини-зону, вес новых видов.
+func _test_luck_pity() -> void:
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 424242
+	var st: Dictionary = {"pity_mid": 0, "pity_high": 0, "jackpot_count": 0, "jackpot_at": 0, "rare_mini": 0}
+	LuckPity.ensure(st, rng)
+	_check("порог джекпота выбирается в пределах 25–35", int(st["jackpot_at"]) >= RollData.JACKPOT_MIN and int(st["jackpot_at"]) <= RollData.JACKPOT_MAX)
+	# Серия бросков на одной дальности: джекпот не реже 35 бросков и не чаще 25.
+	var gaps: Array[int] = []
+	var last: int = 0
+	var hist: Array = []
+	for i in 600:
+		LuckPity.ensure(st, rng)
+		var jp: bool = LuckPity.is_jackpot(st, 0)
+		var res: Dictionary = SpawnRoller.roll(100.0, 2, hist, rng, 1.0, {"state": st, "jackpot": jp, "found": []})
+		hist = [res["animal_id"]]
+		if jp:
+			gaps.append(i - last)
+			last = i
+			# Джекпот: ранг только из двух разрешённых для этого места биома.
+			var low: int = LuckPity.jackpot_rank(SpawnRoller.zone_fraction(100.0, 0))
+			if int(res["rank"]) != low and int(res["rank"]) != low + 1:
+				gaps.append(-999)
+		LuckPity.after_roll(st, int(res["rank"]), jp, 0, rng)
+	var gap_ok: bool = gaps.size() >= 15
+	for g in gaps:
+		if g < RollData.JACKPOT_MIN or g > RollData.JACKPOT_MAX:
+			gap_ok = false
+	# Первый интервал считается от нуля, поэтому допускаем его без нижней границы.
+	_check("джекпот каждые 25–35 бросков, ранг джекпота из двух разрешённых", gap_ok or (gaps.size() >= 15 and _gaps_ok_after_first(gaps)))
+	# Гарантия: бросок в мини-зону дальше прежней всегда джекпот.
+	var st2: Dictionary = {"pity_mid": 0, "pity_high": 0, "jackpot_count": 0, "jackpot_at": 30, "rare_mini": 2}
+	_check("бросок в новую мини-зону это джекпот, в прежнюю нет", LuckPity.is_jackpot(st2, 3) and not LuckPity.is_jackpot(st2, 2))
+	LuckPity.after_roll(st2, 6, true, 3, rng)
+	_check("после джекпота счётчики сброшены, rare_mini = мини-зона броска",
+		int(st2["jackpot_count"]) == 0 and int(st2["pity_mid"]) == 0 and int(st2["rare_mini"]) == 3)
+	# Серия без находок заряжает вес высоких рангов, находка сбрасывает.
+	var st3: Dictionary = {"pity_mid": 0, "pity_high": 0, "jackpot_count": 0, "jackpot_at": 30, "rare_mini": 0}
+	for i in 5:
+		LuckPity.after_roll(st3, 1, false, 0, rng)
+	_check("5 пустых бросков: серия 5, вес ранга 4+ вырос, ранга 1-3 нет",
+		int(st3["pity_mid"]) == 5 and LuckPity.weight_mult(st3, 4) > 1.5 and _near(LuckPity.weight_mult(st3, 2), 1.0))
+	LuckPity.after_roll(st3, 5, false, 0, rng)
+	_check("находка ранга 4+ сбрасывает серию средних", int(st3["pity_mid"]) == 0 and int(st3["pity_high"]) == 6)
+	# Новые виды выпадают чаще: сравниваем долю лисы (ранг 4) при пустом Индексе и при найденной лисе.
+	var rng2: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng2.seed = 99
+	var fox_new: int = 0
+	var fox_old: int = 0
+	for i in 4000:
+		if String(SpawnRoller.roll(50.0, 0, [], rng2, 1.0, {"found": []})["animal_id"]) == "fox":
+			fox_new += 1
+		if String(SpawnRoller.roll(50.0, 0, [], rng2, 1.0, {"found": ["fox"]})["animal_id"]) == "fox":
+			fox_old += 1
+	_check("ещё не найденный вид выпадает заметно чаще найденного", fox_new > fox_old * 1.15)
+	# Игра: roll_catch двигает счётчики и сохраняет, гарантия выдаётся при влёте в новую мини-зону.
+	_fresh()
+	var rng3: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng3.seed = 5
+	var before: int = int(_save.data["jackpot_count"])
+	var r1: Dictionary = _game.roll_catch(10.0, 0, rng3)
+	_check("roll_catch: первый бросок в первую мини-зону не джекпот, счётчик вырос, порог выбран",
+		not bool(r1["jackpot"]) and int(_save.data["jackpot_count"]) == before + 1 and int(_save.data["jackpot_at"]) >= RollData.JACKPOT_MIN)
+	var r2: Dictionary = _game.roll_catch(60.0, 0, rng3)   # 60 м это Лес, мини-зона 3 (30 м на зону), дальше прежней
+	_check("roll_catch: бросок в новую мини-зону это джекпот с редким зверем",
+		bool(r2["jackpot"]) and int(r2["rank"]) >= LuckPity.jackpot_rank(SpawnRoller.zone_fraction(60.0, 0)))
+	var prog: Dictionary = _game.jackpot_progress()
+	_check("jackpot_progress: после джекпота счётчик 0, порог 25–35", int(prog["count"]) == 0 and int(prog["target"]) >= 25 and int(prog["target"]) <= 35)
+
+
+func _gaps_ok_after_first(gaps: Array[int]) -> bool:
+	for i in range(1, gaps.size()):
+		if gaps[i] < RollData.JACKPOT_MIN or gaps[i] > RollData.JACKPOT_MAX:
+			return false
+	return true
