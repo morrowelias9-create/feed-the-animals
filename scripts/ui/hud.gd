@@ -74,6 +74,12 @@ func _ready() -> void:
 		Game.strength_changed.connect(_on_strength_changed)
 	if not Game.boost_changed.is_connected(_on_boost_changed):
 		Game.boost_changed.connect(_on_boost_changed)
+	# Доход в HUD должен обновляться при изменении инвентаря (звери размещены/убраны),
+	# смене активного питомца и активации/деактивации буста.
+	if not Game.inventory_changed.is_connected(_on_inventory_changed):
+		Game.inventory_changed.connect(_on_inventory_changed)
+	if not Game.pet_active_changed.is_connected(_on_pet_active_changed):
+		Game.pet_active_changed.connect(_on_pet_active_changed)
 	Loc.language_changed.connect(_on_language_changed)
 
 
@@ -188,6 +194,20 @@ func get_label_layer() -> CanvasLayer:
 # T22: обработчик изменения буста
 func _on_boost_changed() -> void:
 	_update_boost_display()
+	_update_income_display()
+
+
+## Обновляет отображение дохода в секунду (вызывается при изменении инвентаря, питомца, буста).
+func _update_income_display() -> void:
+	set_income_per_sec(Game.income_per_sec())
+
+
+func _on_inventory_changed() -> void:
+	_update_income_display()
+
+
+func _on_pet_active_changed(_pet_id: String) -> void:
+	_update_income_display()
 
 
 func _update_boost_display() -> void:

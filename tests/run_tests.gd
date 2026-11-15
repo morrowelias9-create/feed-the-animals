@@ -911,6 +911,61 @@ func _test_pets() -> void:
 		(_save.data["pets_unlocked"] as Array) == ["forest"])
 	_fresh()
 
+	# T53: проверка соответствия income_per_sec реальному начислению денег.
+	# Ставим 4 медведя (доход 17.0859 каждый), активируем лесного питомца (+5% дохода) и буст x2.
+	_save.data["animals"] = []
+	_save.data["money"] = 1000.0
+	_save.data["boost_until"] = int(Time.get_unix_time_from_system()) + 3600
+	_save.data["pets_unlocked"] = ["forest"]
+	_save.data["pet_active"] = "forest"
+	_save.data["found"] = []
+	for animal in AnimalData.zone_animals(0):
+		_save.data["found"].append(String(animal["id"]))
+	for i in range(4):
+		_game.add_animal("bear", 0, 0)
+	var animals = _game._animals()
+	for i in range(animals.size()):
+		animals[i]["placed"] = 1
+	_game._income_dirty = true
+	var income_displayed: float = _game.income_per_sec()
+	var money_before: float = _game.money()
+	for i in range(100):
+		_game.tick(0.1)
+	var money_after: float = _game.money()
+	var actual_gain: float = money_after - money_before
+	var expected_gain: float = income_displayed * 10.0
+	_check("T53: доход в секунду равен реальному приросту за 10с (питомец + буст)",
+		_near(actual_gain / expected_gain, 1.0, 0.001))
+
+	# Тот же тест без буста.
+	_save.data["boost_until"] = 0
+	_game._income_dirty = true
+	income_displayed = _game.income_per_sec()
+	money_before = _game.money()
+	for i in range(100):
+		_game.tick(0.1)
+	money_after = _game.money()
+	actual_gain = money_after - money_before
+	expected_gain = income_displayed * 10.0
+	_check("T53: доход в секунду равен реальному приросту за 10с (только питомец)",
+		_near(actual_gain / expected_gain, 1.0, 0.001))
+
+	# Тот же тест без питомца, с бустом.
+	_save.data["pet_active"] = ""
+	_save.data["boost_until"] = int(Time.get_unix_time_from_system()) + 3600
+	_game._income_dirty = true
+	income_displayed = _game.income_per_sec()
+	money_before = _game.money()
+	for i in range(100):
+		_game.tick(0.1)
+	money_after = _game.money()
+	actual_gain = money_after - money_before
+	expected_gain = income_displayed * 10.0
+	_check("T53: доход в секунду равен реальному приросту за 10с (только буст)",
+		_near(actual_gain / expected_gain, 1.0, 0.001))
+
+	_fresh()
+
 
 func _test_game_limit() -> void:
 	_fresh()

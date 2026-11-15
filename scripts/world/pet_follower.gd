@@ -1,31 +1,21 @@
 class_name PetFollower
 extends Node3D
-## T53: питомец, который ходит за игроком. Один узел на всю игру: при смене питомца
-## модель заменяется целиком (не в _process), старых узлов не остаётся.
+## T53: питомец, который ходит за игроком. Использует AnimalView для анимации походки
+## (те же режимы движений, те же части модели), а не самописную анимацию.
+## Один узел на всю игру: при смене питомца AnimalView пересоздаётся.
 ## Следует позади и сбоку с плавным отставанием, при телепорте игрока оказывается рядом.
-## Коллизий нет, бросок не перехватывает, подписи над зверем нет (бонус написан над постаментом).
-## Ноги и тело двигаются походкой из AnimalView: у модели нет скелета, поэтому части
-## поворачиваются вокруг суставов готовыми Transform3D, без создания узлов в _process.
+## Коллизий нет, бросок не перехватывает, подписей над зверем нет.
 
 const SIDE: float = 1.15          # смещение вправо от игрока
 const BACK: float = 1.65          # смещение назад (игрок смотрит в -Z)
 const FOLLOW_RATE: float = 6.0    # плавность догоняния
 const TELEPORT_DIST: float = 15.0
 const MOVE_EPS: float = 0.12
-const BOB_H: float = 0.045        # покачивание корпуса при шаге
-const BREATH_H: float = 0.008     # дыхание в покое
-const ANIM_BLEND_PER_S: float = 8.0
 
 var player: Player
 
-var _holder: Node3D
-var _model: Node3D
-var _parts: Array[Dictionary] = []   # {node, role, pivot, axis}; только готовые узлы модели
-var _move: String = "idle"
+var _animal_view: AnimalView
 var _pet_id: String = ""
-var _anim_t: float = 0.0
-var _anim_amp: float = 0.0
-var _yaw: float = 0.0
 
 
 func _ready() -> void:
@@ -34,7 +24,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if _model == null or player == null:
+	if _animal_view == null or player == null:
 		return
 	var target: Vector3 = _target_position()
 	var before: Vector3 = global_position
@@ -53,16 +43,22 @@ func _process(delta: float) -> void:
 	# Разворот по направлению движения; стоя питомец смотрит туда же, куда шёл.
 	if distance > MOVE_EPS:
 		var want_yaw: float = atan2(-to_target.x, -to_target.z)
-		_yaw = lerp_angle(_yaw, want_yaw, clampf(8.0 * delta, 0.0, 1.0))
-		rotation.y = _yaw
+		rotation.y = lerp_angle(rotation.y, want_yaw, clampf(8.0 * delta, 0.0, 1.0))
 
-	# Скорость шага по реальному смещению: плавно включается и гаснет, без скачков на телепорте.
+	# Синхронизируем анимацию AnimalView с реальной скоростью питомца.
+	# Считаем скорость по фактическому смещению за кадр.
 	var moved: float = Vector2(global_position.x - before.x, global_position.z - before.z).length()
-	var speed_k: float = clampf(moved / maxf(delta * 3.0, 0.0001), 0.0, 1.0)
-	_anim_amp = move_toward(_anim_amp, speed_k, delta * ANIM_BLEND_PER_S)
-	_anim_t += delta
-	_animate_body()
-	_animate_parts()
+	var speed: float = moved / maxf(delta, 0.001)
+	# Максимальная скорость игрока = Player.SPEED (7.0). Питомец бежит за ним, так что
+	# нормируем к 7.0: amp = 1.0 когда питомец движется с max скоростью.
+	var max_player_speed: float = 7.0
+	var amp: float = clampf(speed / max_player_speed, 0.0, 1.0)
+	
+	# Передаём амплитуду в AnimalView. _anim_force_run = false, чтобы в покое не шагал на месте.
+	_animal_view._anim_force_run = false
+	_animal_view._anim_amp = move_toward(_animal_view._anim_amp, amp, delta * 10.0)
+	# _anim_t увеличивается в _animate внутри AnimalView (вызывается из его _process).
+	# AnimalView._process работает, мы только управляем _anim_amp.
 
 
 ## true, если модель не видна (нет активного питомца).
@@ -90,149 +86,35 @@ func _apply_active(initial: bool) -> void:
 		return
 	var was_empty: bool = _pet_id == ""
 	_pet_id = id
-	_clear_model()
+	_clear_animal_view()
 	if _pet_id == "":
 		return
 	var pet: Dictionary = PetData.by_id(_pet_id)
 	if pet.is_empty():
 		return
 	var animal_id: String = String(pet["model_animal"])
-	var parts: Node3D = ModelLoader.get_animal_parts(animal_id, PetData.VARIANT, AnimalBuilder.PART_LIGHT)
-	if parts != null:
-		_model = parts
-		_collect_parts(animal_id)
-	else:
-		# Запасной путь для зверей без рецепта: цельная модель без покачивания ног.
-		_model = ModelLoader.get_animal(animal_id, PetData.VARIANT)
-	_model.name = "Pet"
-	# Обёртка задаёт высоту по пояс: масштаб модели уже подогнан под размер зверя,
-	# поэтому уменьшаем всю обёртку целиком и не теряем посадку лап на землю.
-	_holder = Node3D.new()
-	_holder.name = "PetHolder"
-	_holder.scale = Vector3.ONE * (PetData.HEIGHT_M / maxf(ModelLoader.height_of(_model), 0.001))
-	_holder.add_child(_model)
-	add_child(_holder)
-	_move = ModelLoader.move_of(animal_id)
+	_animal_view = AnimalView.new()
+	_animal_view.name = "PetView"
+	add_child(_animal_view)
+	# Настраиваем зверя: обычный вариант, без подписей, режим PART_FULL (до 12 частей, полная анимация).
+	_animal_view.set_creature(animal_id, PetData.VARIANT, 0, 0.0)
+	_animal_view.set_part_mode(AnimalBuilder.PART_FULL)
+	_animal_view.set_signs_visible(false)
+	# Масштабируем AnimalView так, чтобы высота модели стала PetData.HEIGHT_M (по пояс игроку).
+	# AnimalView создаёт модель в натуральном размере, получаем её высоту и считаем коэффициент.
+	var natural_height: float = _animal_view.model_height()
+	if natural_height > 0.001:
+		var scale_k: float = PetData.HEIGHT_M / natural_height
+		_animal_view.scale = Vector3.ONE * scale_k
+	# НЕ включаем set_anim_running(true) — анимация будет управляться через _anim_amp в _process.
+	# Начальная фаза анимации, чтобы стадо не качалось в унисон.
+	_animal_view._anim_t = float(animal_id.hash() % 1000) * 0.01
 	if (initial or was_empty) and player != null:
 		global_position = _target_position()
 
 
-func _clear_model() -> void:
-	_parts.clear()
-	if _holder != null and is_instance_valid(_holder):
-		remove_child(_holder)
-		_holder.queue_free()
-	_holder = null
-	_model = null
-
-
-func _collect_parts(animal_id: String) -> void:
-	var infos: Array = ModelLoader.part_infos(animal_id, AnimalBuilder.PART_LIGHT)
-	for i in mini(infos.size(), _model.get_child_count()):
-		var info: Dictionary = infos[i]
-		_parts.append({
-			"node": _model.get_child(i),
-			"role": String(info["role"]),
-			"pivot": info["pivot"],
-			"axis": String(info["axis"]),
-		})
-
-
-# Покачивание корпуса: при шаге вверх-вниз и лёгкий крен, в покое дыхание.
-func _animate_body() -> void:
-	var w: float = _anim_t * _gait_speed()
-	var bob: float = absf(sin(w)) * BOB_H * _anim_amp
-	var breath: float = sin(_anim_t * 1.8) * BREATH_H * (1.0 - _anim_amp)
-	var pitch: float = 0.0
-	var roll: float = 0.0
-	match _move:
-		"waddle":
-			roll = sin(w) * 0.10 * _anim_amp
-		"trot":
-			pitch = (-0.035 + sin(w) * 0.025) * _anim_amp
-			roll = sin(w * 0.5) * 0.02 * _anim_amp
-		"slither":
-			roll = sin(_anim_t * 7.0) * 0.03 * _anim_amp
-		"swim":
-			pitch = sin(w) * 0.03 * _anim_amp
-	if _holder == null:
-		return
-	_holder.position = Vector3(0.0, bob + breath, 0.0)
-	_holder.rotation = Vector3(pitch, 0.0, roll)
-
-
-# Походка частей (как в AnimalView): диагональные пары ног в противофазе,
-# змеи и плавники двигаются волной. Новых объектов нет, только Transform3D готовых узлов.
-func _animate_parts() -> void:
-	if _parts.is_empty():
-		return
-	var t: float = _anim_t
-	var w: float = t * _gait_speed()
-	var wave_w: float = t * (7.0 if _move == "slither" else 4.0)
-	var wave_amp: float = 0.25 + 0.75 * _anim_amp
-	for p in _parts:
-		var node: Node3D = p["node"] as Node3D
-		if node == null or not is_instance_valid(node):
-			continue
-		var pivot: Vector3 = p["pivot"]
-		var part_basis: Basis = Basis.IDENTITY
-		match String(p["role"]):
-			"leg_a", "leg_fl", "leg_br":
-				part_basis = Basis(Vector3.RIGHT, _leg_angle(w, 1.0, _anim_amp))
-			"leg_b", "leg_fr", "leg_bl":
-				part_basis = Basis(Vector3.RIGHT, _leg_angle(w, -1.0, _anim_amp))
-			"legs":
-				part_basis = Basis(Vector3.RIGHT, _leg_angle(w, 1.0, _anim_amp))
-			"fin_l":
-				part_basis = Basis(Vector3.BACK, -(0.3 + 0.3 * sin(w)) * (0.4 + 0.6 * _anim_amp))
-			"fin_r":
-				part_basis = Basis(Vector3.BACK, (0.3 + 0.3 * sin(w)) * (0.4 + 0.6 * _anim_amp))
-			"head":
-				part_basis = Basis(Vector3.RIGHT, sin(w * 2.0) * 0.1 * _anim_amp + sin(t * 1.4) * 0.04)
-			"tail":
-				part_basis = Basis(Vector3.UP, sin(w * 0.8) * 0.35 * _anim_amp + sin(t * 2.0) * 0.1)
-			"ear_l":
-				part_basis = Basis(Vector3.BACK, sin(w * 1.3) * 0.12 * _anim_amp + sin(t * 1.7) * 0.05)
-			"ear_r":
-				part_basis = Basis(Vector3.BACK, sin(w * 1.3 + 1.5) * 0.12 * _anim_amp + sin(t * 1.7 + 1.0) * 0.05)
-			"wings":
-				var flap: float = 1.0 + maxf(sin(w), 0.0) * 0.45 * _anim_amp
-				part_basis = Basis.from_scale(Vector3(flap, 1.0, 1.0))
-			"wave0":
-				part_basis = _wave_basis(String(p["axis"]), sin(wave_w) * 0.22 * wave_amp)
-			"wave1":
-				part_basis = _wave_basis(String(p["axis"]), sin(wave_w - 1.2) * 0.1 * wave_amp)
-			"wave2":
-				part_basis = _wave_basis(String(p["axis"]), sin(wave_w - 2.4) * 0.3 * wave_amp)
-			_:
-				continue
-		node.transform = Transform3D(part_basis, pivot)
-
-
-func _gait_speed() -> float:
-	match _move:
-		"trot":
-			return 9.0
-		"waddle":
-			return 5.0
-		"hop":
-			return 8.0
-		"swim":
-			return 4.0
-		"slither":
-			return 7.0
-	return 6.0
-
-
-func _leg_angle(w: float, sign_k: float, amp: float) -> float:
-	if _move == "hop":
-		return maxf(sin(w), 0.0) * 0.6 * amp
-	var swing: float = 0.55 if _move == "trot" else (0.4 if _move == "waddle" else 0.3)
-	return sin(w) * sign_k * swing * amp
-
-
-# Поворот части волны: вдоль z (змея) вокруг вертикали, вдоль y (медуза, конёк) вокруг оси z.
-func _wave_basis(axis: String, angle: float) -> Basis:
-	if axis == "y":
-		return Basis(Vector3.BACK, angle)
-	return Basis(Vector3.UP, angle)
+func _clear_animal_view() -> void:
+	if _animal_view != null and is_instance_valid(_animal_view):
+		remove_child(_animal_view)
+		_animal_view.queue_free()
+	_animal_view = null
