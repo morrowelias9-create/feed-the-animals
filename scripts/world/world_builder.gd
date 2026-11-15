@@ -94,7 +94,7 @@ var _textures: Dictionary = {}
 var _env: Environment
 var _sun: DirectionalLight3D
 var _looks: Array[Dictionary] = []      # зона -> небо, туман и свет (Color), без разбора строк в кадре
-var _arch_labels: Dictionary = {}       # зона -> Label3D
+var _floor_mats: Dictionary = {}        # T46: материалы пола с цветом вершин по id зоны
 var _geo: Node3D
 var scenery: SceneryBuilder             # декор биомов и скальные грани стен, хранится для тестов и отладки
 var _noise_sets: Dictionary = {}        # размер -> байты шума для росписи (общие для всех текстур, очищаются после построения)
@@ -112,14 +112,9 @@ func build(parent: Node3D) -> void:
 	_build_walls(geo)
 	_build_scenery(geo)
 	_build_pens(geo)
-	_build_arches(geo)
 	_build_light_and_env(parent)
 	_noise_sets.clear()
 	set_look(0, 0, 0.0)
-	var loc: Node = _loc()
-	var cb: Callable = Callable(self, "_refresh_labels")
-	if loc != null and not loc.is_connected("language_changed", cb):
-		loc.connect("language_changed", cb)
 
 
 ## Небо, туман и цвет света между зонами: t от 0 (зона from_zone) до 1 (зона to_zone).
@@ -187,13 +182,51 @@ func _build_corridor(parent: Node3D) -> void:
 		var z1: float = -WorldLayout.CORRIDOR_LEN
 		if i + 1 < ZoneData.count():
 			z1 = WorldLayout.floor_start_z(i + 1)
-		var length: float = absf(z1 - z0)
 		var data: Dictionary = ZoneData.ZONES[i]
 		var tint: Color = Color.html(String(data["ground"]))
 		# У каждой зоны своя роспись земли; Океан (T17) остаётся бирюзовой «водой» с лёгкой рябью.
-		var mat: Material = _tex_mat("ground_" + String(data["id"]), tint)
-		_plane(parent, Vector2(w, length), Vector3(0.0, -WorldLayout.DROP_H, (z0 + z1) / 2.0),
+		# T46: пол зоны один меш из 6 полос (мини-зоны), яркость полосы задаёт цвет вершин.
+		var mat: Material = _floor_mat(String(data["id"]), tint)
+		_instance(parent, _floor_mesh(i, w, z0, z1), Vector3(0.0, -WorldLayout.DROP_H, (z0 + z1) / 2.0),
 			mat, "Corridor%d" % i)
+
+
+# Материал пола зоны: копия росписи зоны, цвет вершин умножается на цвет (полосы мини-зон разной яркости).
+func _floor_mat(zone_id: String, tint: Color) -> StandardMaterial3D:
+	if _floor_mats.has(zone_id):
+		return _floor_mats[zone_id]
+	var m: StandardMaterial3D = _tex_mat("ground_" + zone_id, tint).duplicate() as StandardMaterial3D
+	m.vertex_color_use_as_albedo = true
+	_floor_mats[zone_id] = m
+	return m
+
+
+# Пол зоны: 6 полос по мини-зонам в одном ArrayMesh. Вершинный цвет это MiniZoneData.SHADE, делённый на максимум
+# (цвет вершины не бывает больше 1, самая светлая полоса сохраняет исходный цвет зоны). Центр меша в середине
+# зоны, z0 и z1 это ближний и дальний края пола (z0 ближе к игроку, то есть больше).
+func _floor_mesh(zone: int, width: float, z0: float, z1: float) -> ArrayMesh:
+	var shade_max: float = 0.0
+	for sh in MiniZoneData.SHADE:
+		shade_max = maxf(shade_max, sh)
+	var mid: float = (z0 + z1) / 2.0
+	var hw: float = width / 2.0
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for j in MiniZoneData.PER_ZONE:
+		var near_z: float = z0 if j == 0 else -MiniZoneData.start_m(zone, j)
+		var far_z: float = z1 if j == MiniZoneData.PER_ZONE - 1 else -MiniZoneData.end_m(zone, j)
+		var k: float = MiniZoneData.SHADE[j] / shade_max
+		var col: Color = Color(k, k, k, 1.0)
+		var a: Vector3 = Vector3(-hw, 0.0, far_z - mid)
+		var b: Vector3 = Vector3(hw, 0.0, far_z - mid)
+		var c: Vector3 = Vector3(hw, 0.0, near_z - mid)
+		var d: Vector3 = Vector3(-hw, 0.0, near_z - mid)
+		# Лицевая сторона по часовой стрелке, если смотреть сверху: a, b, c и a, c, d.
+		for v in [a, b, c, a, c, d]:
+			st.set_normal(Vector3.UP)
+			st.set_color(col)
+			st.add_vertex(v)
+	return st.commit()
 
 
 func _build_walls(parent: Node3D) -> void:
@@ -330,29 +363,6 @@ func _build_pens(parent: Node3D) -> void:
 	_multimesh(parent, "PenPosts", posts, _flat_mat("#8A5A30"))
 
 
-# Арки-перемычки между стенами коридора на границах зон 1-4 (у Леса арки нет).
-func _build_arches(parent: Node3D) -> void:
-	_arch_labels.clear()
-	var w: float = 2.0 * WorldLayout.CORRIDOR_HALF_W
-	for zone in range(1, ZoneData.count()):
-		var zz: float = WorldLayout.arch_z(zone)
-		var tint: String = String(ZoneData.ZONES[zone]["ground"])
-		_box(parent, Vector3(w, WorldLayout.ARCH_BEAM_H, WorldLayout.ARCH_BEAM_T),
-			Vector3(0.0, WorldLayout.ARCH_BEAM_Y, zz), _flat_mat(tint), "ArchBeam%d" % zone)
-		var label: Label3D = Label3D.new()
-		UiStyle.apply_font_3d(label)
-		label.name = "ArchLabel%d" % zone
-		label.pixel_size = 0.02
-		label.font_size = 128
-		label.outline_size = 24
-		label.modulate = Color.WHITE
-		label.outline_modulate = Color(0.0, 0.0, 0.0, 1.0)
-		label.position = Vector3(0.0, WorldLayout.ARCH_BEAM_Y, zz + WorldLayout.ARCH_BEAM_T / 2.0 + 0.1)
-		label.text = _t(String(ZoneData.ZONES[zone]["name_key"]))
-		parent.add_child(label)
-		_arch_labels[zone] = label
-
-
 func _build_light_and_env(parent: Node3D) -> void:
 	var sun: DirectionalLight3D = DirectionalLight3D.new()
 	sun.name = "Sun"
@@ -373,11 +383,6 @@ func _build_light_and_env(parent: Node3D) -> void:
 	we.name = "WorldEnvironment"
 	we.environment = _env
 	parent.add_child(we)
-
-
-func _refresh_labels(_lang: Variant = null) -> void:
-	for zone in _arch_labels:
-		(_arch_labels[zone] as Label3D).text = _t(String(ZoneData.ZONES[int(zone)]["name_key"]))
 
 
 # ---------- Локализация ----------

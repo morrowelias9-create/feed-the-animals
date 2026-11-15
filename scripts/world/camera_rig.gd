@@ -17,6 +17,16 @@ const FOCUS_HEIGHT: float = 1.2
 const FOOD_BACK: float = 10.0
 const FOOD_UP: float = 5.0
 const RETURN_DEFAULT: float = 0.8
+# «Сочность» полёта: камера отстаёт от еды и догоняет мягко, покачивается, крен, поле зрения растёт со скоростью.
+const FLY_FOLLOW: float = 5.0          # скорость догоняния позиции (1/с)
+const FLY_SWAY_X: float = 0.9          # боковое покачивание, м
+const FLY_SWAY_Y: float = 0.35         # вертикальное покачивание, м
+const FLY_ROLL_DEG: float = 2.2        # крен, градусов
+const FLY_FOV_MAX_ADD: float = 18.0    # на сколько градусов шире поле зрения на полной скорости
+const FLY_FOV_SPEED_REF: float = 350.0 # скорость (м/с), при которой расширение полное
+const FLY_FOV_FOLLOW: float = 4.0
+const FLY_LOOK_AHEAD: float = 5.0      # камера смотрит чуть дальше еды по ходу полёта
+const SHAKE_DECAY: float = 5.0
 
 # Чувствительность поворота: градусов на пиксель перетаскивания.
 const DRAG_SENS_DEG: float = 0.25
@@ -37,6 +47,11 @@ var _return_from_pos: Vector3 = Vector3.ZERO
 var _return_from_focus: Vector3 = Vector3.ZERO
 var _return_from_fov: float = FOV
 var _scripted: bool = false
+var _fly_t: float = 0.0
+var _fly_pos: Vector3 = Vector3.ZERO
+var _fly_last_food: Vector3 = Vector3.ZERO
+var _fly_speed: float = 0.0
+var _shake: float = 0.0
 
 
 func _ready() -> void:
@@ -52,6 +67,20 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if camera == null or _scripted:
 		return
+	_update_pose(delta)
+	if _shake > 0.001:
+		_shake = maxf(_shake - SHAKE_DECAY * delta, 0.0)
+		var t: float = Time.get_ticks_msec() * 0.001
+		camera.global_position += Vector3(sin(t * 61.0), cos(t * 53.0), 0.0) * _shake * 0.25
+		camera.rotate_object_local(Vector3(0.0, 0.0, 1.0), deg_to_rad(sin(t * 47.0) * _shake * 1.5))
+
+
+## Короткая тряска и «удар» поля зрения (приземление); amount около 1.0 это заметный толчок.
+func kick(amount: float) -> void:
+	_shake = maxf(_shake, amount)
+
+
+func _update_pose(delta: float) -> void:
 
 	if _return_left > 0.0 and _target != null:
 		_return_left = maxf(_return_left - delta, 0.0)
@@ -66,16 +95,33 @@ func _process(delta: float) -> void:
 		return
 
 	if _food != null and is_instance_valid(_food):
-		var food_pos: Vector3 = _food.global_position
-		camera.global_position = food_pos + Vector3(0.0, FOOD_UP, FOOD_BACK)
-		_look_focus = food_pos
-		camera.look_at(_look_focus, Vector3.UP)
+		_follow_food_pose(delta)
 		return
 
 	if _target != null:
 		camera.global_position = _orbit_position()
 		_look_focus = _focus_position()
 		camera.look_at(_look_focus, Vector3.UP)
+
+
+func _follow_food_pose(delta: float) -> void:
+	var food_pos: Vector3 = _food.global_position
+	_fly_t += delta
+	if delta > 0.0:
+		var inst: float = food_pos.distance_to(_fly_last_food) / delta
+		_fly_speed = lerpf(_fly_speed, inst, 1.0 - exp(-6.0 * delta))
+	_fly_last_food = food_pos
+	var sway := Vector3(sin(_fly_t * 1.3) * FLY_SWAY_X, sin(_fly_t * 2.1) * FLY_SWAY_Y, 0.0)
+	var want: Vector3 = food_pos + Vector3(0.0, FOOD_UP, FOOD_BACK) + sway
+	# Мягко догоняем только по X и Y; по Z камера жёстко за едой, иначе на скорости отставание растёт в десятки метров.
+	var k: float = 1.0 - exp(-FLY_FOLLOW * delta)
+	_fly_pos = Vector3(lerpf(_fly_pos.x, want.x, k), lerpf(_fly_pos.y, want.y, k), want.z)
+	camera.global_position = _fly_pos
+	_look_focus = food_pos + Vector3(0.0, 0.0, -FLY_LOOK_AHEAD)
+	camera.look_at(_look_focus, Vector3.UP)
+	camera.rotate_object_local(Vector3(0.0, 0.0, 1.0), deg_to_rad(sin(_fly_t * 1.7) * FLY_ROLL_DEG))
+	var fov_goal: float = FOV + FLY_FOV_MAX_ADD * clampf(_fly_speed / FLY_FOV_SPEED_REF, 0.0, 1.0)
+	camera.fov = lerpf(camera.fov, fov_goal, 1.0 - exp(-FLY_FOV_FOLLOW * delta))
 
 
 func set_follow_target(target: Node3D) -> void:
@@ -140,6 +186,10 @@ func snap_to_target() -> void:
 func follow_food(node: Node3D) -> void:
 	_food = node
 	_return_left = 0.0
+	_fly_t = 0.0
+	_fly_speed = 0.0
+	_fly_last_food = node.global_position
+	_fly_pos = camera.global_position if camera != null else node.global_position
 
 
 ## Плавно вернуть камеру к текущей цели за duration секунд.

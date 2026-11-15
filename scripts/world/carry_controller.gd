@@ -4,7 +4,6 @@ extends Node3D
 ## Маркер и кнопка «Поставить» работают только пока игрок стоит внутри своего загона; снаружи подсказка зовёт зайти.
 
 const MARKER_RADIUS := 0.8
-const CARRY_MAX_M: float = 1.3          # наибольшая длина зверя в руках, м
 
 var player: Player
 var camera_rig: CameraRig
@@ -192,11 +191,9 @@ func _attach_held(animal: Dictionary) -> void:
 	_held.set_creature(id, variant, AnimalData.rarity_of(id),
 		Economy.income(id, variant, size_step))
 	_held.set_signs_visible(false)
-	# Модель уже подогнана под size_m видa (ModelLoader), поэтому множим только на мутацию размера,
-	# а в руках длинную сторону ограничиваем: слон или лев в 5-7 м не поместится у героя на руках.
-	var base_size_m: float = maxf(float(AnimalData.by_id(id).get("size_m", 1.2)), 0.1)
-	var size_mult: float = SizeData.visual_scale(size_step)
-	_held.scale = Vector3.ONE * minf(size_mult, CARRY_MAX_M / base_size_m)
+	# Модель уже подогнана под size_m видa (ModelLoader), поэтому множим только на мутацию размера:
+	# в руках зверь натурального размера, как в загоне (раньше длину ограничивали и зверь выходил миниатюрным).
+	_held.scale = Vector3.ONE * SizeData.visual_scale(size_step)
 	_held.position = Vector3(0.0, -0.58, -0.05)
 	_held.rotation.x = -1.45
 

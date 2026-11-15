@@ -21,6 +21,7 @@ const DEFAULTS := {
 	"catch_history": [],
 	"found": [],
 	"claimed_zones": [],
+	"mini_reached": -1,       # T46: максимальный сквозной номер мини-зоны, достигнутый дальностью (-1: ещё не задан)
 	"best_throw": 0,
 	"throws": 0,
 	"reps": 0,

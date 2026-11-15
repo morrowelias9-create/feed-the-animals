@@ -47,7 +47,8 @@ func _draw_coin(rect: Rect2) -> void:
 		f = ThemeDB.fallback_font
 	var fs: int = int(r * 1.25)
 	var text_size: Vector2 = f.get_string_size("$", HORIZONTAL_ALIGNMENT_CENTER, -1.0, fs)
-	var pos := Vector2(c.x - text_size.x * 0.5, c.y + f.get_ascent(fs) * 0.5 - text_size.y * 0.02)
+	# «$» поднят выше: раньше сидел ниже центра монеты (сдвиг на 0.24 радиуса вверх)
+	var pos := Vector2(c.x - text_size.x * 0.5, c.y + f.get_ascent(fs) * 0.5 - text_size.y * 0.02 - r * 0.24)
 	draw_string(f, pos + Vector2(0.0, r * 0.04), "$", HORIZONTAL_ALIGNMENT_LEFT, -1.0, fs, Color("#8A5A00"))
 	draw_arc(c, r * 0.72, deg_to_rad(200.0), deg_to_rad(260.0), 10, Color(1.0, 1.0, 1.0, 0.75), maxf(r * 0.1, 1.5), true)
 

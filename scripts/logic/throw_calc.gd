@@ -25,6 +25,6 @@ static func is_perfect(bonus: int) -> bool:
 	return bonus >= GameConfig.BONUS_MAX - 1
 
 
-## Время полёта еды в секундах: clamp(0.9 + dist / 500, 0.9, 3.0).
+## Время полёта еды в секундах: clamp(1.2 + dist / 400, 1.2, 4.0). Дольше прежнего, чтобы успеть насладиться полётом.
 static func flight_time(dist: float) -> float:
-	return clampf(0.9 + dist / 500.0, 0.9, 3.0)
+	return clampf(1.2 + dist / 400.0, 1.2, 4.0)

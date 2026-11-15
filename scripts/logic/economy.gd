@@ -19,11 +19,12 @@ static func sell_price(animal_id: String, variant: int, size: int = 0) -> float:
 	return income(animal_id, variant, size) * GameConfig.SELL_MULT
 
 
-## Опыта до следующего уровня силы: 30 * XP_ZONE_K^zone_of(4*S) * (1 + S / 40).
+## Опыта до следующего уровня силы: 30 * XP_ZONE_MULT[zone_of(4*S)] * (1 + S / 40).
 static func xp_needed(strength: int) -> float:
 	var s: float = float(maxi(strength, 0))
 	var zone: int = ZoneData.zone_at(float(GameConfig.DIST_K) * s)
-	return 30.0 * pow(GameConfig.XP_ZONE_K, float(zone)) * (1.0 + s / 40.0)
+	var mult: float = GameConfig.XP_ZONE_MULT[clampi(zone, 0, GameConfig.XP_ZONE_MULT.size() - 1)]
+	return 30.0 * mult * (1.0 + s / 40.0)
 
 
 ## Оффлайн-доход: min(прошло, OFFLINE_CAP_S) * доход размещённых * OFFLINE_RATE.

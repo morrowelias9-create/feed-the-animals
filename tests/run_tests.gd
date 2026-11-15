@@ -60,6 +60,8 @@ func _run_all() -> void:
 	_test_game_money()
 	_test_game_animals()
 	_test_game_xp_and_zone()
+	print("== T46: мини-зоны, награда за вход")
+	_test_mini_zone_game()
 	_test_game_limit()
 	print("== T11: загон игрока")
 	_test_slot_manager()
@@ -209,9 +211,9 @@ func _test_data() -> void:
 	_check("luck еды растёт от 1.0 до 3.0",
 		_near(FoodData.luck(0), 1.0) and _near(FoodData.luck(14), 3.0)
 		and FoodData.luck(7) > FoodData.luck(1))
-	_check("цены еды из R4: 0, 30, 200, ..., 15T",
+	_check("цены еды (T47): 0, 30, 200, 250K, ..., 5T",
 		_near(FoodData.price(0), 0.0) and _near(FoodData.price(1), 30.0)
-		and _near(FoodData.price(3), 2500.0) and _near(FoodData.price(14), 15000000000000.0))
+		and _near(FoodData.price(3), 250000.0) and _near(FoodData.price(14), 5000000000000.0))
 
 
 func _test_num_fmt() -> void:
@@ -323,7 +325,52 @@ func _test_throw_scale() -> void:
 		ThrowScale.open_zones(0.0) == 1 and ThrowScale.open_zones(float(z1["start_m"])) == 2)
 
 
-# ---------- T48: шкала броска в ThrowMeter ----------
+# ---------- T44: мини-зоны ----------
+
+func _test_mini_zones() -> void:
+	_check("PER_ZONE равно 6, SHADE по числу мини-зон", MiniZoneData.PER_ZONE == 6 and MiniZoneData.SHADE.size() == 6)
+	_check("name_key(0, 0) это mini_forest_1, name_key(4, 5) это mini_ocean_6",
+		MiniZoneData.name_key(0, 0) == "mini_forest_1" and MiniZoneData.name_key(4, 5) == "mini_ocean_6")
+	var idx_ok: bool = true
+	var bounds_ok: bool = true
+	for z in ZoneData.count():
+		var s: float = float(ZoneData.ZONES[z]["start_m"])
+		var e: float = float(ZoneData.ZONES[z]["end_m"])
+		if MiniZoneData.index_at(s) != 0 or MiniZoneData.index_at((s + e) * 0.5) != 3 or MiniZoneData.index_at(e - 0.01) != 5:
+			idx_ok = false
+		if not _near(MiniZoneData.start_m(z, 0), s) or not _near(MiniZoneData.end_m(z, 5), e) \
+				or not _near(MiniZoneData.end_m(z, 2), MiniZoneData.start_m(z, 3)):
+			bounds_ok = false
+	_check("index_at в начале, середине и конце каждой зоны даёт 0, 3, 5", idx_ok)
+	_check("start_m и end_m мини-зон стыкуются и совпадают с границами зоны", bounds_ok)
+	var mono: bool = true
+	var prog_ok: bool = true
+	var prev_g: int = -1
+	var d: float = 0.0
+	while d < float(ZoneData.ZONES[ZoneData.count() - 1]["end_m"]) + 100.0:
+		var g: int = MiniZoneData.global_index(d)
+		if g < prev_g:
+			mono = false
+		prev_g = g
+		var p: float = MiniZoneData.progress_in(d)
+		if p < 0.0 or p > 1.0:
+			prog_ok = false
+		d += 1.7
+	_check("global_index растёт монотонно", mono)
+	_check("progress_in всегда в пределах 0…1", prog_ok)
+	_check("count() равно зонам * 6", MiniZoneData.count() == ZoneData.count() * 6)
+	var loc_ok: bool = true
+	var loc_node: Node = root.get_node_or_null("Loc")
+	if loc_node == null:
+		loc_ok = false
+	else:
+		for z in ZoneData.count():
+			for j in 6:
+				var entry: Variant = loc_node.T.get(MiniZoneData.name_key(z, j), null)
+				if entry == null or String(entry.get("ru", "")) == "" or String(entry.get("en", "")) == "":
+					loc_ok = false
+	_check("все 30 названий мини-зон есть в Loc.T на ru и en", loc_ok)
+
 
 func _test_throw_meter() -> void:
 	var meter := ThrowMeter.new()
@@ -375,50 +422,6 @@ func _test_throw_path() -> void:
 
 # ---------- T44: мини-зоны ----------
 
-func _test_mini_zones() -> void:
-	_check("PER_ZONE равно 6, SHADE по числу мини-зон", MiniZoneData.PER_ZONE == 6 and MiniZoneData.SHADE.size() == 6)
-	_check("name_key(0, 0) это mini_forest_1, name_key(4, 5) это mini_ocean_6",
-		MiniZoneData.name_key(0, 0) == "mini_forest_1" and MiniZoneData.name_key(4, 5) == "mini_ocean_6")
-	var idx_ok: bool = true
-	var bounds_ok: bool = true
-	for z in ZoneData.count():
-		var s: float = float(ZoneData.ZONES[z]["start_m"])
-		var e: float = float(ZoneData.ZONES[z]["end_m"])
-		if MiniZoneData.index_at(s) != 0 or MiniZoneData.index_at((s + e) * 0.5) != 3 or MiniZoneData.index_at(e - 0.01) != 5:
-			idx_ok = false
-		if not _near(MiniZoneData.start_m(z, 0), s) or not _near(MiniZoneData.end_m(z, 5), e) \
-				or not _near(MiniZoneData.end_m(z, 2), MiniZoneData.start_m(z, 3)):
-			bounds_ok = false
-	_check("index_at в начале, середине и конце каждой зоны даёт 0, 3, 5", idx_ok)
-	_check("start_m и end_m мини-зон стыкуются и совпадают с границами зоны", bounds_ok)
-	var mono: bool = true
-	var prog_ok: bool = true
-	var prev_g: int = -1
-	var d: float = 0.0
-	while d < float(ZoneData.ZONES[ZoneData.count() - 1]["end_m"]) + 100.0:
-		var g: int = MiniZoneData.global_index(d)
-		if g < prev_g:
-			mono = false
-		prev_g = g
-		var p: float = MiniZoneData.progress_in(d)
-		if p < 0.0 or p > 1.0:
-			prog_ok = false
-		d += 1.7
-	_check("global_index растёт монотонно", mono)
-	_check("progress_in всегда в пределах 0…1", prog_ok)
-	_check("count() равно зонам * 6", MiniZoneData.count() == ZoneData.count() * 6)
-	var loc_ok: bool = true
-	var loc_node: Node = root.get_node_or_null("Loc")
-	if loc_node == null:
-		loc_ok = false
-	else:
-		for z in ZoneData.count():
-			for j in 6:
-				var entry: Variant = loc_node.T.get(MiniZoneData.name_key(z, j), null)
-				if entry == null or String(entry.get("ru", "")) == "" or String(entry.get("en", "")) == "":
-					loc_ok = false
-	_check("все 30 названий мини-зон есть в Loc.T на ru и en", loc_ok)
-
 
 func _test_economy() -> void:
 	_check("income(frog) = 1.0", _near(Economy.income("frog", 0, 0), 1.0))
@@ -449,14 +452,24 @@ func _test_economy() -> void:
 	# Размер 1 на золотой белке даёт ~4.67 (близко к наблюдаемым 5)
 	_check("T31: золотая белка с размером 1 ~ 4.67", _near(Economy.income("squirrel", 1, 1), 4.668171301876246))
 
-	_check("xp_needed(1) = 30.75", _near(Economy.xp_needed(1), 30.75))
-	# Зона по силе определяется дальностью 4 * сила, границы берём из ZoneData (T45: Саванна с 180 м, Пустыня с 480 м).
-	var s_savanna: int = int(float(ZoneData.ZONES[1]["start_m"]) / GameConfig.DIST_K)
-	var s_desert: int = int(float(ZoneData.ZONES[2]["start_m"]) / GameConfig.DIST_K)
-	_check("xp_needed на силе начала Саванны (45) = 223.125", s_savanna == 45 and _near(Economy.xp_needed(s_savanna), 223.125))
-	_check("xp_needed на силе начала Пустыни (120) = 1470", s_desert == 120 and _near(Economy.xp_needed(s_desert), 1470.0))
-	_check("xp_needed: на силе перед границей зоны ещё множитель предыдущей зоны",
-		_near(Economy.xp_needed(s_savanna - 1), 30.0 * (1.0 + float(s_savanna - 1) / 40.0)))
+	# T47: опыт считается по таблице множителей зон, значения берём из неё, а не из pow.
+	var mults: Array[float] = GameConfig.XP_ZONE_MULT
+	_check("T47: XP_ZONE_MULT по одному числу на зону", mults.size() == ZoneData.count())
+	var mult_up: bool = true
+	for i in range(1, mults.size()):
+		if mults[i] <= mults[i - 1]:
+			mult_up = false
+	_check("T47: множители опыта растут по зонам", mult_up)
+	_check("xp_needed(1) = 30 * mult[0] * (1 + 1/40)", _near(Economy.xp_needed(1), 30.0 * mults[0] * (1.0 + 1.0 / 40.0)))
+	var xp_ok: bool = true
+	for z in ZoneData.count():
+		# Сила на границе зоны: DIST_K * сила = start_m (T45: границы из ZoneData).
+		var s_z: int = ceili(float(ZoneData.ZONES[z]["start_m"]) / GameConfig.DIST_K)
+		if not _near(Economy.xp_needed(s_z), 30.0 * mults[z] * (1.0 + float(s_z) / 40.0)):
+			xp_ok = false
+		if z > 0 and not _near(Economy.xp_needed(s_z - 1), 30.0 * mults[z - 1] * (1.0 + float(s_z - 1) / 40.0)):
+			xp_ok = false
+	_check("T47: xp_needed на силе границ зон берёт множитель своей зоны, перед границей предыдущей", xp_ok)
 	_check("offline_gain(10000, 5) = 18000 (потолок 2 часа, половина дохода)",
 		_near(Economy.offline_gain(10000.0, 5.0), 18000.0))
 	_check("offline_gain(100, 10) = 500", _near(Economy.offline_gain(100.0, 10.0), 500.0))
@@ -644,6 +657,17 @@ func _test_scenery() -> void:
 		and wb_a.scenery.min_abs_x >= SceneryBuilder.CENTER_CLEAR_M - 2.0)
 	_check("света ровно один (Sun)", _count_nodes(a, "DirectionalLight3D") == 1
 		and _count_nodes(a, "OmniLight3D") == 0 and _count_nodes(a, "SpotLight3D") == 0)
+	# T46: пол зоны из 6 полос с цветом вершин (арки с названиями убраны: они были нужны только для разработки).
+	var floors_ok: bool = true
+	for zi in ZoneData.count():
+		var fl: MeshInstance3D = a.get_node_or_null("WorldGeometry/Corridor%d" % zi) as MeshInstance3D
+		if fl == null or fl.mesh == null or not (fl.material_override as StandardMaterial3D).vertex_color_use_as_albedo:
+			floors_ok = false
+			continue
+		var arr: Array = fl.mesh.surface_get_arrays(0)
+		if (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() != 6 * MiniZoneData.PER_ZONE or arr[Mesh.ARRAY_COLOR] == null:
+			floors_ok = false
+	_check("T46: пол каждой зоны это один меш из 6 полос с цветом вершин", floors_ok)
 	a.free()
 	b.free()
 
@@ -729,8 +753,8 @@ func _test_game_animals() -> void:
 
 func _test_game_xp_and_zone() -> void:
 	_fresh()
-	_game.add_xp(31.0)
-	_check("add_xp(31): сила 2, остаток 0.25",
+	_game.add_xp(Economy.xp_needed(1) + 0.25)   # T47: порог первого уровня берём из формулы, а не числом
+	_check("add_xp(порог + 0.25): сила 2, остаток 0.25",
 		int(_save.data["strength"]) == 2 and _near(float(_save.data["strength_xp"]), 0.25, 0.001))
 	_game.add_xp(0.0)
 	_check("add_xp(0) ничего не меняет", int(_save.data["strength"]) == 2)
@@ -745,6 +769,48 @@ func _test_game_xp_and_zone() -> void:
 	_check("повторно награду не дают", _near(_game.claim_zone_reward(0), 0.0))
 	_check("чужую несобранную зону не дают", _near(_game.claim_zone_reward(1), 0.0))
 	_check("зона записана в claimed_zones", (_save.data["claimed_zones"] as Array).size() == 1)
+
+
+func _test_mini_zone_game() -> void:
+	_check("T46: SHADE по числу мини-зон, награда: 120 с дохода, минимум 20 базовых доходов",
+		MiniZoneData.SHADE.size() == MiniZoneData.PER_ZONE
+		and _near(MiniZoneData.entry_reward(0.0, 0), 20.0) and _near(MiniZoneData.entry_reward(0.0, 1), 800.0)
+		and _near(MiniZoneData.entry_reward(1000.0, 1), 120000.0))
+	_check("T46: ключи плашки и подписи есть в Loc.T на ru и en",
+		Loc.T.has("mini_zone_new") and Loc.T.has("zone_progress_fmt")
+		and String(Loc.T["mini_zone_new"].get("ru", "")) != "" and String(Loc.T["zone_progress_fmt"].get("en", "")) != "")
+	_fresh()
+	_check("T46: у новой игры mini_reached = 0 (первая мини-зона), денег нет",
+		int(_save.data["mini_reached"]) == 0 and _near(_game.money(), 0.0))
+	var got: Array = []
+	var on_reached: Callable = func(zone: int, index: int, reward: float) -> void: got.append([zone, index, reward])
+	_game.mini_zone_reached.connect(on_reached)
+	_game.add_xp(500.0)   # сила растёт, но награды за силу нет: мини-зона засчитывается только броском
+	_check("T46: рост силы не даёт награды и не двигает mini_reached", got.is_empty() and int(_save.data["mini_reached"]) == 0
+		and _near(_game.money(), 0.0))
+	_game.report_flight_distance(10.0)
+	_check("T46: полёт в пределах первой мини-зоны ничего не даёт", got.is_empty() and _near(_game.money(), 0.0))
+	_game.report_flight_distance(35.0)   # вторая мини-зона Леса (30…60 м)
+	_check("T46: еда залетела во вторую мини-зону: одна награда 20 и сигнал",
+		got.size() == 1 and int(got[0][0]) == 0 and int(got[0][1]) == 1 and _near(float(got[0][2]), 20.0)
+		and _near(_game.money(), 20.0) and int(_save.data["mini_reached"]) == 1)
+	_game.report_flight_distance(35.0)
+	_game.report_flight_distance(20.0)
+	_check("T46: повторно и ближе награды нет", got.size() == 1 and _near(_game.money(), 20.0))
+	# Прыжок через несколько мини-зон за один кадр даёт одну награду, зона считается по базе достигнутой зоны.
+	_game.report_flight_distance(float(ZoneData.ZONES[2]["start_m"]) + 1.0)   # начало Пустыни
+	_check("T46: прыжок через несколько мини-зон даёт одну награду 20 * base(Пустыня)",
+		got.size() == 2 and int(got[1][0]) == 2 and int(got[1][1]) == 0 and _near(float(got[1][2]), 32000.0)
+		and int(_save.data["mini_reached"]) == 12)
+	_game.mini_zone_reached.disconnect(on_reached)
+	# Старое сохранение: поле -1 восстанавливается по рекордному броску без награды.
+	_fresh()
+	_save.data["best_throw"] = 320   # Саванна, мини-зона 3 (сквозной номер 8)
+	_save.data["mini_reached"] = -1
+	_game.init_mini_zone()
+	_check("T46: при mini_reached = -1 номер берётся из best_throw без награды", int(_save.data["mini_reached"]) == 8
+		and _near(_game.money(), 0.0))
+	_fresh()
 
 
 func _test_game_limit() -> void:

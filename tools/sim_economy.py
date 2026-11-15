@@ -33,7 +33,7 @@ INV_LIMIT = 60
 START_SLOTS = 4
 SLOTS_PER_LEVEL = 2
 SLOT_PRICES = [600, 8_000, 120_000, 2_000_000, 30_000_000, 500_000_000, 8_000_000_000, 120_000_000_000]
-XP_ZONE_K = 3.5
+XP_ZONE_MULT = [3.3, 3.4, 5.9, 13.7, 28.1]   # как GameConfig.XP_ZONE_MULT (T47)
 
 # Звери: id по рангу 1-8 в каждой зоне (для анти-повтора важен только id).
 ANIMAL_IDS = [
@@ -84,7 +84,7 @@ def zone_at(dist: float) -> int:
 
 def xp_needed(strength: int) -> float:
     zone = zone_at(4 * strength)
-    return 30 * XP_ZONE_K ** zone * (1 + strength / 40)
+    return 30 * XP_ZONE_MULT[min(zone, len(XP_ZONE_MULT) - 1)] * (1 + strength / 40)
 
 
 def size_mult(size: int) -> float:

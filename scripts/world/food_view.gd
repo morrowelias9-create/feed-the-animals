@@ -7,6 +7,7 @@ extends Node3D
 
 const BALL_RADIUS: float = 0.2
 const TUMBLE_SPEED: Vector3 = Vector3(5.5, 0.0, 3.0)   # кручение модели в полёте, рад/с по X и Z
+const FLIGHT_SCALE: float = 2.2                         # в полёте еда крупнее, чтобы её было видно издалека
 const FACE_SPEED: float = 10.0                          # как быстро модель на земле поворачивается к камере
 
 var _color: Color = Color.WHITE
@@ -20,6 +21,8 @@ var _landed: bool = false
 var _food_index: int = -1        # какая еда показана (индекс покупки), -1 пока показан шар
 var _model: Node3D
 var _ball: MeshInstance3D
+var _trail: CPUParticles3D
+var _spin_axis: Vector3 = Vector3.RIGHT
 
 
 func _ready() -> void:
@@ -37,6 +40,8 @@ func _ready() -> void:
 	mi.position.y = BALL_RADIUS   # шарик лежит на земле, а не вкопан: узел стоит в точке земли
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+	_trail = FxFactory.make_trail(_color)
+	add_child(_trail)
 	if _food_index >= 0:
 		_apply_food()
 
@@ -50,6 +55,10 @@ func launch_arc(from: Vector3, to: Vector3, height: float, duration: float) -> v
 	_duration = maxf(duration, 0.001)
 	_landed = false
 	global_position = from
+	_spin_axis = Vector3(randf_range(0.6, 1.0), randf_range(-0.3, 0.3), randf_range(0.3, 0.8)).normalized()
+	if _trail != null:
+		_trail.restart()
+		_trail.emitting = true
 	if _model != null and is_instance_valid(_model):
 		_model.quaternion = Quaternion.IDENTITY
 
@@ -78,8 +87,17 @@ func _apply_food() -> void:
 
 func set_color(color: Color) -> void:
 	_color = color
+	if _trail != null:
+		_trail.color_ramp = FxFactory.make_trail(color).color_ramp
 	if _mat != null:
 		_mat.albedo_color = _color
+
+
+## Длина модели еды в метрах (0, если показан шарик). Нужна кинематике получения, чтобы еда не была крупнее зверя.
+func food_size_m() -> float:
+	if _model != null and is_instance_valid(_model):
+		return FoodModels.size_of(_model)
+	return 0.0
 
 
 func is_landed() -> bool:
@@ -96,16 +114,19 @@ func _process(delta: float) -> void:
 		if _landed:
 			_face_camera(delta)
 		elif _duration > 0.0:
-			_model.rotate_object_local(Vector3.RIGHT, TUMBLE_SPEED.x * delta)
-			_model.rotate_object_local(Vector3.FORWARD, TUMBLE_SPEED.z * delta)
+			_model.rotate_object_local(_spin_axis, TUMBLE_SPEED.length() * delta)
 	if _duration <= 0.0 or _landed:
 		return
 	_time = minf(_time + delta, _duration)
 	var k: float = _time / _duration
 	global_position = _from.lerp(_to, k) + Vector3(0.0, 4.0 * _height * k * (1.0 - k), 0.0)
+	scale = Vector3.ONE * lerpf(FLIGHT_SCALE, 1.0, smoothstep(0.85, 1.0, k))
 	if _time >= _duration:
 		_landed = true
 		global_position = _to
+		scale = Vector3.ONE
+		if _trail != null:
+			_trail.emitting = false
 
 
 # На земле модель не крутится: плавно разворачивается вокруг вертикали передней стороной (+Z) к камере.

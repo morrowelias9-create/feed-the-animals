@@ -5,7 +5,11 @@ extends RefCounted
 
 const PER_ZONE: int = 6
 ## Множитель яркости пола по номеру мини-зоны 0…5 (чередование светлее/темнее, чтобы границы были заметны).
-const SHADE: Array[float] = [1.00, 0.94, 1.06, 0.96, 1.08, 0.98]
+## Не больше 1.0: цвет вершины пола не бывает ярче исходного цвета зоны (T46).
+const SHADE: Array[float] = [1.00, 0.70, 0.90, 0.76, 1.00, 0.83]
+## Награда за первое достижение мини-зоны: столько секунд дохода, но не меньше ENTRY_REWARD_MIN_K базовых доходов зоны.
+const ENTRY_REWARD_S: float = 120.0
+const ENTRY_REWARD_MIN_K: float = 20.0
 
 
 ## Ключ названия мини-зоны в Loc.T: mini_<id зоны>_<номер 1…6>.
@@ -65,3 +69,10 @@ static func end_m(zone: int, index: int) -> float:
 ## Всего мини-зон в мире.
 static func count() -> int:
 	return ZoneData.count() * PER_ZONE
+
+
+## Награда за вход в новую мини-зону зоны zone при доходе income в секунду.
+static func entry_reward(income: float, zone: int) -> float:
+	var z: int = clampi(zone, 0, ZoneData.count() - 1)
+	var base_income: float = float(ZoneData.ZONES[z]["base"])
+	return maxf(maxf(income, 0.0) * ENTRY_REWARD_S, ENTRY_REWARD_MIN_K * base_income)

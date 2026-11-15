@@ -14,8 +14,9 @@ enum Phase { NONE, EYES, PULLBACK, RESULT, EXIT }
 
 const EYE_START_DIST: float = 12.0      # стартовая дистанция камеры фазы A
 const EYE_END_DIST: float = 1.2         # камера подходит к еде на столько
-const EYE_PITCH_FROM: float = -25.0
-const EYE_PITCH_TO: float = -40.0
+const FOOD_MAX_SHARE: float = 0.4       # длина еды не больше этой доли длины зверя
+const EYE_PITCH_FROM: float = -6.0     # взгляд почти по горизонту, на еду, а не в пол
+const EYE_PITCH_TO: float = -14.0
 const EYE_FOV_FROM: float = 75.0
 const EYE_FOV_TO: float = 68.0
 const BOB_AMP_M: float = 0.12           # покачивание шагов по вертикали (для крупных пропорционально размеру)
@@ -137,6 +138,7 @@ func start(zone: int, dist: float, land_pos: Vector3, food: Node3D, perfect: boo
 	_land = land_pos
 	_floor_y = land_pos.y
 	_food = food
+	_fit_food_to_animal()
 	_compute_layout()
 	_finished = false
 	if _camera_rig == null:
@@ -192,6 +194,18 @@ func _final_view_scale() -> float:
 ## Множитель удачи SCORE: «Идеально!» даёт 1.25, обычный бросок — 1.0 (число в SpawnRoller, одна формула на игру).
 static func _luck_mult(perfect: bool) -> float:
 	return SpawnRoller.PERFECT_LUCK_MULT if perfect else 1.0
+
+
+## Еда не должна быть крупнее зверя: если длина еды больше доли длины зверя, уменьшаем её на время кинематики
+## (в _cleanup масштаб возвращается). Доля FOOD_MAX_SHARE подобрана так, чтобы зверь выглядел крупнее еды.
+func _fit_food_to_animal() -> void:
+	if _food == null or not is_instance_valid(_food) or not _food.has_method("food_size_m"):
+		return
+	var food_m: float = float(_food.call("food_size_m"))
+	if food_m <= 0.001:
+		return
+	var limit: float = maxf(_size, 0.3) * FOOD_MAX_SHARE
+	_food.scale = Vector3.ONE * minf(1.0, limit / food_m)
 
 
 func _process(delta: float) -> void:

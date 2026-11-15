@@ -13,6 +13,7 @@ signal bar_changed               # куплен турник
 signal xp_changed                # опыт силы изменился (шкала тренировки, T14)
 signal animal_received(animal: Dictionary, is_new: bool)   # {uid, animal_id, variant, placed}, у сразу проданного ещё sold = 1
 signal boost_changed
+signal mini_zone_reached(zone: int, index: int, reward: float)   # T46: дальность впервые вошла в новую мини-зону
 signal notice(key: String, args: Array)      # короткие сообщения игроку
 # T38: уведомление о доступной покупке еды
 signal food_affordable(tier: int)  # денег достаточно для еды tier
@@ -56,6 +57,7 @@ func start() -> void:
 	_migrate_animals()
 	_migrate_variants()
 	ZoneProgress.ensure_migrated()
+	init_mini_zone()
 	await _load_remote_config()
 	_loaded = true
 	_income_dirty = true
@@ -316,6 +318,34 @@ func _apply_xp(x: float) -> bool:
 		strength_changed.emit(s)
 	xp_changed.emit()
 	return leveled
+
+
+## T46: старое сохранение (поле -1): мини-зона, достигнутая рекордным броском, запоминается без награды.
+func init_mini_zone() -> void:
+	if int(Save.data.get("mini_reached", -1)) >= 0:
+		return
+	Save.data["mini_reached"] = MiniZoneData.global_index(float(_i("best_throw")))
+	Save.save_data()
+
+
+## T46: вызывается каждый кадр полёта еды с текущей дальностью (метры от линии). Когда еда физически залетает
+## в мини-зону дальше всех прежних, игрок получает награду и сигнал `mini_zone_reached`. Несколько мини-зон
+## за один кадр дают одну награду. Мини-зоны, которые игрок только мог бы достать силой, не считаются.
+@warning_ignore("integer_division")
+func report_flight_distance(dist: float) -> void:
+	var g: int = MiniZoneData.global_index(dist)
+	var reached: int = int(Save.data.get("mini_reached", -1))
+	if reached < 0:
+		init_mini_zone()
+		reached = int(Save.data.get("mini_reached", 0))
+	if g <= reached:
+		return
+	var zone: int = g / MiniZoneData.PER_ZONE
+	var index: int = g % MiniZoneData.PER_ZONE
+	var reward: float = MiniZoneData.entry_reward(income_per_sec(), zone)
+	Save.data["mini_reached"] = g
+	add_money(reward)
+	mini_zone_reached.emit(zone, index, reward)
 
 
 # ---------- Звери ----------

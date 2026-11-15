@@ -36,6 +36,7 @@ var _money_row: Control
 var _income_row: Control
 var _buttons: Dictionary = {}
 var throw_meter: ThrowMeter
+var mini_zone_bar: MiniZoneBar          # T46: зона и мини-зона слева вверху, плашка «Новая местность»
 var xp_bar: XpBar                       # T14: шкала «Уровень N x/y», видна только на тренировке
 var _bonus: Button                      # T14: пузырь-бонус 96x96 в экранных координатах
 var _boost_button: Button               # T22: кнопка буста x2 за рекламу
@@ -63,6 +64,7 @@ func _ready() -> void:
 	_build_texts()
 	_build_stats()
 	_build_buttons()
+	_build_mini_zone_bar()
 	_build_throw_meter()
 	_build_training()
 	_refresh()
@@ -564,6 +566,12 @@ func _update_index_button_pulse() -> void:
 		index_button.scale = Vector2(1.0, 1.0)
 
 
+func _build_mini_zone_bar() -> void:
+	mini_zone_bar = MiniZoneBar.new()
+	mini_zone_bar.name = "MiniZoneBar"
+	add_child(mini_zone_bar)
+
+
 func _build_throw_meter() -> void:
 	throw_meter = ThrowMeter.new()
 	throw_meter.name = "ThrowMeter"
@@ -574,6 +582,8 @@ func _build_throw_meter() -> void:
 
 func _update_visibility() -> void:
 	_goal.visible = _full
+	if mini_zone_bar != null:
+		mini_zone_bar.set_shown(_full)
 	_hint.visible = not _full and _hint_visible
 	_strength_row.visible = true
 	_money_row.visible = _full

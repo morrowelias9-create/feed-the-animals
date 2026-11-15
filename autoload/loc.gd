@@ -105,6 +105,8 @@ const T := {
 	"mini_ocean_4": {"ru": "Течение", "en": "The Current"},
 	"mini_ocean_5": {"ru": "Глубина", "en": "The Deep"},
 	"mini_ocean_6": {"ru": "Бездна", "en": "The Abyss"},
+	"mini_zone_new": {"ru": "Новая местность: %s", "en": "New area: %s"},
+	"zone_progress_fmt": {"ru": "%s · %s %d/6", "en": "%s · %s %d/6"},
 
 	# Еда
 	"food_carrot": {"ru": "Морковь", "en": "Carrot", "tr": "Havuç"},

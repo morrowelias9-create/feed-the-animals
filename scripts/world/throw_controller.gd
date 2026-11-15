@@ -152,6 +152,7 @@ func _process(delta: float) -> void:
 			hud.set_flight(true)
 			if _food != null:
 				_fx.update(_food.global_position, delta)
+				Game.report_flight_distance(-_food.global_position.z)   # T46: мини-зона засчитывается, когда еда в неё залетела
 				if _food.is_landed():
 					_land()
 		STATE_LANDED:
@@ -324,7 +325,7 @@ func _spawn_land_fx(position: Vector3) -> void:
 	var particles := CPUParticles3D.new()
 	particles.name = "LandParticles"
 	particles.one_shot = true
-	particles.amount = 12
+	particles.amount = 16
 	particles.lifetime = 0.5
 	particles.explosiveness = 1.0
 	particles.gravity = Vector3(0.0, -9.8, 0.0)
@@ -342,6 +343,8 @@ func _spawn_land_fx(position: Vector3) -> void:
 	particles.emitting = true
 	# Одноразовый эффект убирается сам, иначе узлов становится больше с каждым броском.
 	get_tree().create_timer(1.0).timeout.connect(particles.queue_free)
+	if camera_rig != null:
+		camera_rig.kick(1.0)
 
 
 # Удача выбранной еды из FoodData (R3, редакция 3: luck = round(dist * food.luck * 1.25 за «Идеально!»)).
