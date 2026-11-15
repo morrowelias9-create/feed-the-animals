@@ -15,6 +15,8 @@ signal xp_changed                # опыт силы изменился (шка�
 signal animal_received(animal: Dictionary, is_new: bool)   # {uid, animal_id, variant, placed}, у сразу проданного ещё sold = 1
 signal boost_changed
 signal mini_zone_reached(zone: int, index: int, reward: float)   # T46: дальность впервые вошла в новую мини-зону
+signal pet_unlocked(zone: int, pet_id: String)   # T53: в Индексе собраны все звери зоны, питомец открылся
+signal pet_active_changed(pet_id: String)        # T53: выбран другой питомец (пусто: питомца с игроком нет)
 signal notice(key: String, args: Array)      # короткие сообщения игроку
 # T38: уведомление о доступной покупке еды
 signal food_affordable(tier: int)  # денег достаточно для еды tier
@@ -58,6 +60,9 @@ func start() -> void:
 	_migrate_animals()
 	_migrate_variants()
 	ZoneProgress.ensure_migrated()
+	# T53: питомцы открываются до расчёта оффлайна, иначе бонус дохода не попадёт в накопленное.
+	_migrate_pets()
+	check_pet_unlocks()
 	init_mini_zone()
 	await _load_remote_config()
 	_loaded = true
@@ -192,6 +197,8 @@ func income_per_sec() -> float:
 		income *= float(ShopData.CASH_MULT)
 	if _boost_active():
 		income *= float(GameConfig.BOOST_MULT)
+	# T53: бонус активного питомца (только доход). Оффлайн наследует его через income_per_sec.
+	income *= PetLogic.bonus_mult("income")
 	return income
 
 
@@ -288,6 +295,8 @@ func train_reps(bar_index: int, count: int = 1) -> float:
 	# T24a: покупка «опыт с турников x2 навсегда».
 	if _b("train_x2"):
 		gained *= float(ShopData.TRAIN_MULT)
+	# T53: бонус активного питомца на опыт силы.
+	gained *= PetLogic.bonus_mult("xp")
 	Save.data["reps"] = _i("reps") + count
 	if _apply_xp(gained):
 		Save.save_data()
@@ -340,6 +349,8 @@ func _init_rare_mini() -> void:
 ## Результат как у SpawnRoller.roll, плюс «jackpot».
 func roll_catch(dist: float, food_tier: int, rng: RandomNumberGenerator, luck_mult: float = 1.0) -> Dictionary:
 	_init_rare_mini()
+	# T53: бонус удачи активного питомца — один общий множитель, как у «Идеально!».
+	luck_mult *= PetLogic.bonus_mult("luck")
 	var st: Dictionary = {}
 	for key in ["pity_mid", "pity_high", "jackpot_count", "jackpot_at", "rare_mini"]:
 		st[key] = int(Save.data.get(key, 0))
@@ -451,6 +462,8 @@ func add_animal(animal_id: String, variant: int, size: int = 0) -> Dictionary:
 	if sold_new:
 		result["sold"] = 1
 	animal_received.emit(result, is_new)
+	# T53: последний зверь зоны открывает питомца (сигнал уходит до сохранения, плашка не блокирует игру).
+	check_pet_unlocks()
 	if full:
 		notice.emit("notice_inventory_full", [])
 	Save.save_data()
@@ -786,6 +799,49 @@ func claim_zone_reward(zone: int) -> float:
 	return reward
 
 
+## T53: открывает питомцев, чьи зоны полностью собраны. Вызывается при старте и после получения зверя.
+## Питомец остаётся открытым навсегда, повторно сигнал не уходит.
+func check_pet_unlocks() -> void:
+	var changed: bool = false
+	var unlocked: Array = _arr("pets_unlocked")
+	for pet in PetData.PET_ZONES:
+		var id: String = String(pet["id"])
+		if unlocked.has(id):
+			continue
+		if not is_zone_complete(int(pet["zone"])):
+			continue
+		unlocked.append(id)
+		changed = true
+		pet_unlocked.emit(int(pet["zone"]), id)
+	if changed:
+		Save.save_data()
+
+
+## T53: открыт ли питомец зоны (условие Индекса или запись в сохранении).
+func is_pet_unlocked(zone: int) -> bool:
+	return PetLogic.is_unlocked(zone)
+
+
+## T53: выбирает питомца, который ходит с игроком. Пустая строка снимает питомца.
+## false, если такого питомца нет или он ещё не открыт. Активен всегда ровно один.
+func set_active_pet(pet_id: String) -> bool:
+	if pet_id != "":
+		var pet: Dictionary = PetData.by_id(pet_id)
+		if pet.is_empty() or not is_pet_unlocked(int(pet["zone"])):
+			return false
+	if String(Save.data.get("pet_active", "")) == pet_id:
+		return true
+	Save.data["pet_active"] = pet_id
+	pet_active_changed.emit(pet_id)
+	Save.save_data()
+	return true
+
+
+## T53: id активного питомца (пусто, если с игроком никого).
+func active_pet_id() -> String:
+	return PetLogic.active_id()
+
+
 ## T21: получает накопленный оффлайн-доход с множителем mult (1 или 2).
 ## Если offline_pending > 0, начисляет деньги, обнуляет pending и сохраняет.
 func claim_offline(mult: float = 1.0) -> float:
@@ -953,6 +1009,27 @@ func _migrate_variants() -> void:
 			changed = true
 		else:
 			animal["variant"] = VariantData.clamp_variant(int(animal["variant"]))
+	if changed:
+		Save.save_data()
+
+
+# T53: старые сохранения без полей питомцев получают пустые значения, неизвестные id удаляются.
+func _migrate_pets() -> void:
+	var changed: bool = false
+	var unlocked: Array = _arr("pets_unlocked")
+	var clean: Array = []
+	for raw in unlocked:
+		var id: String = String(raw)
+		if PetData.by_id(id).is_empty() or clean.has(id):
+			changed = true
+			continue
+		clean.append(id)
+	if changed:
+		Save.data["pets_unlocked"] = clean
+	var active: String = String(Save.data.get("pet_active", ""))
+	if active != "" and PetData.by_id(active).is_empty():
+		Save.data["pet_active"] = ""
+		changed = true
 	if changed:
 		Save.save_data()
 

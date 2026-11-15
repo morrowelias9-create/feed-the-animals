@@ -38,6 +38,8 @@ static func dist_at_z(z: float) -> float:
 ## Удача броска целиком (SCORE): та же формула, что на экране награды (SpawnRoller.luck_of).
 static func luck_total(dist: float, food_luck: float, perfect: bool) -> int:
 	var mult: float = SpawnRoller.PERFECT_LUCK_MULT if perfect else 1.0
+	# T53: бонус удачи активного питомца — тот же общий множитель, что и у броска.
+	mult *= PetLogic.bonus_mult("luck")
 	return SpawnRoller.luck_of(dist, food_luck, mult)
 
 

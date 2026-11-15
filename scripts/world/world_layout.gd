@@ -84,6 +84,12 @@ const SPAWN_Z: float = 9.0
 const PLAYER_Z_MIN: float = 0.0
 const PLAYER_MARGIN: float = 2.0
 
+# T53: аллея наград — пять постаментов питомцев справа от двора, в ряд по Z.
+# Место не задевает зону броска (|x| <= 18, z = -3…3), палатку еды (x <= 16.5) и декор двора (|x| >= 22).
+const PET_PEDESTAL_X: float = 21.0
+const PET_PEDESTAL_Z: Array[float] = [5.0, 8.0, 11.0, 14.0, 17.0]
+const PET_INTERACT_RADIUS: float = 3.0
+
 
 ## Номера участков соседей: все, кроме своего (с юга на север слева направо).
 static func neighbor_plot_indices() -> Array[int]:
@@ -224,6 +230,12 @@ static func sell_zone_rect() -> Rect2:
 ## Центр палатки еды (T15).
 static func food_tent_position() -> Vector3:
 	return Vector3(FOOD_TENT_X, 0.0, FOOD_TENT_Z)
+
+
+## T53: место постамента питомца i (0-4) в аллее наград справа от двора.
+static func pet_pedestal_position(i: int) -> Vector3:
+	var idx: int = clampi(i, 0, PET_PEDESTAL_Z.size() - 1)
+	return Vector3(PET_PEDESTAL_X, 0.0, PET_PEDESTAL_Z[idx])
 
 
 ## Зона входа палатки 3x3 м: x и z мира.

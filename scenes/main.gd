@@ -24,6 +24,8 @@ var _bar_controller: BarController
 var _buy_pad: BuyPad
 var _expand_sign: ExpandSign
 var _index_window: IndexWindow
+var _pet_pedestals: PetPedestals
+var _pet_follower: PetFollower
 var _tutorial: TutorialController
 var _offline_window: OfflineWindow
 var _ad_warning: AdWarning
@@ -107,6 +109,15 @@ func _build_world() -> void:
 	_player = Player.new()
 	_player.name = "Player"
 	world.add_child(_player)
+	# T53: аллея наград справа от двора и питомец, который ходит за игроком.
+	_pet_follower = PetFollower.new()
+	_pet_follower.name = "PetFollower"
+	_pet_follower.player = _player
+	world.add_child(_pet_follower)
+	_pet_pedestals = PetPedestals.new()
+	_pet_pedestals.name = "PetPedestals"
+	_pet_pedestals.player = _player
+	world.add_child(_pet_pedestals)
 	_expand_sign = ExpandSign.new()
 	_expand_sign.name = "ExpandSign"
 	_expand_sign.player = _player
@@ -354,6 +365,9 @@ func _setup_training() -> void:
 # Сначала проверяем действие у таблички; иначе передаём его обычному броску.
 func _on_action_pressed() -> void:
 	if _expand_sign != null and _expand_sign.try_activate():
+		return
+	# T53: рядом с открытым постаментом действие берёт питомца, а не бросает еду.
+	if _pet_pedestals != null and _pet_pedestals.try_activate():
 		return
 	_throw_controller.action_pressed()
 

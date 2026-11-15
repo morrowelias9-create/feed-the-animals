@@ -238,6 +238,26 @@ const T := {
 	"index_claim": {"ru": "Забрать %s", "en": "Claim %s"},
 	"index_claimed": {"ru": "Получено: +%s", "en": "Claimed: +%s"},
 
+	# Питомцы за полный Индекс биома (T53)
+	"pet_index_title": {"ru": "Питомец зоны", "en": "Zone pet"},
+	"pet_locked": {"ru": "Питомец не открыт", "en": "Pet not unlocked"},
+	"pet_take": {"ru": "Нажмите, чтобы взять питомца", "en": "Tap to take the pet"},
+	"pet_unlocked_toast": {"ru": "Новый питомец: %s", "en": "New pet: %s"},
+	"pet_progress": {"ru": "%s %d/%d", "en": "%s %d/%d"},
+	"pet_forest": {"ru": "Дух леса", "en": "Forest Spirit"},
+	"pet_savanna": {"ru": "Золотой лев", "en": "Golden Lion"},
+	"pet_desert": {"ru": "Песчаный страж", "en": "Sand Guardian"},
+	"pet_jungle": {"ru": "Призрачный ягуар", "en": "Ghost Jaguar"},
+	"pet_ocean": {"ru": "Светящийся кит", "en": "Glowing Whale"},
+	"pet_bonus_income": {"ru": "+%d %% к доходу", "en": "+%d%% income"},
+	"pet_bonus_luck": {"ru": "+%d %% к удаче", "en": "+%d%% luck"},
+	"pet_bonus_xp": {"ru": "+%d %% к опыту силы", "en": "+%d%% strength XP"},
+	"pet_bonus_sell": {"ru": "+%d %% к цене продажи", "en": "+%d%% sell price"},
+	"pet_short_income": {"ru": "+%d %% $", "en": "+%d%% $"},
+	"pet_short_luck": {"ru": "+%d %% удачи", "en": "+%d%% luck"},
+	"pet_short_xp": {"ru": "+%d %% опыта", "en": "+%d%% XP"},
+	"pet_short_sell": {"ru": "+%d %% продажи", "en": "+%d%% sell"},
+
 	# Окно оффлайн-дохода (T21)
 	"offline_title": {"ru": "Оффлайн-доход", "en": "Offline Income"},
 	"offline_text": {"ru": "Вы отсутствовали %d мин", "en": "You were away for %d min", "tr": "%d dakika yoktunuz"},

@@ -14,9 +14,9 @@ static func income(animal_id: String, variant: int, size: int = 0) -> float:
 	return value * VariantData.mult(variant) * SizeData.income_mult(size)
 
 
-## Цена продажи: доход * SELL_MULT.
+## Цена продажи: доход * SELL_MULT * бонус активного питомца «продажа» (T53).
 static func sell_price(animal_id: String, variant: int, size: int = 0) -> float:
-	return income(animal_id, variant, size) * GameConfig.SELL_MULT
+	return income(animal_id, variant, size) * GameConfig.SELL_MULT * PetLogic.bonus_mult("sell")
 
 
 ## Опыта до следующего уровня силы: 30 * XP_ZONE_MULT[zone_of(4*S)] * (1 + S / 40).

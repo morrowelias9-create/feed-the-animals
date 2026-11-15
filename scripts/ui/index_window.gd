@@ -18,6 +18,12 @@ var _content: VBoxContainer
 var _header_label: Label
 var _tab_buttons: Array[Button] = []
 var _claim_button: Button
+var _pet_panel: PanelContainer
+var _pet_panel_style: StyleBoxFlat
+var _pet_icon: TextureRect
+var _pet_letter: Label
+var _pet_name: Label
+var _pet_bonus: Label
 var _grid_containers: Array[GridContainer] = []
 var _current_zone: int = 0
 var _total_found: int = 0
@@ -59,6 +65,9 @@ func _build_body() -> void:
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_child(_content)
 
+	# T53: строка «Питомец зоны» — значок, название и бонус, у закрытого прогресс Индекса.
+	_build_pet_row()
+
 	# Сетки для каждой зоны (скрыты по умолчанию)
 	for zone_idx in ZoneData.count():
 		var grid: GridContainer = GridContainer.new()
@@ -84,12 +93,74 @@ func _build_body() -> void:
 	# Подписка на изменения инвентаря (новые звери)
 	if not Game.inventory_changed.is_connected(_on_game_changed):
 		Game.inventory_changed.connect(_on_game_changed)
+	# T53: открытие питомца обновляет строку, если окно уже открыто.
+	if not Game.pet_unlocked.is_connected(_on_pet_unlocked):
+		Game.pet_unlocked.connect(_on_pet_unlocked)
+
+## T53: строка питомца зоны. Значок берётся из существующих animal_*.png, новых картинок нет.
+func _build_pet_row() -> void:
+	_pet_panel = PanelContainer.new()
+	_pet_panel.name = "PetRow"
+	_pet_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pet_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pet_panel_style = StyleBoxFlat.new()
+	_pet_panel_style.bg_color = Color(0.12, 0.12, 0.13)
+	_pet_panel_style.set_corner_radius_all(14)
+	_pet_panel_style.set_border_width_all(2)
+	_pet_panel_style.set_content_margin_all(10.0)
+	_pet_panel.add_theme_stylebox_override("panel", _pet_panel_style)
+	_content.add_child(_pet_panel)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pet_panel.add_child(row)
+
+	var icon_box := Control.new()
+	icon_box.custom_minimum_size = Vector2(56.0, 56.0)
+	icon_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	icon_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(icon_box)
+
+	_pet_icon = TextureRect.new()
+	_pet_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_pet_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_pet_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_pet_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon_box.add_child(_pet_icon)
+
+	_pet_letter = UiStyle.outline_label("?", 30, 5, Color(0.6, 0.6, 0.65))
+	_pet_letter.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_pet_letter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_pet_letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_pet_letter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon_box.add_child(_pet_letter)
+
+	var texts := VBoxContainer.new()
+	texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	texts.add_theme_constant_override("separation", 0)
+	texts.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(texts)
+
+	var title: Label = UiStyle.outline_label(Loc.t("pet_index_title"), 18, 3, Color(0.75, 0.75, 0.8))
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	texts.add_child(title)
+
+	_pet_name = UiStyle.outline_label("", 24, 4, UiStyle.COLOR_TEXT)
+	_pet_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	texts.add_child(_pet_name)
+
+	_pet_bonus = UiStyle.outline_label("", 18, 3, UiStyle.COLOR_MONEY)
+	_pet_bonus.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	texts.add_child(_pet_bonus)
+
 
 func refresh() -> void:
 	_update_header()
 	_update_tabs()
 	_update_current_grid()
 	_update_claim_button()
+	_update_pet_row()
 
 func _update_header() -> void:
 	_total_found = 0
@@ -252,6 +323,46 @@ func _update_claim_button() -> void:
 	else:
 		_claim_button.visible = false
 
+func _update_pet_row() -> void:
+	if _pet_panel == null:
+		return
+	var pet: Dictionary = PetData.by_zone(_current_zone)
+	if pet.is_empty():
+		_pet_panel.visible = false
+		return
+	_pet_panel.visible = true
+	var unlocked: bool = Game.is_pet_unlocked(_current_zone)
+	var animal_id: String = String(pet["model_animal"])
+	var icon_path: String = UiStyle.ICON_DIR + "animal_" + animal_id + ".png"
+	var icon_tex: Texture2D = null
+	if unlocked and ResourceLoader.exists(icon_path):
+		icon_tex = load(icon_path) as Texture2D
+	_pet_icon.texture = icon_tex
+	_pet_icon.visible = icon_tex != null
+	_pet_letter.visible = icon_tex == null
+
+	if unlocked:
+		_pet_panel_style.border_color = Color(1.0, 0.82, 0.25).darkened(0.25)
+		_pet_name.text = Loc.t(String(pet["name_key"]))
+		_pet_name.add_theme_color_override("font_color", Color("#FFD23F"))
+		var percent: int = int(roundf(float(pet["value"]) * 100.0))
+		_pet_bonus.text = Loc.t("pet_bonus_" + String(pet["bonus"])) % percent
+		_pet_bonus.add_theme_color_override("font_color", UiStyle.COLOR_MONEY)
+		_pet_letter.text = Loc.t(String(pet["name_key"])).left(1).to_upper()
+		_pet_letter.add_theme_color_override("font_color", Color("#FFD23F"))
+	else:
+		_pet_panel_style.border_color = Color(0.3, 0.3, 0.35)
+		_pet_name.text = Loc.t("pet_locked")
+		_pet_name.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65))
+		var found: int = PetLogic.found_in_zone(_current_zone)
+		var total: int = AnimalData.zone_animals(_current_zone).size()
+		_pet_bonus.text = Loc.t("pet_progress") % [
+			Loc.t(String(ZoneData.ZONES[_current_zone]["name_key"])), found, total
+		]
+		_pet_bonus.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65))
+		_pet_letter.text = "?"
+
+
 func _on_tab_pressed(zone_idx: int) -> void:
 	if zone_idx == _current_zone:
 		return
@@ -266,6 +377,11 @@ func _on_claim_pressed() -> void:
 		refresh()
 
 func _on_game_changed() -> void:
+	if visible:
+		refresh()
+
+
+func _on_pet_unlocked(_zone: int, _pet_id: String) -> void:
 	if visible:
 		refresh()
 

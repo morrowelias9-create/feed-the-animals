@@ -62,6 +62,8 @@ func _run_all() -> void:
 	_test_game_xp_and_zone()
 	print("== T46: мини-зоны, награда за вход")
 	_test_mini_zone_game()
+	print("== T53: питомцы за полный Индекс")
+	_test_pets()
 	print("== Баланс: страховка и джекпот")
 	_test_luck_pity()
 	_test_game_limit()
@@ -843,6 +845,70 @@ func _test_mini_zone_game() -> void:
 	_game.init_mini_zone()
 	_check("T46: при mini_reached = -1 номер берётся из best_throw без награды", int(_save.data["mini_reached"]) == 8
 		and _near(_game.money(), 0.0))
+	_fresh()
+
+
+# ---------- T53: питомцы ----------
+
+func _test_pets() -> void:
+	_check("T53: пять питомцев", PetData.count() == 5)
+	var limits_ok: bool = true
+	for pet in PetData.PET_ZONES:
+		if float(pet["value"]) > 0.1001:
+			limits_ok = false
+	_check("T53: ни один бонус не выше 10 %", limits_ok)
+	_fresh()
+	_check("T53: без питомца множитель любого бонуса 1.0",
+		_near(PetLogic.bonus_mult("income"), 1.0) and _near(PetLogic.bonus_mult("luck"), 1.0)
+		and _near(PetLogic.bonus_mult("xp"), 1.0) and _near(PetLogic.bonus_mult("sell"), 1.0))
+
+	# Неполный Индекс: зверь найден, но питомец ещё закрыт.
+	_save.data["found"] = [String(AnimalData.zone_animals(0)[0]["id"])]
+	_game.check_pet_unlocks()
+	_check("T53: при неполном Индексе питомец не открыт и не записан",
+		not PetLogic.is_unlocked(0) and not (_save.data["pets_unlocked"] as Array).has("forest"))
+
+	# Полный Индекс Леса открывает Духа леса и записывает его навсегда.
+	var forest_ids: Array = []
+	for animal in AnimalData.zone_animals(0):
+		forest_ids.append(String(animal["id"]))
+	_save.data["found"] = forest_ids
+	_game.check_pet_unlocks()
+	_check("T53: полный Индекс открывает питомца и пишет id в сохранение",
+		PetLogic.is_unlocked(0) and (_save.data["pets_unlocked"] as Array).has("forest"))
+
+	_game.set_active_pet("forest")
+	_check("T53: бонус дохода активного питомца равен 1 + value",
+		_near(PetLogic.bonus_mult("income"), 1.0 + PetData.bonus_value("forest")))
+	_check("T53: бонус другого вида от того же питомца не действует",
+		_near(PetLogic.bonus_mult("luck"), 1.0) and _near(PetLogic.bonus_mult("sell"), 1.0))
+
+	# Второй питомец: переключение оставляет ровно одного активного.
+	var savanna_ids: Array = []
+	for animal in AnimalData.zone_animals(1):
+		savanna_ids.append(String(animal["id"]))
+	_save.data["found"] = forest_ids + savanna_ids
+	_game.check_pet_unlocks()
+	_check("T53: активен только один питомец, смена бесплатна",
+		_game.set_active_pet("savanna") and _game.active_pet_id() == "savanna"
+		and String(_save.data["pet_active"]) == "savanna"
+		and (_save.data["pets_unlocked"] as Array).count("savanna") == 1)
+	_check("T53: после смены бонус прежнего питомца не действует",
+		_near(PetLogic.bonus_mult("income"), 1.0)
+		and _near(PetLogic.bonus_mult("luck"), 1.0 + PetData.bonus_value("savanna")))
+
+	# Старое сохранение: полей нет совсем, миграция создаёт пустые значения без ошибок.
+	_save.data.erase("pets_unlocked")
+	_save.data.erase("pet_active")
+	_game._migrate_pets()
+	_check("T53: миграция старого сохранения создаёт пустые поля",
+		_save.data.get("pets_unlocked") is Array and (_save.data["pets_unlocked"] as Array).is_empty()
+		and String(_save.data.get("pet_active", "")) == "")
+	# Неизвестные и повторные id вычищаются.
+	_save.data["pets_unlocked"] = ["bad_id", "forest", "forest"]
+	_game._migrate_pets()
+	_check("T53: миграция убирает неизвестные и повторные id",
+		(_save.data["pets_unlocked"] as Array) == ["forest"])
 	_fresh()
 
 
