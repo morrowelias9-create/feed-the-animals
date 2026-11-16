@@ -91,6 +91,13 @@ const PET_PEDESTAL_Z: Array[float] = [5.0, 8.0, 11.0, 14.0, 17.0]
 const PET_INTERACT_RADIUS: float = 3.0
 
 
+# T54: Хранитель зверей стоит на левом соседнем участке, справа от проёма его ограды, лицом ко двору.
+# Место не задевает лавку продажи (x = -15, z = 7), турник (x = -7), диск покупки и декор двора (z до 17).
+const KEEPER_PLOT: int = 0
+const KEEPER_OFFSET_X: float = 5.0       # от центра участка (проём шириной 6 м остаётся свободным)
+const KEEPER_OFFSET_Z: float = -1.8      # от передней ограды в сторону двора
+
+
 ## Номера участков соседей: все, кроме своего (с юга на север слева направо).
 static func neighbor_plot_indices() -> Array[int]:
 	var result: Array[int] = []
@@ -230,6 +237,11 @@ static func sell_zone_rect() -> Rect2:
 ## Центр палатки еды (T15).
 static func food_tent_position() -> Vector3:
 	return Vector3(FOOD_TENT_X, 0.0, FOOD_TENT_Z)
+
+
+## T54: место Хранителя зверей перед своим участком.
+static func keeper_position() -> Vector3:
+	return Vector3(plot_center_x(KEEPER_PLOT) + KEEPER_OFFSET_X, 0.0, PLOT_Z_FRONT + KEEPER_OFFSET_Z)
 
 
 ## T53: место постамента питомца i (0-4) в аллее наград справа от двора.

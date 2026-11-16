@@ -28,6 +28,7 @@ var _expand_sign: ExpandSign
 var _index_window: IndexWindow
 var _pet_pedestals: PetPedestals
 var _pet_follower: PetFollower
+var _keeper_yard: KeeperYard             # T54: Хранитель зверей, пока игрок не долетел до Саванны
 var _tutorial: TutorialController
 var _offline_window: OfflineWindow
 var _ad_warning: AdWarning
@@ -120,6 +121,11 @@ func _build_world() -> void:
 	_pet_pedestals.name = "PetPedestals"
 	_pet_pedestals.player = _player
 	world.add_child(_pet_pedestals)
+	# T54: Хранитель зверей: показательный сосед для новичка, уходит после первого броска в Саванну.
+	_keeper_yard = KeeperYard.new()
+	_keeper_yard.name = "KeeperYard"
+	_keeper_yard.player = _player
+	world.add_child(_keeper_yard)
 	_expand_sign = ExpandSign.new()
 	_expand_sign.name = "ExpandSign"
 	_expand_sign.player = _player
@@ -142,20 +148,25 @@ func _build_world() -> void:
 # T24b: создаёт NeighborView для 4 соседних участков (индексы 0, 1, 3, 4).
 func _build_neighbors(opponents: Array = []) -> void:
 	var neighbor_indices: Array = WorldLayout.neighbor_plot_indices()  # все участки, кроме своего
+	var keeper_active: bool = not KeeperLogic.is_gone()   # T54: участок Хранителя занят, пока он стоит
+	var session_i: int = 0   # сессии соперников раздаются по очереди без учёта участка Хранителя
 	
 	for i in neighbor_indices.size():
 		var plot_idx: int = neighbor_indices[i]
+		if keeper_active and plot_idx == WorldLayout.KEEPER_PLOT:
+			continue
 		var nv: NeighborView = NeighborView.new()
 		nv.name = "Neighbor_%d" % plot_idx
 		_world.add_child(nv)
 		
 		# Если есть загруженная сессия для этого участка
-		if i < opponents.size():
-			var session: Dictionary = opponents[i]
+		if session_i < opponents.size():
+			var session: Dictionary = opponents[session_i]
 			nv.setup(str(session.get("id", "")), plot_idx, session)
 		else:
 			# Нет сессии — показываем "Свободный участок"
 			nv.show_free_plot()
+		session_i += 1
 		
 		_neighbors.append(nv)
 

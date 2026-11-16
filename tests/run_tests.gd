@@ -64,6 +64,8 @@ func _run_all() -> void:
 	_test_mini_zone_game()
 	print("== T53: питомцы за полный Индекс")
 	_test_pets()
+	print("== T54: Хранитель зверей")
+	_test_keeper()
 	print("== Баланс: страховка и джекпот")
 	_test_luck_pity()
 	print("== Полировка: вид турников и загона, уведомления")
@@ -854,6 +856,71 @@ func _test_mini_zone_game() -> void:
 
 
 # ---------- T53: питомцы ----------
+
+
+func _test_keeper() -> void:
+	var pen: Array[Dictionary] = KeeperLogic.build_pen()
+	var ids_ok: bool = true
+	var values_ok: bool = true
+	var zones: Dictionary = {}
+	var monkey_ok: bool = false
+	var wolf_ok: bool = false
+	var showcase: int = 0
+	for e in pen:
+		var entry: Dictionary = e
+		var id: String = String(entry["animal_id"])
+		var animal: Dictionary = AnimalData.by_id(id)
+		ids_ok = ids_ok and not animal.is_empty()
+		zones[int(animal.get("zone", -1))] = true
+		values_ok = values_ok and VariantData.clamp_variant(int(entry["variant"])) == int(entry["variant"]) \
+			and SizeData.clamp_size(int(entry["size"])) == int(entry["size"])
+		if id == "monkey":
+			monkey_ok = int(animal["zone"]) == 3 and int(entry["size"]) == SizeData.clamp_size(KeeperData.MAX_SIZE)
+		if id == "wolf":
+			wolf_ok = int(animal["zone"]) == 0 and int(entry["variant"]) == VariantData.RUBY
+		if bool(entry["showcase"]):
+			showcase += 1
+	_check("T54: загон Хранителя %d зверей, все существуют в игре" % KeeperData.PEN.size(), pen.size() == KeeperData.PEN.size() and ids_ok)
+	_check("T54: есть гигантская обезьяна Джунглей максимального размера и рубиновый волк Леса", monkey_ok and wolf_ok)
+	_check("T54: варианты и размеры загона существуют в игре", values_ok)
+	_check("T54: звери из нескольких биомов, не один биом", zones.size() >= 3)
+	_check("T54: показательных зверей с подписями три", showcase == 3)
+	_check("T54: состав детерминирован (одинаков при повторном вызове)", str(pen) == str(KeeperLogic.build_pen()))
+	var sum: float = 0.0
+	for e in pen:
+		sum += Economy.income(String(e["animal_id"]), int(e["variant"]), int(e["size"]))
+	_check("T54: доход загона равен сумме доходов зверей и положителен", KeeperLogic.pen_income(pen) > 0.0 and _near(KeeperLogic.pen_income(pen), sum, 0.001 * sum))
+	_fresh()
+	_check("T54: Хранитель не даёт дохода игроку и не пишет в Индекс",
+		_near(_game.income_per_sec(), 0.0) and (_save.data["found"] as Array).is_empty() and (_save.data["animals"] as Array).is_empty())
+	_check("T54: у нового игрока Хранитель на месте", not KeeperLogic.is_gone())
+	_save.data["keeper_gone"] = true
+	_check("T54: флаг keeper_gone убирает Хранителя", KeeperLogic.is_gone())
+	_fresh()
+	ZoneProgress.record_reached_zone(KeeperData.GONE_ZONE)
+	_check("T54: долетел до Саванны, значит Хранитель ушёл", KeeperLogic.is_gone())
+	_fresh()
+	var keys_ok: bool = true
+	var keys: Array = ["keeper_name", "notice_keeper_farewell"]
+	keys.append_array(KeeperData.LINE_KEYS)
+	for k in keys:
+		keys_ok = keys_ok and Loc.T.has(k) and String(Loc.T[k].get("ru", "")) != "" and String(Loc.T[k].get("en", "")) != ""
+	_check("T54: тексты Хранителя есть в Loc.T на ru и en", keys_ok)
+	# Мир: узел создаёт зверей и персонажа; при флаге ухода сам удаляется и ничего не строит.
+	var yard := KeeperYard.new()
+	root.add_child(yard)
+	var views: int = 0
+	for c in yard.get_children():
+		if c is AnimalView:
+			views += 1
+	_check("T54: KeeperYard создаёт всех зверей и персонажа", views == KeeperData.PEN.size() and yard.get_node_or_null("Keeper") != null)
+	yard.free()
+	_save.data["keeper_gone"] = true
+	var yard2 := KeeperYard.new()
+	root.add_child(yard2)
+	_check("T54: при флаге ухода KeeperYard ничего не строит", yard2.get_node_or_null("Keeper") == null and yard2.is_queued_for_deletion())
+	yard2.free()
+	_fresh()
 
 func _test_pets() -> void:
 	_check("T53: пять питомцев", PetData.count() == 5)

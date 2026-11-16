@@ -29,6 +29,7 @@ const DEFAULTS := {
 	"rare_mini": -1,          # последняя мини-зона, за вход в которую выдан гарантированный редкий зверь (-1: не задана)
 	"pets_unlocked": [],      # T53: id открытых питомцев (forest, savanna, desert, jungle, ocean)
 	"pet_active": "",         # T53: id питомца, который ходит с игроком (пусто: нет)
+	"keeper_gone": false,     # T54: Хранитель зверей ушёл (игрок долетел до Саванны), навсегда
 	"best_throw": 0,
 	"throws": 0,
 	"reps": 0,
