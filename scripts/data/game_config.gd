@@ -25,8 +25,8 @@ const SIZE_MAX: int = 20             # максимальная ступень �
 const XP_ZONE_MULT: Array[float] = [3.3, 3.4, 5.9, 13.7, 28.1]
 
 # Оффлайн
-const OFFLINE_CAP_S: int = 7200      # максимум учитываемого отсутствия, секунд
-const OFFLINE_RATE: float = 0.5      # доля дохода за время отсутствия
+const OFFLINE_CAP_S: int = 3600      # максимум учитываемого отсутствия, секунд
+const OFFLINE_RATE: float = 0.1      # доля дохода за время отсутствия
 const OFFLINE_MIN_S: int = 60        # меньше этого окно не показываем
 
 # Буст (rewarded)

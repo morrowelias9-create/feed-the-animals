@@ -46,11 +46,11 @@ const SLOT_ROW_Z: Array[float] = [PLOT_Z_FRONT + 2.5, PLOT_Z_FRONT + 7.5, PLOT_Z
 # Зона тренировки 6x6 м. Диск покупки (T15a) всегда в одной точке рядом с турником.
 const BAR_X: float = -7.0
 const BAR_Z: float = 14.0
-const BAR_ZONE_SIZE: float = 6.0
+const BAR_ZONE_SIZE: float = 3.6
 # Диск покупки стоит сбоку от турника (слева), а не на пути от входа к лавке: проходя мимо, купить случайно нельзя.
-const BUY_PAD_X: float = -12.2
+const BUY_PAD_X: float = -10.4
 const BUY_PAD_Z: float = 14.0
-const BUY_PAD_RADIUS: float = 1.2
+const BUY_PAD_RADIUS: float = 0.8
 
 # Проход в свой загон (игрок ходит внутри, как и звери): только через проём в передней ограде.
 const PEN_WALK_MARGIN: float = 0.5       # отступ от ограды при ходьбе
@@ -60,7 +60,7 @@ const PEN_INNER_MARGIN: float = 0.6      # отступ от боковых и �
 const SIGN_X: float = 7.0
 const SIGN_Z: float = PLOT_Z_FRONT
 const SIGN_ZONE_SIZE: float = 3.0
-const SIGN_PAD_RADIUS: float = 1.2
+const SIGN_PAD_RADIUS: float = 0.8
 const SIGN_PAD_DISTANCE: float = 2.2   # диск ближе к ограде: путь от входа к палатке проходит мимо него с запасом
 
 # Лавка продажи (T12a): слева от загона игрока, на дворе перед участком. Зона входа 3x3 м вокруг точки.

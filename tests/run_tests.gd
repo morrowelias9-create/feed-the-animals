@@ -478,9 +478,9 @@ func _test_economy() -> void:
 		if z > 0 and not _near(Economy.xp_needed(s_z - 1), 30.0 * mults[z - 1] * (1.0 + float(s_z - 1) / 40.0)):
 			xp_ok = false
 	_check("T47: xp_needed на силе границ зон берёт множитель своей зоны, перед границей предыдущей", xp_ok)
-	_check("offline_gain(10000, 5) = 18000 (потолок 2 часа, половина дохода)",
-		_near(Economy.offline_gain(10000.0, 5.0), 18000.0))
-	_check("offline_gain(100, 10) = 500", _near(Economy.offline_gain(100.0, 10.0), 500.0))
+	_check("offline_gain(10000, 5) = 1800 (потолок 1 час, 10% дохода)",
+		_near(Economy.offline_gain(10000.0, 5.0), 1800.0))
+	_check("offline_gain(100, 10) = 100", _near(Economy.offline_gain(100.0, 10.0), 100.0))
 	_check("zone_reward(1) = 70000", _near(Economy.zone_reward(1), 70000.0))
 
 
