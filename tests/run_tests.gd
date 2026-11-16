@@ -68,6 +68,8 @@ func _run_all() -> void:
 	_test_luck_pity()
 	print("== Полировка: вид турников и загона, уведомления")
 	_test_polish_looks()
+	_test_notice_card()
+	_test_food_rarity()
 	_test_game_limit()
 	print("== T11: загон игрока")
 	_test_slot_manager()
@@ -1823,3 +1825,30 @@ func _test_polish_looks() -> void:
 	_check("денег хватает на турник 1: одно уведомление", seen == [1])
 	_game.add_money(10.0)
 	_check("повторного уведомления нет", seen == [1])
+
+
+# Карточка-уведомление: собирается, кнопка шлёт сигнал, закрытие шлёт finished один раз.
+func _test_notice_card() -> void:
+	var card: NoticeCard = NoticeCard.new()
+	card.setup("Заголовок", "Подсказка", "Турник", "$60", "Купить")
+	var counts: Dictionary = {"action": 0, "finished": 0}
+	card.action_pressed.connect(func() -> void: counts["action"] += 1)
+	card.finished.connect(func() -> void: counts["finished"] += 1)
+	root.add_child(card)
+	card.start()
+	card._on_action()
+	card.close()
+	_check("карточка: кнопка шлёт action_pressed один раз", int(counts["action"]) == 1)
+	_check("карточка: finished один раз", int(counts["finished"]) == 1)
+
+
+# Редкость и уровень еды (окно еды в стиле Роблокса).
+func _test_food_rarity() -> void:
+	var ok: bool = true
+	for t in FoodData.count():
+		var r: int = FoodData.rarity(t)
+		if r < 0 or r > 4 or FoodData.level(t) != t + 1:
+			ok = false
+	_check("редкость еды в пределах 0–4, уровень = номер покупки", ok)
+	_check("лес: морковь обычная, соты редкие", FoodData.rarity(0) == 0 and FoodData.rarity(2) == 2)
+	_check("океан: вся еда легендарная", FoodData.rarity(12) == 4 and FoodData.rarity(14) == 4)

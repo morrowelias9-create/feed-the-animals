@@ -14,6 +14,7 @@ const GOAL_KEYS: Array[String] = ["tut_goal_0", "tut_goal_1", "tut_goal_2", "tut
 
 var player: Player
 var hud: Hud
+var carry_controller: Node              # зверь в руках: цель и стрелки ведут к загону
 
 var _arrows: GuideArrows
 var _step: int = 0
@@ -22,6 +23,8 @@ var _throws_at_step4: int = 0
 var _apple_tier: int = 1
 var _shop_pulse: bool = false
 var _arrows_target: Vector3 = Vector3.ZERO
+var _last_goal: String = "?"
+var _was_carrying: bool = false
 
 
 func _ready() -> void:
@@ -59,6 +62,12 @@ func _process(delta: float) -> void:
 			return
 		_apply_step()
 	_update_shop_pulse()
+	var carrying: bool = _is_carrying()
+	if carrying != _was_carrying:
+		_was_carrying = carrying
+		_update_arrows_target()
+	if _goal_text() != _last_goal:
+		_apply_goal()
 	_update_arrows_target()
 
 
@@ -86,11 +95,24 @@ func _apply_step() -> void:
 	_update_arrows_target()
 
 
-func _apply_goal() -> void:
+func _is_carrying() -> bool:
+	return carry_controller != null and carry_controller.is_carrying()
+
+
+# Текст цели: зверь в руках важнее шага; «Брось дальше» показываем только до первого броска шага 4.
+func _goal_text() -> String:
 	if _step >= STEP_DONE:
-		hud.set_goal("")
-		return
-	hud.set_goal(Loc.t(GOAL_KEYS[_step]))
+		return ""
+	if _is_carrying():
+		return Loc.t("tut_goal_place")
+	if _step == 4 and _throws() - _throws_at_step4 >= 1:
+		return ""
+	return Loc.t(GOAL_KEYS[_step])
+
+
+func _apply_goal() -> void:
+	_last_goal = _goal_text()
+	hud.set_goal(_last_goal)
 
 
 # Кнопка «Магазин» пульсирует на шаге 1 (подсказка броска), на шаге 2 пульсации нет — покупка в палатке.
@@ -106,6 +128,9 @@ func _update_shop_pulse() -> void:
 # шаг 3 — к диску покупки турника, потом к самому турнику.
 func _update_arrows_target() -> void:
 	if _arrows == null:
+		return
+	if _is_carrying():
+		_point_arrows(WorldLayout.pen_gate_position())
 		return
 	match _step:
 		0:
@@ -149,7 +174,7 @@ func _finish() -> void:
 func _in_throw_zone() -> bool:
 	if player == null:
 		return false
-	return WorldLayout.throw_zone_rect().has_point(Vector2(player.position.x, player.position.z))
+	return WorldLayout.throw_line_rect().has_point(Vector2(player.position.x, player.position.z))
 
 
 func _throws() -> int:

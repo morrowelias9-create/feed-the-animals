@@ -22,6 +22,7 @@ const T := {
 	"tut_goal_1": {"ru": "Нажми, чтобы бросить", "en": "Tap to throw"},
 	"tut_goal_2": {"ru": "Накопи на яблоко", "en": "Save up for an apple"},
 	"tut_goal_3": {"ru": "Подтянись на турнике", "en": "Do pull-ups on the bar"},
+	"tut_goal_place": {"ru": "Поставь зверя в загон", "en": "Put the animal in the pen"},
 	"tut_goal_4": {"ru": "Брось дальше", "en": "Throw farther"},
 	"land_toast": {"ru": "Зона, %d м", "en": "Zone, %d m", "tr": "Bölge, %d m"},
 	"flight_luck": {"ru": "Удача: %d", "en": "Luck: %d"},
@@ -194,9 +195,12 @@ const T := {
 	"food_select": {"ru": "Выбрать", "en": "Select", "tr": "Seç"},
 	"food_selected": {"ru": "Выбрано", "en": "Selected", "tr": "Seçildi"},
 	"food_unknown": {"ru": "???", "en": "???", "tr": "???"},
-	"notice_food_fmt": {"ru": "Можно купить еду: %s!", "en": "New food to buy: %s!", "tr": "Satın alınabilir yemek: %s!"},
-	"notice_bar_fmt": {"ru": "Можно купить турник: %s!", "en": "New bar to buy: %s!", "tr": "Satın alınabilir bar: %s!"},
-	"notice_level_fmt": {"ru": "Новый уровень силы: %d!", "en": "New strength level: %d!", "tr": "Yeni güç seviyesi: %d!"},
+	"notice_food_title": {"ru": "Новая еда доступна!", "en": "New food unlocked!", "tr": "Yeni yemek açıldı!"},
+	"notice_bar_title": {"ru": "Новый турник доступен!", "en": "New bar unlocked!", "tr": "Yeni bar açıldı!"},
+	"notice_hint": {"ru": "Теперь вы можете купить", "en": "You can now buy", "tr": "Artık satın alabilirsin"},
+	"notice_buy": {"ru": "Купить", "en": "Buy", "tr": "Satın al"},
+	"levelup_title": {"ru": "Повышение уровня!", "en": "Level up!", "tr": "Seviye atladın!"},
+	"levelup_power": {"ru": "Сила броска +%d", "en": "Throw power +%d", "tr": "Atış gücü +%d"},
 	"food_bought_toast": {"ru": "Куплено: %s", "en": "Bought: %s", "tr": "Satın alındı: %s"},
 	"food_selected_toast": {"ru": "Выбрано: %s", "en": "Selected: %s", "tr": "Seçildi: %s"},
 	"food_no_money": {"ru": "Не хватает денег", "en": "Not enough money", "tr": "Yeterli para yok"},
@@ -204,11 +208,14 @@ const T := {
 	# T38: уведомление о доступной покупке еды
 	"food_affordable_notice": {"ru": "Можно купить: %s", "en": "Can buy: %s", "tr": "Satın alınabilir: %s"},
 	# Ключи для карточек еды (переработка T38)
-	"food_unlock_hint": {"ru": "Открой биом «%s»", "en": "Unlock biome «%s»", "tr": "Biyom «%s»ni aç"},
+	"food_unlock_hint": {"ru": "Открой биом", "en": "Unlock biome", "tr": "Biyomu aç"},
+	"food_free": {"ru": "Бесплатно", "en": "Free", "tr": "Ücretsiz"},
+	"food_level": {"ru": "Уровень %d", "en": "Level %d", "tr": "Seviye %d"},
+	"food_equipped": {"ru": "Экипировано", "en": "Equipped", "tr": "Kuşanıldı"},
 	"food_locked_button": {"ru": "ЗАКРЫТО", "en": "LOCKED", "tr": "KİLİTLİ"},
-	"food_benefit_2": {"ru": "Чаще встречаются обычные звери", "en": "Common animals appear more often", "tr": "Sıradan hayvanlar daha sık çıkar"},
-	"food_benefit_5": {"ru": "Выше шанс встретить необычных зверей", "en": "Higher chance to encounter uncommon animals", "tr": "Olağandışı hayvanlarla karşılaşma şansı artar"},
-	"food_benefit_8": {"ru": "Выше шанс встретить легендарных зверей", "en": "Higher chance to encounter legendary animals", "tr": "Efsanevi hayvanlarla karşılaşma şansı artar"},
+	"food_benefit_2": {"ru": "Приманка: обычные звери", "en": "Lures common animals", "tr": "Sıradan hayvanları çeker"},
+	"food_benefit_5": {"ru": "Приманка: необычные звери", "en": "Lures uncommon animals", "tr": "Olağandışı hayvanları çeker"},
+	"food_benefit_8": {"ru": "Приманка: легендарные звери", "en": "Lures legendary animals", "tr": "Efsanevi hayvanları çeker"},
 	"food_luck": {"ru": "Удача ×%s", "en": "Luck ×%s", "tr": "Şans ×%s"},
 
 	# Табличка расширения участка (T16)
@@ -262,11 +269,13 @@ const T := {
 	"pet_short_sell": {"ru": "+%d %% продажи", "en": "+%d%% sell"},
 
 	# Окно оффлайн-дохода (T21)
-	"offline_title": {"ru": "Оффлайн-доход", "en": "Offline Income"},
-	"offline_text": {"ru": "Вы отсутствовали %d мин", "en": "You were away for %d min", "tr": "%d dakika yoktunuz"},
+	"offline_title": {"ru": "С возвращением!", "en": "Welcome back!", "tr": "Tekrar hoş geldin!"},
+	"offline_text": {"ru": "Пока вас не было, ваши звери зарабатывали", "en": "While you were away, your animals earned", "tr": "Sen yokken hayvanların kazandı"},
+	"offline_away_min": {"ru": "Вне игры: %d мин", "en": "Away for %d min", "tr": "%d dk yoktun"},
+	"offline_away_h": {"ru": "Вне игры: %d ч %d мин", "en": "Away for %d h %d min", "tr": "%d sa %d dk yoktun"},
 	"offline_amount": {"ru": "Доход: %s", "en": "Income: %s"},
-	"offline_claim": {"ru": "Забрать", "en": "Claim"},
-	"offline_double": {"ru": "x2 за рекламу", "en": "x2 for ad"},
+	"offline_claim": {"ru": "Получить", "en": "Claim", "tr": "Al"},
+	"offline_double": {"ru": "x2 за рекламу", "en": "x2 for ad", "tr": "Reklamla x2"},
 
 	# Буст x2 за рекламу (T22)
 	"boost_btn": {"ru": "Получить х2 дохода\nза рекламу", "en": "Get x2 income\nfor ad"},

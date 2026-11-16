@@ -117,13 +117,24 @@ func _tick_reps(delta: float) -> void:
 	_rep_t += delta
 	while _rep_t >= GameConfig.BAR_REP_S:
 		_rep_t -= GameConfig.BAR_REP_S
+		var level_before: int = Game.strength()
 		var gained: float = Game.train_reps(Game.best_bar(), 1)
 		_unsaved = true
 		if player.avatar != null:
 			player.avatar.play_pullup(GameConfig.BAR_REP_S * 0.9)
-		if hud != null and gained > 0.0:
-			var at: Vector2 = _bonus_screen_pos() + Vector2(randf_range(70.0, 120.0), 50.0)   # сбоку от подписи турника
-			hud.popup_at("+%s" % NumFmt.format(gained), at)
+		_show_gain(gained, level_before)
+
+
+# Опыт вылетает над головой; новый уровень силы: надписи «Повышение уровня» и «Сила броска +N».
+func _show_gain(gained: float, level_before: int) -> void:
+	if hud == null:
+		return
+	var at: Vector2 = _bonus_screen_pos()
+	if gained > 0.0:
+		hud.xp_popup("+%s" % NumFmt.format(gained), at)
+	var levels: int = Game.strength() - level_before
+	if levels > 0:
+		hud.level_up_popup(int(round(GameConfig.DIST_K * float(levels))), at + Vector2(0.0, -40.0))
 
 
 func _tick_bonus(delta: float) -> void:
@@ -161,10 +172,13 @@ func _on_bonus_pressed() -> void:
 	if not _training or _bonus_left <= 0.0:
 		return
 	var at: Vector2 = hud.bonus_center()
+	var level_before: int = Game.strength()
 	var gained: float = Game.train_reps(Game.best_bar(), GameConfig.BAR_BONUS_REPS)
 	_unsaved = true
 	if player.avatar != null:
 		player.avatar.play_pullup(0.3)
 	hud.popup_at("+%d" % int(gained), at)
+	if Game.strength() > level_before:
+		hud.level_up_popup(int(round(GameConfig.DIST_K * float(Game.strength() - level_before))), _bonus_screen_pos() + Vector2(0.0, -40.0))
 	_hide_bonus()
 	_bonus_t = randf_range(GameConfig.BAR_BONUS_MIN_S, GameConfig.BAR_BONUS_MAX_S)

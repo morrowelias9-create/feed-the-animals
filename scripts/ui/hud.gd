@@ -6,11 +6,11 @@ extends Control
 signal index_pressed
 signal shop_pressed
 signal animals_pressed
+signal notice_action(kind: String, index: int)   # кнопка «Купить» в уведомлении
 signal bonus_pressed               # T14: тап по пузырю-бонусу на турнике
 
 const NOTICE_SECONDS: float = 5.0
-const NOTICE_FONT: int = 60
-const NOTICE_TOP: float = 150.0
+const NOTICE_TOP: float = 84.0
 const BONUS_SIZE: float = 96.0
 const SOUND_BTN_SIZE: float = 64.0         # не меньше 64 пикселей (правило мобильности)
 const SIDE_BTN_SIZE: Vector2 = Vector2(128.0, 128.0)   # крупные кнопки «Индекс», «Магазин», «Животные» с подписью под иконкой
@@ -29,8 +29,9 @@ var _throw_meter_enabled: bool = true
 var _hint_visible: bool = true           # T37: подсказку внизу можно скрыть (пока зверь в руках)
 
 var _goal: Label
-var _notice: Label
-var _notice_tween: Tween
+var _notice_card: NoticeCard
+var _notice_queue: Array[Dictionary] = []
+var busy_check: Callable             # true, пока идёт бросок: уведомления ждут
 var _hint: Label
 var _strength: Label
 var _money: Label
@@ -48,6 +49,9 @@ var _boost_button: Button               # T22: кнопка буста x2 за �
 var _boost_timer: Label                 # T22: таймер буста "x2 MM:SS"
 var _sound_button: Button               # T26: кнопка звука вкл/выкл
 var _training: bool = false
+var _zone_rewards: Array[Dictionary] = []   # награды за новые мини-зоны, ждут конца полёта
+var _flight: bool = false              # бросок сделан: шкала и инвентарь скрыты до конца кинематики
+var hotbar: Control                    # инвентарь зверей (создаёт main.gd)
 var _bonus_shown: bool = false
 var _boost_active: bool = false
 var _boost_pulse_tween: Tween
@@ -67,6 +71,7 @@ func _ready() -> void:
 	_label_layer.layer = 15
 	add_child(_label_layer)
 	_build_texts()
+	Game.mini_zone_reached.connect(_on_mini_zone_reached)
 	_build_stats()
 	_build_buttons()
 	_build_mini_zone_bar()
@@ -150,12 +155,36 @@ func set_throw_meter_enabled(enabled: bool) -> void:
 ## Кинематика получения зверя: HUD скрыт целиком, кнопки недоступны (справочник R2, фаза REVEAL).
 func set_reveal(active: bool) -> void:
 	visible = not active
+	if active:
+		_flight = false
 
 
 ## В полёте шкала броска скрывается: приземление уже сделано, цель — полёт.
 func set_flight(active: bool) -> void:
-	if throw_meter != null:
-		throw_meter.visible = not active and not _full and _throw_meter_enabled
+	if _flight == active:
+		return
+	_flight = active
+	_update_visibility()
+	if not active:
+		_flush_zone_rewards()
+
+
+# Награда за вход в новую мини-зону: во время полёта шкала мини-зон скрыта, поэтому показываем вылетающую надпись после посадки.
+func _on_mini_zone_reached(zone: int, index: int, reward: float) -> void:
+	_zone_rewards.append({"zone": zone, "index": index, "reward": reward})
+	if not _flight:
+		_flush_zone_rewards()
+
+
+func _flush_zone_rewards() -> void:
+	var center: Vector2 = get_viewport_rect().size * Vector2(0.5, 0.3)
+	var shift: float = 0.0
+	for item in _zone_rewards:
+		var name_text: String = Loc.t("mini_zone_new") % Loc.t(MiniZoneData.name_key(int(item["zone"]), int(item["index"])))
+		float_text(name_text, center + Vector2(0.0, shift), Color("#FFD23F"), 30, Vector2(0.0, -50.0), 2.2)
+		float_text("+" + NumFmt.money(float(item["reward"])), center + Vector2(0.0, shift + 36.0), UiStyle.COLOR_MONEY, 34, Vector2(0.0, -50.0), 2.2)
+		shift += 80.0
+	_zone_rewards.clear()
 
 
 func set_strength(value: int) -> void:
@@ -176,38 +205,88 @@ func _on_money_changed(value: float) -> void:
 
 func _on_strength_changed(value: int) -> void:
 	_strength.text = str(value)
-	show_notice(Loc.t("notice_level_fmt") % value, UiStyle.COLOR_STRENGTH, 2.5)
 
 
 func _on_food_affordable(tier: int) -> void:
-	show_notice(Loc.t("notice_food_fmt") % Loc.t(String(FoodData.FOODS[tier]["name_key"])), UiStyle.COLOR_MONEY, NOTICE_SECONDS)
+	_enqueue_notice({"kind": "food", "index": tier})
 
 
 func _on_bar_affordable(index: int) -> void:
-	show_notice(Loc.t("notice_bar_fmt") % Loc.t(String(UpgradeData.BARS[index]["name_key"])), UiStyle.COLOR_MONEY, NOTICE_SECONDS)
+	_enqueue_notice({"kind": "bar", "index": index})
 
 
-## Крупное уведомление сверху экрана: появляется, висит seconds секунд и гаснет. Новое заменяет старое.
-func show_notice(text: String, color: Color, seconds: float = NOTICE_SECONDS) -> void:
-	if _notice == null:
-		_notice = UiStyle.outline_label("", NOTICE_FONT, 12, color)
-		_notice.set_anchors_preset(Control.PRESET_TOP_WIDE)
-		_notice.offset_top = NOTICE_TOP
-		_notice.offset_bottom = NOTICE_TOP + 80.0
-		_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_notice.z_index = 20
-		add_child(_notice)
-	if _notice_tween != null and _notice_tween.is_valid():
-		_notice_tween.kill()
-	_notice.text = text
-	_notice.add_theme_color_override("font_color", color)
-	_notice.visible = true
-	_notice.modulate.a = 0.0
-	_notice_tween = _notice.create_tween()
-	_notice_tween.tween_property(_notice, "modulate:a", 1.0, 0.2)
-	_notice_tween.tween_interval(maxf(seconds - 0.7, 0.1))
-	_notice_tween.tween_property(_notice, "modulate:a", 0.0, 0.5)
-	_notice_tween.tween_callback(_notice.hide)
+# ---------- Уведомления «можно купить» ----------
+
+## Карточка не показывается, пока идёт бросок (еда летит, камера у зверя): ждёт очереди.
+func _enqueue_notice(entry: Dictionary) -> void:
+	_notice_queue.append(entry)
+
+
+func _process(_delta: float) -> void:
+	if _notice_card != null or _notice_queue.is_empty():
+		return
+	if busy_check.is_valid() and bool(busy_check.call()):
+		return
+	_show_notice_card(_notice_queue.pop_front())
+
+
+func _show_notice_card(entry: Dictionary) -> void:
+	var kind: String = String(entry["kind"])
+	var index: int = int(entry["index"])
+	var title: String
+	var item: String
+	var price: float
+	if kind == "food":
+		if Game.is_food_owned(index):
+			return
+		title = Loc.t("notice_food_title")
+		item = Loc.t(String(FoodData.FOODS[index]["name_key"]))
+		price = FoodData.price(index)
+	else:
+		if Game.bars_owned() > index:
+			return
+		title = Loc.t("notice_bar_title")
+		item = Loc.t(String(UpgradeData.BARS[index]["name_key"]))
+		price = float(UpgradeData.BARS[index]["price"])
+	var card: NoticeCard = NoticeCard.new()
+	card.lifetime = NOTICE_SECONDS
+	card.setup(title, Loc.t("notice_hint"), item, NumFmt.money(price), Loc.t("notice_buy"))
+	card.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	card.offset_left = -NoticeCard.CARD_WIDTH / 2.0
+	card.offset_right = NoticeCard.CARD_WIDTH / 2.0
+	card.offset_top = NOTICE_TOP
+	card.z_index = 20
+	card.action_pressed.connect(func() -> void: notice_action.emit(kind, index))
+	card.finished.connect(func() -> void: _notice_card = null)
+	add_child(card)
+	_notice_card = card
+	card.start()
+
+
+## Мелкий вылетающий текст: летит в случайную сторону и гаснет (опыт за подтягивания, надписи над головой).
+func float_text(text: String, screen_pos: Vector2, color: Color, font_size: int, travel: Vector2, life: float) -> void:
+	var label: Label = UiStyle.outline_label(text, font_size, maxi(font_size / 6, 3), color)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(label)
+	label.size = Vector2(320.0, float(font_size) + 12.0)
+	label.global_position = screen_pos - label.size * 0.5
+	var tween: Tween = label.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(label, "position", label.position + travel, life).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "modulate:a", 0.0, life * 0.5).set_delay(life * 0.5)
+	tween.chain().tween_callback(label.queue_free)
+
+
+## Опыт за подтягивание: маленькое «+N» в случайную сторону вверх.
+func xp_popup(text: String, screen_pos: Vector2) -> void:
+	var dir: Vector2 = Vector2.from_angle(randf_range(-PI * 0.92, -PI * 0.08))
+	float_text(text, screen_pos, UiStyle.COLOR_STRENGTH, 26, dir * randf_range(50.0, 110.0), 0.9)
+
+
+## Новый уровень силы: две небольшие надписи над головой, медленно уплывают вверх.
+func level_up_popup(power_gain: int, screen_pos: Vector2) -> void:
+	float_text(Loc.t("levelup_title"), screen_pos + Vector2(0.0, -34.0), Color("#FFD23F"), 34, Vector2(0.0, -70.0), 1.8)
+	float_text(Loc.t("levelup_power") % power_gain, screen_pos, UiStyle.COLOR_STRENGTH, 30, Vector2(0.0, -70.0), 1.8)
 
 
 func _on_language_changed() -> void:
@@ -649,8 +728,13 @@ func _update_visibility() -> void:
 	_strength_row.visible = true
 	_money_row.visible = _full
 	_income_row.visible = _full
+	var meter_shown: bool = not _full and _throw_meter_enabled and not _flight
 	if throw_meter != null:
-		throw_meter.visible = not _full and _throw_meter_enabled
+		throw_meter.visible = meter_shown
+	# Инвентарь прячется на тренировке (там шкала опыта), при прицеливании и в полёте.
+	if hotbar != null:
+		hotbar.visible = not _training and not meter_shown and not _flight
+	_goal.visible = _full and not _flight
 	for key in _buttons:
 		var button: Button = _buttons[key]
 		button.visible = _full

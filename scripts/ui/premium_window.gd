@@ -7,11 +7,11 @@ extends WindowBase
 ## Нет каталога (оффлайн, редактор без заглушки, ошибка SDK) — вместо карточек «Магазин недоступен».
 ## Названия и описания берутся из каталога; если там пусто, подставляются запасные тексты из Loc.
 
-const CARD_W: float = 250.0
-const IMAGE_SIZE: float = 110.0
-const CURRENCY_ICON_SIZE: float = 32.0
+const CARD_W: float = 190.0
+const IMAGE_SIZE: float = 64.0
+const CURRENCY_ICON_SIZE: float = 26.0
 const BUTTON_H: float = 64.0
-const CARD_PAD: int = 12
+const CARD_PAD: int = 10
 const COLOR_CARD: Color = Color("#3A3A44")
 const COLOR_CARD_BORDER: Color = Color("#6A6A78")
 const COLOR_OWNED_BORDER: Color = Color("#FFC83D")
@@ -31,6 +31,10 @@ var _busy: bool = false                  # идёт покупка: кнопки
 
 func _init() -> void:
 	title_key = "shop"
+	panel_w_k = 0.7
+	panel_w_max = 900.0
+	panel_h_k = 0.75
+	panel_h_max = 500.0
 
 
 func _build_body() -> void:
@@ -51,7 +55,7 @@ func _build_body() -> void:
 
 	_row = HBoxContainer.new()
 	_row.name = "Row"
-	_row.add_theme_constant_override("separation", 14)
+	_row.add_theme_constant_override("separation", 10)
 	_scroll.add_child(_row)
 
 
@@ -112,7 +116,7 @@ func _build_card(entry: Dictionary) -> void:
 
 	var frame: StyleBoxFlat = StyleBoxFlat.new()
 	frame.bg_color = COLOR_CARD
-	frame.set_corner_radius_all(16)
+	frame.set_corner_radius_all(14)
 	frame.set_border_width_all(3)
 	frame.border_color = COLOR_CARD_BORDER
 	var panel: PanelContainer = PanelContainer.new()
@@ -149,19 +153,21 @@ func _build_card(entry: Dictionary) -> void:
 	var title_text: String = str(entry.get("title", ""))
 	if title_text == "":
 		title_text = Loc.t(str(product["name_key"]))
-	var title_label: Label = UiStyle.outline_label(title_text, 28, 5, UiStyle.COLOR_TEXT)
+	var title_label: Label = UiStyle.outline_label(title_text, 22, 4, UiStyle.COLOR_TEXT)
 	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.custom_minimum_size = Vector2(CARD_W - 2.0 * CARD_PAD, 0.0)
 	column.add_child(title_label)
 
 	var desc_text: String = str(entry.get("description", ""))
 	if desc_text == "":
 		desc_text = Loc.t(str(product["desc_key"]))
-	var desc_label: Label = UiStyle.outline_label(desc_text, 20, 4, COLOR_SUB)
+	var desc_label: Label = UiStyle.outline_label(desc_text, 16, 3, COLOR_SUB)
 	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	desc_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	desc_label.custom_minimum_size = Vector2(0.0, 96.0)
+	desc_label.max_lines_visible = 4
+	desc_label.custom_minimum_size = Vector2(CARD_W - 2.0 * CARD_PAD, 0.0)
 	column.add_child(desc_label)
 
 	# Цена: строка IProduct.price как есть и иконка валюты из SDK.
@@ -169,7 +175,7 @@ func _build_card(entry: Dictionary) -> void:
 	price_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	price_row.add_theme_constant_override("separation", 8)
 	column.add_child(price_row)
-	price_row.add_child(UiStyle.outline_label(str(entry.get("price", "")), 30, 5, COLOR_PRICE))
+	price_row.add_child(UiStyle.outline_label(str(entry.get("price", "")), 24, 4, COLOR_PRICE))
 	var currency_rect: TextureRect = TextureRect.new()
 	currency_rect.custom_minimum_size = Vector2(CURRENCY_ICON_SIZE, CURRENCY_ICON_SIZE)
 	currency_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -181,6 +187,7 @@ func _build_card(entry: Dictionary) -> void:
 
 	var button: Button = make_button("", Vector2(0.0, BUTTON_H))
 	button.pressed.connect(_on_buy.bind(product_id))
+	_style_button(button, Color("#2FB344"))
 	column.add_child(button)
 
 	_cards.append({"id": product_id, "button": button, "frame": frame})
@@ -194,8 +201,24 @@ func _update_states() -> void:
 		var frame: StyleBoxFlat = card["frame"] as StyleBoxFlat
 		button.text = Loc.t("shop_owned") if owned else Loc.t("shop_buy")
 		button.disabled = owned or _busy
+		_style_button(button, Color("#6A6A78") if owned else Color("#2FB344"))
 		frame.border_color = COLOR_OWNED_BORDER if owned else COLOR_CARD_BORDER
 		frame.set_border_width_all(5 if owned else 3)
+
+
+func _style_button(button: Button, color: Color) -> void:
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = color
+	style.set_corner_radius_all(10)
+	style.set_border_width_all(3)
+	style.border_color = Color.BLACK
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		button.add_theme_stylebox_override(state, style)
+	button.add_theme_color_override("font_color", UiStyle.COLOR_TEXT)
+	button.add_theme_color_override("font_disabled_color", Color(1.0, 1.0, 1.0, 0.75))
+	button.add_theme_color_override("font_outline_color", Color.BLACK)
+	button.add_theme_constant_override("outline_size", 4)
+	button.add_theme_font_size_override("font_size", 22)
 
 
 func _on_buy(product_id: String) -> void:

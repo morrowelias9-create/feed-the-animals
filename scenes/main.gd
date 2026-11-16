@@ -7,6 +7,8 @@ var _player: Player
 var _camera_rig: CameraRig
 var _zone_look: ZoneLook
 var _router: InputRouter
+const FOOD_ENTRY_INSET: float = 0.25   # на сколько метров от края зоны еды ставим игрока при переносе
+
 var _hud: Hud
 var _throw_controller: ThrowController
 var _slot_manager: SlotManager
@@ -227,6 +229,7 @@ func _setup_throw() -> void:
 	_hotbar.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_hotbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud.add_child(_hotbar)
+	_hud.hotbar = _hotbar
 	_hotbar.animal_selected.connect(_carry_controller.take)
 	_setup_windows()
 
@@ -315,6 +318,8 @@ func _setup_windows() -> void:
 		(window as WindowBase).opened.connect(_on_window_opened)
 		(window as WindowBase).closed.connect(_on_window_closed)
 	_hud.animals_pressed.connect(_on_animals_pressed)
+	_hud.notice_action.connect(_on_notice_action)
+	_hud.busy_check = _throw_controller.is_busy
 	_hud.shop_pressed.connect(_on_shop_pressed)
 	_hud.index_pressed.connect(_on_index_pressed)
 
@@ -359,6 +364,7 @@ func _setup_training() -> void:
 	_tutorial.name = "TutorialController"
 	_tutorial.player = _player
 	_tutorial.hud = _hud
+	_tutorial.carry_controller = _carry_controller
 	_world.add_child(_tutorial)
 
 
@@ -458,3 +464,20 @@ func _process(delta: float) -> void:
 				_router.enabled = true
 				_player.enabled = true
 				print("DEBUG: биом-тур завершён, камера вернулась к игроку")
+
+
+# Кнопка «Купить» в уведомлении: игрок переносится на кнопку покупки, как если бы дошёл до неё сам.
+# Еда: открывается окно еды; турник: покупка срабатывает при входе на диск.
+func _on_notice_action(kind: String, _index: int) -> void:
+	if _player == null:
+		return
+	if kind == "food":
+		var rect: Rect2 = WorldLayout.food_zone_rect()
+		var inside: bool = rect.has_point(Vector2(_player.position.x, _player.position.z))
+		# Вход со стороны покупателя (+Z, перед прилавком), лицом к палатке (-Z); точка внутри зоны, окно откроется само.
+		_player.position = Vector3(rect.get_center().x, 0.0, rect.end.y - FOOD_ENTRY_INSET)
+		_player.face(0.0)
+		if inside and not _food_window.is_open():
+			_food_window.open()
+	else:
+		_player.position = WorldLayout.buy_pad_position()

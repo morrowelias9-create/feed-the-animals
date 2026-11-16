@@ -22,6 +22,18 @@ const FOODS: Array[Dictionary] = [
 ]
 
 
+## Редкость еды 0-4 (Обычный … Легендарный): растёт с биомом и с местом внутри биома (0-2).
+## Лес: 0,1,2; Саванна: 1,2,3; Пустыня: 2,3,4; Джунгли: 3,4,4; Океан: 4,4,4.
+static func rarity(index: int) -> int:
+	var i: int = clamp_index(index)
+	return clampi(zone_of(i) + i % 3, 0, 4)
+
+
+## Уровень еды для игрока: номер покупки с 1 (за кулисами работает прежняя удача `luck`).
+static func level(index: int) -> int:
+	return clamp_index(index) + 1
+
+
 static func count() -> int:
 	return FOODS.size()
 

@@ -68,8 +68,8 @@ func start() -> void:
 	await _load_remote_config()
 	_loaded = true
 	_income_dirty = true
+	_calc_offline_income()   # до _touch_last_seen: иначе «время отсутствия» всегда ~0 и окно не появляется
 	_touch_last_seen()
-	_calc_offline_income()
 	# T23: инициализируем время старта сессии для рекламы.
 	var now: int = int(Time.get_unix_time_from_system())
 	if Save.data["session_start_time"] == 0:
@@ -104,7 +104,7 @@ func _calc_offline_income() -> void:
 	var now: int = int(Time.get_unix_time_from_system())
 	var last: int = _i("last_seen")
 	var away_s: float = float(now - last)
-	if away_s <= 0.0:
+	if away_s < float(GameConfig.OFFLINE_MIN_S):
 		return
 	var income: float = income_per_sec()
 	if income <= 0.0:
@@ -270,6 +270,8 @@ func _check_food_affordability() -> void:
 		if not is_food_available(tier):
 			continue
 		var price: float = FoodData.price(tier)
+		if price <= 0.0:
+			continue   # бесплатную еду объявлять незачем
 		if money >= price and not notified.has(tier):
 			notified.append(tier)
 			food_affordable.emit(tier)

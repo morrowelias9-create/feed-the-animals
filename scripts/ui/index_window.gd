@@ -6,10 +6,10 @@ extends WindowBase
 
 signal zone_reward_claimed
 
-const CARD_W: float = 130.0
-const CARD_H: float = 160.0
-const CARD_SPACING: float = 12.0
-const TABS_H: float = 60.0
+const CARD_W: float = 190.0
+const CARD_H: float = 116.0
+const CARD_SPACING: float = 8.0
+const TABS_H: float = 56.0
 const BUTTON_H: float = 64.0
 const BUTTON_W: float = 200.0
 
@@ -31,11 +31,15 @@ var _total_all: int = 40
 
 func _init() -> void:
 	title_key = "index_title"
+	panel_w_k = 0.74
+	panel_w_max = 940.0
+	panel_h_k = 0.84
+	panel_h_max = 600.0
 	super._init()
 
 func _build_body() -> void:
 	# Заголовок с общим процентом
-	_header_label = UiStyle.outline_label("", 30, 5, UiStyle.COLOR_TEXT)
+	_header_label = UiStyle.outline_label("", 22, 4, UiStyle.COLOR_TEXT)
 	_header_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_header_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.add_child(_header_label)
@@ -50,7 +54,7 @@ func _build_body() -> void:
 
 	for zone_idx in ZoneData.count():
 		var zone_data: Dictionary = ZoneData.ZONES[zone_idx]
-		var tab_button: Button = WindowBase.make_button("", Vector2(0.0, TABS_H), 22)
+		var tab_button: Button = WindowBase.make_button("", Vector2(0.0, TABS_H), 20)
 		tab_button.name = "Tab_%d" % zone_idx
 		tab_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tab_button.theme_type_variation = "Tab"
@@ -107,7 +111,7 @@ func _build_pet_row() -> void:
 	_pet_panel_style.bg_color = Color(0.12, 0.12, 0.13)
 	_pet_panel_style.set_corner_radius_all(14)
 	_pet_panel_style.set_border_width_all(2)
-	_pet_panel_style.set_content_margin_all(10.0)
+	_pet_panel_style.set_content_margin_all(6.0)
 	_pet_panel.add_theme_stylebox_override("panel", _pet_panel_style)
 	_content.add_child(_pet_panel)
 
@@ -117,7 +121,7 @@ func _build_pet_row() -> void:
 	_pet_panel.add_child(row)
 
 	var icon_box := Control.new()
-	icon_box.custom_minimum_size = Vector2(56.0, 56.0)
+	icon_box.custom_minimum_size = Vector2(44.0, 44.0)
 	icon_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(icon_box)
@@ -142,15 +146,15 @@ func _build_pet_row() -> void:
 	texts.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(texts)
 
-	var title: Label = UiStyle.outline_label(Loc.t("pet_index_title"), 18, 3, Color(0.75, 0.75, 0.8))
+	var title: Label = UiStyle.outline_label(Loc.t("pet_index_title"), 14, 3, Color(0.75, 0.75, 0.8))
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texts.add_child(title)
 
-	_pet_name = UiStyle.outline_label("", 24, 4, UiStyle.COLOR_TEXT)
+	_pet_name = UiStyle.outline_label("", 19, 4, UiStyle.COLOR_TEXT)
 	_pet_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texts.add_child(_pet_name)
 
-	_pet_bonus = UiStyle.outline_label("", 18, 3, UiStyle.COLOR_MONEY)
+	_pet_bonus = UiStyle.outline_label("", 15, 3, UiStyle.COLOR_MONEY)
 	_pet_bonus.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texts.add_child(_pet_bonus)
 
@@ -217,13 +221,13 @@ func _build_zone_grid(zone_idx: int) -> void:
 			style.border_color = rarity_color.darkened(0.3)
 		else:
 			style.border_color = Color(0.3, 0.3, 0.35)
-		style.set_content_margin_all(10.0)
+		style.set_content_margin_all(6.0)
 		card.add_theme_stylebox_override("panel", style)
 
 		var card_vbox: VBoxContainer = VBoxContainer.new()
 		card_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		card_vbox.add_theme_constant_override("separation", 6)
+		card_vbox.add_theme_constant_override("separation", 2)
 		card_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		card.add_child(card_vbox)
 
@@ -233,7 +237,7 @@ func _build_zone_grid(zone_idx: int) -> void:
 		card_vbox.add_child(icon)
 
 		# Название
-		var name_label: Label = UiStyle.outline_label("", 22, 4, UiStyle.COLOR_TEXT)
+		var name_label: Label = UiStyle.outline_label("", 18, 4, UiStyle.COLOR_TEXT)
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		card_vbox.add_child(name_label)
@@ -247,7 +251,7 @@ func _build_zone_grid(zone_idx: int) -> void:
 
 		# Редкость (только для найденных)
 		if is_found:
-			var rarity_label: Label = UiStyle.outline_label("", 18, 3, UiStyle.COLOR_TEXT)
+			var rarity_label: Label = UiStyle.outline_label("", 14, 3, UiStyle.COLOR_TEXT)
 			rarity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			rarity_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			rarity_label.text = Loc.t("rarity_%d" % AnimalData.rarity_of(animal_id))
@@ -265,7 +269,7 @@ func _refresh_zone_grid(zone_idx: int) -> void:
 	_build_zone_grid(zone_idx)
 
 func _make_card_icon(animal_id: String, is_found: bool) -> Control:
-	var icon_size: float = 70.0
+	var icon_size: float = 52.0
 	if is_found:
 		# Иконка зверя: PNG из assets/ui/icons/animal_<id>.png (T25), фоллбек — буква
 		var icon := ColorRect.new()

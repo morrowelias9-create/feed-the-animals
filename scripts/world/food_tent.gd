@@ -49,8 +49,6 @@ func _can_open() -> bool:
 		return false
 	if throw_controller != null and throw_controller.is_busy():
 		return false
-	if carry_controller != null and carry_controller.is_carrying():
-		return false
 	return true
 
 

@@ -100,6 +100,13 @@ func food_size_m() -> float:
 	return 0.0
 
 
+## Доля пройденного полёта 0..1 (1 после приземления).
+func progress() -> float:
+	if _landed:
+		return 1.0
+	return clampf(_time / _duration, 0.0, 1.0) if _duration > 0.0 else 0.0
+
+
 func is_landed() -> bool:
 	return _landed
 

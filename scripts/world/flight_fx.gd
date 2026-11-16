@@ -14,6 +14,7 @@ const MINI_FLASH_ALPHA: float = 0.07
 const HINT_THROWS: int = 10              # пояснение к удаче показываем первые броски
 const BURST_LIFE_BIG: float = 0.8
 const BURST_LIFE_SMALL: float = 0.45
+const BANNER_FADE_AT: float = 0.8          # с этой доли полёта плашка зоны гаснет
 const GOLD: Color = Color("#FFD23F")
 
 var _active: bool = false
@@ -43,6 +44,7 @@ var _next_small: int = 0
 var _pop_tween: Tween
 var _flash_tween: Tween
 var _fade_tween: Tween
+var _banner_fading: bool = false
 
 
 func _ready() -> void:
@@ -62,6 +64,7 @@ func begin(dist: float, luck_total: int) -> void:
 	_luck_shown = -1
 	_active = true
 	_kill(_fade_tween)
+	_banner_fading = false
 	_layer.visible = true
 	_banner.modulate.a = 1.0
 	_luck_box.modulate.a = 1.0
@@ -71,9 +74,14 @@ func begin(dist: float, luck_total: int) -> void:
 
 
 ## Вызывается каждый кадр полёта с мировой позицией еды.
-func update(food_pos: Vector3, delta: float) -> void:
+func update(food_pos: Vector3, delta: float, progress: float = 0.0) -> void:
 	if not _active:
 		return
+	if progress >= BANNER_FADE_AT and not _banner_fading:
+		_banner_fading = true   # камера подлетает к земле: плашка зоны уходит, не висит над едой
+		_kill(_pop_tween)
+		var fade: Tween = create_tween()
+		fade.tween_property(_banner, "modulate:a", 0.0, 0.25)
 	_clock += delta
 	for i in _bursts.size():
 		if _burst_left[i] > 0.0:
@@ -101,9 +109,9 @@ func finish(land_pos: Vector3, zone: int, perfect: bool) -> void:
 	_start_burst(true, land_pos, color)
 	_kill(_fade_tween)
 	_fade_tween = create_tween()
+	_banner.modulate.a = 0.0
 	_fade_tween.tween_interval(0.5)
-	_fade_tween.tween_property(_banner, "modulate:a", 0.0, 0.35)
-	_fade_tween.parallel().tween_property(_luck_box, "modulate:a", 0.0, 0.35)
+	_fade_tween.tween_property(_luck_box, "modulate:a", 0.0, 0.35)
 	_fade_tween.tween_callback(func() -> void: _layer.visible = false)
 
 

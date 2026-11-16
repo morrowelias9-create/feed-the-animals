@@ -8,19 +8,24 @@ extends Control
 signal opened
 signal closed
 
-const PANEL_W_K: float = 0.8
-const PANEL_W_MAX: float = 1000.0
-const PANEL_H_K: float = 0.8
 const CLOSE_SIZE: float = 64.0
+const HEADER_COLOR: Color = Color("#C21FD0")   # фиолетовая шапка в стиле Роблокса
+const BODY_COLOR: Color = Color("#17171E")
+const CLOSE_COLOR: Color = Color("#E0262B")
 const DIM_ALPHA: float = 0.5
-const TITLE_FONT_SIZE: int = 40
+const TITLE_FONT_SIZE: int = 36
 const TOAST_FONT_SIZE: int = 28
 const TOAST_HOLD_S: float = 1.0
 const TOAST_FADE_S: float = 0.4
 const BUTTON_FONT_SIZE: int = 24
-const PADDING: int = 16
+const PADDING: int = 12
 
 var title_key: String = ""
+# Размер панели: доля экрана и предел в пикселях базового разрешения; наследники меняют в _init().
+var panel_w_k: float = 0.7
+var panel_w_max: float = 900.0
+var panel_h_k: float = 0.78
+var panel_h_max: float = 620.0
 var body: VBoxContainer
 
 var _panel: PanelContainer
@@ -117,37 +122,59 @@ func _build_frame() -> void:
 
 	_panel = PanelContainer.new()
 	_panel.name = "Panel"
-	_panel.add_theme_stylebox_override("panel", UiStyle.panel_style())
+	var frame := StyleBoxFlat.new()
+	frame.bg_color = BODY_COLOR
+	frame.set_corner_radius_all(22)
+	frame.set_border_width_all(4)
+	frame.border_color = Color.BLACK
+	_panel.add_theme_stylebox_override("panel", frame)
 	add_child(_panel)
 
-	var margin := MarginContainer.new()
-	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, PADDING)
-	_panel.add_child(margin)
-
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 10)
-	margin.add_child(column)
+	column.add_theme_constant_override("separation", 0)
+	_panel.add_child(column)
 
+	# Шапка: цветная полоса, название слева, красный крестик справа.
+	var header_panel := PanelContainer.new()
+	var header_style := StyleBoxFlat.new()
+	header_style.bg_color = HEADER_COLOR
+	header_style.corner_radius_top_left = 18
+	header_style.corner_radius_top_right = 18
+	header_style.content_margin_left = 20.0
+	header_style.content_margin_right = 10.0
+	header_style.content_margin_top = 6.0
+	header_style.content_margin_bottom = 6.0
+	header_panel.add_theme_stylebox_override("panel", header_style)
+	column.add_child(header_panel)
 	var header := HBoxContainer.new()
-	column.add_child(header)
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(CLOSE_SIZE, CLOSE_SIZE)
-	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	header.add_child(spacer)
-	_title = UiStyle.outline_label(Loc.t(title_key), TITLE_FONT_SIZE, 6, UiStyle.COLOR_TEXT)
+	header_panel.add_child(header)
+	_title = UiStyle.outline_label(Loc.t(title_key), TITLE_FONT_SIZE, 7, UiStyle.COLOR_TEXT)
+	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(_title)
 	var close_button := make_button("×", Vector2(CLOSE_SIZE, CLOSE_SIZE), 40)
 	close_button.name = "CloseButton"
+	var close_style := StyleBoxFlat.new()
+	close_style.bg_color = CLOSE_COLOR
+	close_style.set_corner_radius_all(10)
+	close_style.set_border_width_all(3)
+	close_style.border_color = Color.BLACK
+	for state in ["normal", "hover", "pressed", "focus"]:
+		close_button.add_theme_stylebox_override(state, close_style)
 	close_button.pressed.connect(close)
 	header.add_child(close_button)
+
+	var margin := MarginContainer.new()
+	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, PADDING)
+	column.add_child(margin)
 
 	body = VBoxContainer.new()
 	body.name = "Body"
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 10)
-	column.add_child(body)
+	body.add_theme_constant_override("separation", 8)
+	margin.add_child(body)
 
 	_toast = UiStyle.outline_label("", TOAST_FONT_SIZE, 5, UiStyle.COLOR_MONEY)
 	_toast.name = "Toast"
@@ -156,12 +183,12 @@ func _build_frame() -> void:
 	add_child(_toast)
 
 
-# Панель по центру: 80% ширины (не больше 1000) и 80% высоты; сообщение сразу под панелью.
+# Панель по центру; сообщение сразу под панелью.
 func _layout() -> void:
 	if _panel == null:
 		return
-	var w: float = minf(size.x * PANEL_W_K, PANEL_W_MAX)
-	var h: float = size.y * PANEL_H_K
+	var w: float = minf(size.x * panel_w_k, panel_w_max)
+	var h: float = minf(size.y * panel_h_k, panel_h_max)
 	_panel.size = Vector2(w, h)
 	_panel.position = Vector2((size.x - w) * 0.5, (size.y - h) * 0.5)
 	_toast.size = Vector2(w, 40.0)

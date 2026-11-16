@@ -119,6 +119,7 @@ func action_pressed() -> void:
 	_flight_luck = ThrowPath.luck_total(dist, _food_luck(food_idx), _perfect)
 	camera_rig.follow_food(_food)
 	player.avatar.play_throw()
+	hud.set_flight(true)   # шкала и инвентарь исчезают сразу после броска
 	state = STATE_THROWING
 	_throw_t = 0.0
 	_lock_player()
@@ -151,7 +152,7 @@ func _process(delta: float) -> void:
 		STATE_FLIGHT:
 			hud.set_flight(true)
 			if _food != null:
-				_fx.update(_food.global_position, delta)
+				_fx.update(_food.global_position, delta, _food.progress())
 				Game.report_flight_distance(-_food.global_position.z)   # T46: мини-зона засчитывается, когда еда в неё залетела
 				if _food.is_landed():
 					_land()
@@ -188,7 +189,7 @@ func cancel_for_carry() -> void:
 func _in_throw_zone() -> bool:
 	if player == null:
 		return false
-	var rect: Rect2 = WorldLayout.throw_zone_rect()
+	var rect: Rect2 = WorldLayout.throw_line_rect()
 	return rect.has_point(Vector2(player.position.x, player.position.z))
 
 
@@ -302,7 +303,7 @@ func _land() -> void:
 	Game.mp_record_throw(dist, food_idx)
 	# Регистрируем достижение зоны (биома) фактическим приземлением.
 	Game.record_zone_reached(zone)
-	_set_toast(true, dist)
+	# Плашка «Зона, N м» у еды убрана: у приземления она огромная и мешает камере (решение по замечанию игрока).
 	_spawn_land_fx(position)
 	_fx.finish(position, zone, perfect)
 	landed.emit(dist, zone, perfect, position)

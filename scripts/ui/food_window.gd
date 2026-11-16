@@ -1,21 +1,26 @@
 class_name FoodWindow
 extends WindowBase
-## Окно палатки еды (T15, T38, справочники R3, R4, R6): горизонтальная прокрутка карточек еды.
-## Карточка: иконка еды (настоящая текстура), название, польза, удача, цена, кнопка.
-## Заблокированная еда: настоящее изображение еды с лёгким затемнением,
-## небольшой замок по центру, условие открытия "Открой биом «...»", кнопка "ЗАКРЫТО".
+## Окно палатки еды (T15, T38, справочники R3, R4, R6) в стиле Роблокса: горизонтальный ряд карточек.
+## Карточка сверху вниз: название, редкость, иконка на цветном фоне редкости, короткая польза,
+## «Уровень N» (за кулисами работает прежняя удача), кнопка: цена / «Выбрать» / «Экипировано».
+## Закрытая еда: иконка затемнена, по центру замок, «Открой биом» и значок биома.
 
-const CARD_W: float = 220.0
-const ICON_SIZE: float = 120.0
-const BUTTON_H: float = 64.0
-const CARD_PAD: int = 12
-const COLOR_CARD: Color = Color("#3A3A44")
-const COLOR_CARD_BORDER: Color = Color("#6A6A78")
-const COLOR_SELECTED_BORDER: Color = Color("#FFC83D")
-const COLOR_PRICE_BAD: Color = Color("#FF5A5A")
-const COLOR_SUB: Color = Color("#B8B8C4")
-const CONTENT_MIN_H: float = 240.0  # минимальная высота контентной области для равных карточек
-const LOCKED_DIM: Color = Color(0.5, 0.5, 0.5, 0.7)  # затемнение для заблокированной еды
+const CARD_W: float = 196.0
+const ICON_SIZE: float = 118.0
+const BUTTON_H: float = 60.0
+const CARD_PAD: int = 10
+const LOCKED_DIM: Color = Color(0.18, 0.18, 0.22, 1.0)
+const COLOR_BORDER: Color = Color.BLACK
+const COLOR_SELECTED_BORDER: Color = Color("#7CFF4D")
+const COLOR_LEVEL_PLATE: Color = Color(0.0, 0.0, 0.0, 0.45)
+const COLOR_BUY: Color = Color("#FF9A1F")
+const COLOR_EQUIP_OK: Color = Color("#2FC41F")
+const COLOR_EQUIPPED: Color = Color("#5A5A66")
+const COLOR_LOCKED_BTN: Color = Color("#33333D")
+## Фон карточки по редкости 0-4: обычный, необычный, редкий, эпический, легендарный.
+const RARITY_BG: Array[Color] = [
+	Color("#7D8794"), Color("#46B84A"), Color("#3F86F0"), Color("#9B49DC"), Color("#F2A71B"),
+]
 
 var _scroll: ScrollContainer
 var _row: HBoxContainer
@@ -24,6 +29,10 @@ var _cards: Array[Dictionary] = []
 
 func _init() -> void:
 	title_key = "food_title"
+	panel_w_k = 0.7
+	panel_w_max = 900.0
+	panel_h_k = 0.72
+	panel_h_max = 520.0
 
 
 func _build_body() -> void:
@@ -36,7 +45,7 @@ func _build_body() -> void:
 
 	_row = HBoxContainer.new()
 	_row.name = "Row"
-	_row.add_theme_constant_override("separation", 14)
+	_row.add_theme_constant_override("separation", 10)
 	_scroll.add_child(_row)
 
 	for tier in FoodData.count():
@@ -58,12 +67,13 @@ func refresh() -> void:
 
 func _build_card(tier: int) -> void:
 	var food: Dictionary = FoodData.FOODS[tier]
-	
+	var rarity: int = FoodData.rarity(tier)
+
 	var frame: StyleBoxFlat = StyleBoxFlat.new()
-	frame.bg_color = COLOR_CARD
+	frame.bg_color = RARITY_BG[rarity]
 	frame.set_corner_radius_all(16)
-	frame.set_border_width_all(3)
-	frame.border_color = COLOR_CARD_BORDER
+	frame.set_border_width_all(4)
+	frame.border_color = COLOR_BORDER
 
 	var panel: PanelContainer = PanelContainer.new()
 	panel.name = "Card%d" % tier
@@ -77,22 +87,24 @@ func _build_card(tier: int) -> void:
 	panel.add_child(margin)
 
 	var column: VBoxContainer = VBoxContainer.new()
-	column.add_theme_constant_override("separation", 8)
+	column.add_theme_constant_override("separation", 4)
 	margin.add_child(column)
 
-	# --- Иконка еды (настоящая текстура) ---
-	# Используем PanelContainer с фиксированным размером для гарантированной области изображения
-	var icon_panel: PanelContainer = PanelContainer.new()
-	icon_panel.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
-	icon_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var icon_panel_style: StyleBoxFlat = StyleBoxFlat.new()
-	icon_panel_style.bg_color = Color(0, 0, 0, 0)  # прозрачный фон
-	icon_panel_style.set_corner_radius_all(0)
-	icon_panel_style.set_border_width_all(0)
-	icon_panel.add_theme_stylebox_override("panel", icon_panel_style)
-	column.add_child(icon_panel)
+	var name_label: Label = UiStyle.outline_label("", 26, 5, UiStyle.COLOR_TEXT)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_label.custom_minimum_size = Vector2(CARD_W - CARD_PAD * 2, 64.0)   # две строки без скачков высоты
+	column.add_child(name_label)
 
-	# Текстура еды (если есть файл)
+	var rarity_label: Label = UiStyle.outline_label(Loc.t("rarity_%d" % rarity), 18, 4, UiStyle.COLOR_TEXT)
+	column.add_child(rarity_label)
+
+	# Иконка еды; поверх неё для закрытой еды замок и условие открытия.
+	var icon_box: Control = Control.new()
+	icon_box.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
+	icon_box.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	icon_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(icon_box)
+
 	var tex_rect: TextureRect = TextureRect.new()
 	tex_rect.name = "FoodTexture"
 	tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -102,95 +114,84 @@ func _build_card(tier: int) -> void:
 	var icon_path: String = UiStyle.ICON_DIR + "food_%s.png" % String(food["id"])
 	if ResourceLoader.exists(icon_path):
 		tex_rect.texture = load(icon_path) as Texture2D
-	else:
-		tex_rect.visible = false  # скрываем, если текстуры нет
-	icon_panel.add_child(tex_rect)
+	icon_box.add_child(tex_rect)
 
-	# Замок (невидимый по умолчанию) — поверх текстуры еды
-	var lock_icon: TextureRect = TextureRect.new()
-	lock_icon.name = "LockIcon"
-	lock_icon.custom_minimum_size = Vector2(36.0, 36.0)
-	lock_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	lock_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	lock_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lock_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	lock_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	# Создаём замок программно или загружаем иконку
-	var lock_path: String = UiStyle.ICON_DIR + "lock.png"
-	if ResourceLoader.exists(lock_path):
-		lock_icon.texture = load(lock_path) as Texture2D
-	else:
-		lock_icon.texture = _create_lock_texture()
-	lock_icon.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	lock_icon.anchor_left = 0.5
-	lock_icon.anchor_top = 0.5
-	lock_icon.anchor_right = 0.5
-	lock_icon.anchor_bottom = 0.5
-	lock_icon.offset_left = -18.0
-	lock_icon.offset_top = -18.0
-	lock_icon.offset_right = 18.0
-	lock_icon.offset_bottom = 18.0
-	lock_icon.visible = false
-	icon_panel.add_child(lock_icon)
+	var lock_box: VBoxContainer = _build_lock_overlay(int(food["zone"]))
+	icon_box.add_child(lock_box)
 
-	# Название еды
-	var name_label: Label = UiStyle.outline_label("", 30, 5, UiStyle.COLOR_TEXT)
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_label.custom_minimum_size = Vector2(CARD_W - CARD_PAD * 2, 0.0)
-	column.add_child(name_label)
-
-	# Контейнер для текстового контента с фиксированной минимальной высотой
-	# Это гарантирует одинаковую высоту карточек независимо от длины описания
-	var content_container: VBoxContainer = VBoxContainer.new()
-	content_container.add_theme_constant_override("separation", 4)
-	content_container.custom_minimum_size = Vector2(0.0, CONTENT_MIN_H)
-	content_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(content_container)
-
-	# Польза еды (описание ранга)
-	var benefit_label: Label = UiStyle.outline_label("", 20, 4, COLOR_SUB)
-	benefit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var benefit_label: Label = UiStyle.outline_label("", 16, 3, Color(1.0, 1.0, 1.0, 0.92))
 	benefit_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	benefit_label.custom_minimum_size = Vector2(CARD_W - CARD_PAD * 2, 0.0)
-	content_container.add_child(benefit_label)
+	benefit_label.custom_minimum_size = Vector2(CARD_W - CARD_PAD * 2, 42.0)
+	column.add_child(benefit_label)
 
-	# Удача
-	var luck_label: Label = UiStyle.outline_label("", 20, 4, COLOR_SUB)
-	luck_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content_container.add_child(luck_label)
+	var level_plate: PanelContainer = PanelContainer.new()
+	var plate_style: StyleBoxFlat = StyleBoxFlat.new()
+	plate_style.bg_color = COLOR_LEVEL_PLATE
+	plate_style.set_corner_radius_all(8)
+	plate_style.set_border_width_all(2)
+	plate_style.border_color = Color.BLACK
+	level_plate.add_theme_stylebox_override("panel", plate_style)
+	column.add_child(level_plate)
+	var level_label: Label = UiStyle.outline_label(Loc.t("food_level") % FoodData.level(tier), 22, 4, UiStyle.COLOR_TEXT)
+	level_plate.add_child(level_label)
 
-	# Условие открытия (для заблокированной еды)
-	var unlock_label: Label = UiStyle.outline_label("", 20, 4, COLOR_SUB)
-	unlock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	unlock_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	unlock_label.custom_minimum_size = Vector2(CARD_W - CARD_PAD * 2, 0.0)
-	unlock_label.visible = false
-	content_container.add_child(unlock_label)
-
-	# Цена
-	var price_label: Label = UiStyle.outline_label("", 28, 5, UiStyle.COLOR_MONEY)
-	price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content_container.add_child(price_label)
-
-	# Кнопка
-	var button: Button = make_button("", Vector2(0.0, BUTTON_H))
+	var button: Button = make_button("", Vector2(0.0, BUTTON_H), 26)
 	button.pressed.connect(_on_button.bind(tier))
 	column.add_child(button)
 
 	_cards.append({
 		"frame": frame,
 		"tex_rect": tex_rect,
-		"lock_icon": lock_icon,
+		"lock_box": lock_box,
 		"name": name_label,
+		"rarity": rarity_label,
 		"benefit": benefit_label,
-		"luck": luck_label,
-		"unlock": unlock_label,
-		"price": price_label,
+		"level": level_label,
 		"button": button,
 		"panel": panel,
-		"content_container": content_container,
 	})
+
+
+# Замок по центру иконки, «Открой биом» и значок биома. Размытие шейдером запрещено правилами 3D/веба,
+# поэтому закрытая иконка просто затемнена.
+func _build_lock_overlay(zone_idx: int) -> VBoxContainer:
+	var box: VBoxContainer = VBoxContainer.new()
+	box.name = "LockOverlay"
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 0)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.visible = false
+
+	var lock_icon: TextureRect = TextureRect.new()
+	lock_icon.custom_minimum_size = Vector2(26.0, 26.0)
+	lock_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	lock_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	lock_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	lock_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lock_path: String = UiStyle.ICON_DIR + "lock.png"
+	lock_icon.texture = load(lock_path) as Texture2D if ResourceLoader.exists(lock_path) else _create_lock_texture()
+	box.add_child(lock_icon)
+
+	var hint: Label = UiStyle.outline_label(Loc.t("food_unlock_hint"), 14, 3, UiStyle.COLOR_TEXT)
+	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(hint)
+
+	var zone_icon: TextureRect = TextureRect.new()
+	zone_icon.custom_minimum_size = Vector2(34.0, 34.0)
+	zone_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	zone_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	zone_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	zone_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var zone_path: String = UiStyle.ICON_DIR + "zone_%s.png" % String(ZoneData.ZONES[zone_idx]["id"])
+	if ResourceLoader.exists(zone_path):
+		zone_icon.texture = load(zone_path) as Texture2D
+	box.add_child(zone_icon)
+
+	var zone_name: Label = UiStyle.outline_label(Loc.t(String(ZoneData.ZONES[zone_idx]["name_key"])), 15, 3, UiStyle.COLOR_TEXT)
+	zone_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(zone_name)
+	return box
 
 
 func _create_lock_texture() -> Texture2D:
@@ -239,98 +240,53 @@ func _update_cards() -> void:
 		var card: Dictionary = _cards[tier]
 		var owned: bool = Game.is_food_owned(tier)
 		var available: bool = Game.is_food_available(tier)
-		var can_buy: bool = Game.can_buy_food(tier)
 		var price: float = FoodData.price(tier)
-		var zone_idx: int = int(food["zone"])
-		var zone_name: String = Loc.t(String(ZoneData.ZONES[zone_idx]["name_key"]))
-		var aim_rank: int = int(food["aim_rank"])
-		var luck_val: float = FoodData.luck(tier)
-
-		# Название еды — всегда видно
-		(card["name"] as Label).text = Loc.t(String(food["name_key"]))
-
-		# Польза еды (описание ранга)
-		var benefit_label: Label = card["benefit"] as Label
-		benefit_label.text = _get_benefit_text(aim_rank)
-		benefit_label.visible = true
-
-		# Удача
-		var luck_label: Label = card["luck"] as Label
-		luck_label.text = Loc.t("food_luck") % str(luck_val)
-		luck_label.visible = true
-
-		# Условие открытия / кнопка / изображение
-		var unlock_label: Label = card["unlock"] as Label
 		var button: Button = card["button"] as Button
 		var tex_rect: TextureRect = card["tex_rect"] as TextureRect
-		var lock_icon: TextureRect = card["lock_icon"] as TextureRect
-		var price_label: Label = card["price"] as Label
 
-		if available:
-			# Доступная еда: полноцветная, без замка
-			tex_rect.modulate = Color.WHITE
-			lock_icon.visible = false
-			unlock_label.visible = false
-			unlock_label.text = ""
+		(card["name"] as Label).text = Loc.t(String(food["name_key"]))
+		(card["rarity"] as Label).text = Loc.t("rarity_%d" % FoodData.rarity(tier))
+		(card["benefit"] as Label).text = _get_benefit_text(int(food["aim_rank"]))
+		(card["level"] as Label).text = Loc.t("food_level") % FoodData.level(tier)
+		(card["lock_box"] as Control).visible = not available
+		tex_rect.modulate = Color.WHITE if available else LOCKED_DIM
 
-			if owned and tier == selected:
-				button.text = Loc.t("food_selected")
-				button.disabled = true
-			elif owned:
-				button.text = Loc.t("food_select")
-				button.disabled = false
-			else:
-				button.text = Loc.t("food_buy")
-				button.disabled = not can_buy
-			
-			# Цена
-			if owned:
-				price_label.text = ""
-			else:
-				price_label.text = NumFmt.money(price)
-				price_label.add_theme_color_override("font_color", UiStyle.COLOR_MONEY if money >= price else COLOR_PRICE_BAD)
-		else:
-			# Заблокированная еда: лёгкое затемнение, замок
-			tex_rect.modulate = LOCKED_DIM
-			lock_icon.visible = true
-			
-			# Текст условия открытия (ТОЛЬКО здесь, не на кнопке)
-			unlock_label.text = Loc.t("food_unlock_hint") % zone_name
-			unlock_label.visible = true
-			
-			# Кнопка — просто "ЗАКРЫТО"
-			button.text = Loc.t("food_locked_button")
+		var is_selected: bool = available and owned and tier == selected
+		if not available:
+			_style_button(button, COLOR_LOCKED_BTN)
+			button.text = NumFmt.money(price)
 			button.disabled = true
-			# Приглушённый стиль кнопки
-			var disabled_style: StyleBoxFlat = StyleBoxFlat.new()
-			disabled_style.bg_color = Color("#2A2A34")
-			disabled_style.set_corner_radius_all(12)
-			disabled_style.border_color = Color("#555566")
-			disabled_style.set_border_width_all(2)
-			button.add_theme_stylebox_override("disabled", disabled_style)
-			button.add_theme_color_override("font_color", Color("#888899"))
-			
-			# Цена (видна, но приглушённая)
-			price_label.text = NumFmt.money(price)
-			price_label.add_theme_color_override("font_color", COLOR_SUB)
+		elif is_selected:
+			_style_button(button, COLOR_EQUIPPED)
+			button.text = Loc.t("food_equipped")
+			button.disabled = true
+		elif owned:
+			_style_button(button, COLOR_EQUIP_OK)
+			button.text = Loc.t("food_select")
+			button.disabled = false
+		else:
+			_style_button(button, COLOR_BUY if money >= price else COLOR_BUY.darkened(0.45))
+			button.text = Loc.t("food_free") if price <= 0.0 else NumFmt.money(price)
+			button.disabled = false   # без денег нажатие покажет «Не хватает денег»
 
-		# Рамка выбранной карточки
 		var frame: StyleBoxFlat = card["frame"] as StyleBoxFlat
-		var is_selected: bool = owned and tier == selected
-		frame.border_color = COLOR_SELECTED_BORDER if is_selected else COLOR_CARD_BORDER
-		frame.set_border_width_all(5 if is_selected else 3)
+		frame.border_color = COLOR_SELECTED_BORDER if is_selected else COLOR_BORDER
+		frame.set_border_width_all(6 if is_selected else 4)
 
 
-func _get_benefit_text(aim_rank: int) -> String:
-	match aim_rank:
-		2:
-			return Loc.t("food_benefit_2")
-		5:
-			return Loc.t("food_benefit_5")
-		8:
-			return Loc.t("food_benefit_8")
-		_:
-			return ""
+# Единый вид кнопки карточки: цвет заливки, чёрная обводка, белый текст с контуром.
+func _style_button(button: Button, color: Color) -> void:
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = color
+	style.set_corner_radius_all(10)
+	style.set_border_width_all(3)
+	style.border_color = Color.BLACK
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		button.add_theme_stylebox_override(state, style)
+	button.add_theme_color_override("font_color", UiStyle.COLOR_TEXT)
+	button.add_theme_color_override("font_disabled_color", Color(1.0, 1.0, 1.0, 0.75))
+	button.add_theme_color_override("font_outline_color", Color.BLACK)
+	button.add_theme_constant_override("outline_size", 5)
 
 
 func _focus_current() -> void:
@@ -366,3 +322,14 @@ func _on_game_changed() -> void:
 func _on_money_changed(_value: float) -> void:
 	if visible:
 		_update_cards()
+
+func _get_benefit_text(aim_rank: int) -> String:
+	match aim_rank:
+		2:
+			return Loc.t("food_benefit_2")
+		5:
+			return Loc.t("food_benefit_5")
+		8:
+			return Loc.t("food_benefit_8")
+		_:
+			return ""
