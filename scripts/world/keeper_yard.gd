@@ -3,9 +3,9 @@ extends Node3D
 ## Загон Хранителя зверей (T54): показательный сосед в Лесу, пока игрок не долетел до Саванны.
 ## Занимает левый соседний участок (WorldLayout.KEEPER_PLOT). Звери гуляют по загону, над Хранителем
 ## речевой пузырь с репликами (как в комиксах). Состав и доход берутся из KeeperLogic.
+## Уход: звери по очереди, потом Хранитель рассыпаются цветной пылью, которую уносит вбок и вверх (около 5 секунд).
 ## Всё создаётся один раз в _ready; в _process нет создания узлов и объектов, кроме редких событий.
 
-const PUFF_COLOR := Color("#FFE066")
 const INK := Color("#2B2B2B")                      # цвет контура и текста пузыря
 const BUBBLE_LAYER: int = 11                       # над миром, ниже окон и экрана награды
 const BUBBLE_W: float = 190.0                      # ширина текста внутри пузыря (небольшое облачко)
@@ -22,7 +22,6 @@ var _wait: Array[float] = []
 var _rng := RandomNumberGenerator.new()
 var _name_label: Label3D
 var _income_label: Label3D
-var _puff: CPUParticles3D
 var _income_total: float = 0.0
 var _poll_t: float = 0.0
 var _talk_left: float = 0.0
@@ -36,6 +35,16 @@ var _bubble: Control                    # корень: точка (0, 0) это
 var _bubble_panel: PanelContainer
 var _bubble_label: Label
 var _bubble_tween: Tween
+
+# Состояние ухода: параллельные массивы по участникам (звери в случайном порядке, Хранитель последним).
+var _leave_t: float = 0.0
+var _leave_nodes: Array[Node3D] = []
+var _leave_base: Array[Vector3] = []              # исходный масштаб
+var _leave_start: Array[float] = []
+var _leave_dur: Array[float] = []
+var _leave_dust: Array[CPUParticles3D] = []
+var _leave_phase: Array[int] = []                 # 0 ждёт, 1 рассыпается, 2 готов
+var _leave_bubble_hidden: bool = false
 
 
 func _ready() -> void:
@@ -56,13 +65,13 @@ func _ready() -> void:
 	_build_pen(pen)
 	_build_labels()
 	_build_bubble()
-	_build_puff()
 	Loc.language_changed.connect(_refresh_texts)
 	_refresh_texts()
 
 
 func _process(delta: float) -> void:
 	if _leaving:
+		_update_leave(delta)
 		return
 	_wander(delta)
 	if _talk_left > 0.0:
@@ -201,42 +210,6 @@ func _build_bubble() -> void:
 	_bubble.add_child(tail_fill)
 
 
-# Облачко прощания создаётся заранее и лежит выключенным: в момент ухода только запускается.
-func _build_puff() -> void:
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.vertex_color_use_as_albedo = true
-	var sphere := SphereMesh.new()
-	sphere.radius = 0.25
-	sphere.height = 0.5
-	sphere.radial_segments = 6
-	sphere.rings = 3
-	sphere.material = mat
-	var shrink := Curve.new()
-	shrink.add_point(Vector2(0.0, 1.0))
-	shrink.add_point(Vector2(1.0, 0.0))
-	_puff = CPUParticles3D.new()
-	_puff.name = "Puff"
-	_puff.emitting = false
-	_puff.one_shot = true
-	_puff.explosiveness = 0.95
-	_puff.amount = 60
-	_puff.lifetime = 1.0
-	_puff.direction = Vector3.UP
-	_puff.spread = 180.0
-	_puff.gravity = Vector3(0.0, -3.0, 0.0)
-	_puff.initial_velocity_min = 3.0
-	_puff.initial_velocity_max = 9.0
-	_puff.scale_amount_min = 0.7
-	_puff.scale_amount_max = 1.8
-	_puff.scale_amount_curve = shrink
-	_puff.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-	_puff.emission_sphere_radius = 1.0
-	_puff.mesh = sphere
-	_puff.color = PUFF_COLOR
-	add_child(_puff)
-
-
 func _refresh_texts() -> void:
 	if _name_label == null:
 		return
@@ -336,22 +309,122 @@ func _update_bubble() -> void:
 
 # ---------- уход ----------
 
-# Аккуратный уход: звери и Хранитель сжимаются, облачко, плашка, флаг в сохранении, потом узел удаляется.
+# Начало ухода: флаг в сохранении, плашка, прощальная реплика над головой и расписание рассыпания.
 func _leave() -> void:
 	_leaving = true
+	_leave_t = 0.0
 	Save.data["keeper_gone"] = true
 	Save.save_data()
 	Game.notice.emit("notice_keeper_farewell", [])
-	_kill_tween()
-	_bubble.visible = false
-	_puff.global_position = _root.global_position + Vector3(0.0, 1.2, 0.0)
-	_puff.restart()
-	_puff.emitting = true
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(_root, "scale", Vector3.ZERO, 0.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 	for view in _views:
 		if is_instance_valid(view):
-			tween.tween_property(view, "scale", Vector3.ZERO, 0.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-	tween.chain().tween_interval(0.6)
-	tween.chain().tween_callback(queue_free)
+			view.idle()   # звери замирают, пока их очередь рассыпаться
+	_say(Loc.t("keeper_farewell_line"))
+	_talk_left = 0.0
+	_build_leave_schedule()
+
+
+# Расписание: звери стартуют по очереди в случайном порядке в течение LEAVE_ANIMAL_SPAN_S, Хранитель последним.
+# У каждого участника свой источник пыли (создаётся один раз в момент ухода, не по кадрам).
+func _build_leave_schedule() -> void:
+	var mesh := SphereMesh.new()
+	mesh.radius = KeeperData.LEAVE_DUST_RADIUS
+	mesh.height = KeeperData.LEAVE_DUST_RADIUS * 2.0
+	mesh.radial_segments = 6
+	mesh.rings = 3
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.vertex_color_use_as_albedo = true
+	mesh.material = mat
+	var shrink := Curve.new()
+	shrink.add_point(Vector2(0.0, 1.0))
+	shrink.add_point(Vector2(1.0, 0.1))
+	var fade := Gradient.new()
+	fade.offsets = PackedFloat32Array([0.0, 0.65, 1.0])
+	fade.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)])
+	var order: Array[int] = []
+	for i in _views.size():
+		order.append(i)
+	for i in range(order.size() - 1, 0, -1):   # перемешать (Фишер-Йетс), порядок случайный, но детерминированный
+		var j: int = _rng.randi_range(0, i)
+		var tmp: int = order[i]
+		order[i] = order[j]
+		order[j] = tmp
+	var steps: float = float(maxi(order.size() - 1, 1))
+	for pos in order.size():
+		var view: AnimalView = _views[order[pos]]
+		var start: float = KeeperData.LEAVE_ANIMAL_SPAN_S * float(pos) / steps
+		var bounds: AABB = view.model_bounds()
+		var center: Vector3 = view.global_transform * bounds.get_center()
+		var extents: Vector3 = bounds.size * view.scale * 0.5
+		var tint: Color = VariantData.text_color(view.variant) if view.variant != VariantData.NONE else AnimalData.rarity_color(view.rarity)
+		_add_leave_entry(view, start, KeeperData.LEAVE_ANIMAL_DUR_S, center, extents, tint.lerp(Color.WHITE, 0.35), mesh, shrink, fade)
+	var keeper_extents := Vector3(0.45, 0.95, 0.35)
+	_add_leave_entry(_root, KeeperData.LEAVE_KEEPER_START_S, KeeperData.LEAVE_KEEPER_DUR_S,
+		_root.global_position + Vector3(0.0, 0.95, 0.0), keeper_extents, Color("#E9F1FF"), mesh, shrink, fade)
+
+
+func _add_leave_entry(node: Node3D, start: float, dur: float, center: Vector3, extents: Vector3, tint: Color,
+		mesh: Mesh, shrink: Curve, fade: Gradient) -> void:
+	var k: float = clampf(maxf(extents.x, maxf(extents.y, extents.z)) / 1.2, 0.7, 2.6)   # крупным больше и крупнее пыль
+	var dust := CPUParticles3D.new()
+	dust.name = "Dust_%d" % _leave_nodes.size()
+	dust.emitting = false
+	dust.local_coords = false                     # пыль остаётся в мире и улетает, а не едет вместе с узлом
+	dust.amount = clampi(int(70.0 * k * k), 50, 220)
+	dust.lifetime = KeeperData.LEAVE_DUST_LIFE_S
+	dust.explosiveness = 0.0
+	dust.randomness = 0.6
+	dust.direction = KeeperData.LEAVE_DRIFT.normalized()
+	dust.spread = 28.0
+	dust.gravity = KeeperData.LEAVE_WIND
+	dust.initial_velocity_min = 0.8
+	dust.initial_velocity_max = 2.4
+	dust.scale_amount_min = 0.5 * k
+	dust.scale_amount_max = 1.3 * k
+	dust.scale_amount_curve = shrink
+	dust.color_ramp = fade
+	dust.color = tint
+	dust.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	dust.emission_box_extents = extents
+	dust.mesh = mesh
+	add_child(dust)
+	dust.global_position = center
+	_leave_nodes.append(node)
+	_leave_base.append(node.scale)
+	_leave_start.append(start)
+	_leave_dur.append(dur)
+	_leave_dust.append(dust)
+	_leave_phase.append(0)
+
+
+# Каждый кадр ухода: по расписанию участник начинает рассыпаться (уменьшается, всплывает, сыплет пыль) и пропадает.
+func _update_leave(delta: float) -> void:
+	_leave_t += delta
+	for i in _leave_nodes.size():
+		var phase: int = _leave_phase[i]
+		if phase >= 2:
+			continue
+		var node: Node3D = _leave_nodes[i]
+		var p: float = clampf((_leave_t - _leave_start[i]) / _leave_dur[i], 0.0, 1.0)
+		if phase == 0 and _leave_t >= _leave_start[i]:
+			_leave_phase[i] = 1
+			_leave_dust[i].emitting = true
+		if _leave_t < _leave_start[i]:
+			continue
+		if p >= 1.0:
+			_leave_phase[i] = 2
+			_leave_dust[i].emitting = false
+			node.visible = false
+			continue
+		var factor: float = 1.0 - smoothstep(0.1, 1.0, p)
+		node.scale = _leave_base[i] * maxf(factor, 0.0001)
+		node.position.y = p * KeeperData.LEAVE_LIFT_M
+	if not _leave_bubble_hidden and _leave_t >= KeeperData.LEAVE_BUBBLE_HIDE_S:
+		_leave_bubble_hidden = true
+		_hide_bubble()
+	if _bubble.visible:
+		_update_bubble()
+	if _leave_t >= KeeperData.LEAVE_END_S:
+		queue_free()

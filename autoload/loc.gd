@@ -109,7 +109,6 @@ const T := {
 	"mini_ocean_5": {"ru": "Глубина", "en": "The Deep"},
 	"mini_ocean_6": {"ru": "Бездна", "en": "The Abyss"},
 	"mini_zone_new": {"ru": "Новая местность: %s", "en": "New area: %s"},
-	"mini_zone_bonus": {"ru": "Бонус за открытие: +%s", "en": "Discovery bonus: +%s"},
 	"zone_progress_fmt": {"ru": "%s · %s %d/6", "en": "%s · %s %d/6"},
 
 	# Еда
@@ -290,6 +289,7 @@ const T := {
 	"keeper_line_2": {"ru": "Эта обезьяна выросла до максимума. Ты тоже так сможешь!", "en": "This monkey grew to the maximum size. You can do it too!"},
 	"keeper_line_3": {"ru": "Рубиновый волк нашёлся в самом Лесу. Редкие звери бывают везде!", "en": "I found this ruby wolf right in the Forest. Rare beasts can be anywhere!"},
 	"keeper_line_4": {"ru": "Качай силу на турнике и покупай еду получше.", "en": "Train on the bar and buy better food."},
+	"keeper_farewell_line": {"ru": "Удачной игры!", "en": "Good luck!"},
 	"notice_keeper_farewell": {"ru": "Хранитель уходит: ты дошёл до Саванны!", "en": "The Keeper leaves: you reached the Savanna!"},
 	"neighbor_free_plot": {"ru": "Свободный участок", "en": "Free plot", "tr": "Boş arsa"},
 

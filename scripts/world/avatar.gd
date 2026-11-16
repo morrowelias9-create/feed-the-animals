@@ -21,9 +21,13 @@ const RUN_FROM: float = 3.5                  # со скорости выше э
 const THROW_TIME: float = 0.55
 const PULLUP_DEFAULT: float = 0.3
 const PULLUP_HOLD_S: float = 0.7             # сколько герой висит на турнике после последнего повторения
-const PULLUP_BAR_Y: float = 2.1              # высота перекладины над землёй, м (уточни по турнику и поправь здесь)
-const HANG_REACH_Y: float = 1.74             # высота кистей над землёй при вытянутых вверх руках (по модели героя)
-const PULLUP_RISE: float = 0.30              # на сколько тело поднимается в верхней точке повторения
+const SHOULDER_Y: float = 1.18              # высота плеча над ногами в покое (по модели героя, HeroRecipe)
+const ARM_UPPER: float = 0.25                # плечо: от плеча до локтя
+const ARM_LOWER: float = 0.30                # предплечье с кистью: от локтя до центра кисти
+const GRIP_FORWARD: float = 0.2              # перекладина впереди игрока по -Z (BarView.CROSSBAR_Z относительно игрока)
+const HANG_BACK: float = 0.3                # на сколько тело отодвинуто назад от перекладины (+Z), чтобы голова не входила в неё
+const HANG_REACH: float = 0.545              # расстояние плечо-кисть в виске (почти прямые руки)
+const PULLUP_RISE: float = 0.10              # на сколько плечо приближается к перекладине в верхней точке повторения
 const CARRY_ANCHOR_POS: Vector3 = Vector3(-0.20, 0.34, 0.0)   # от кости chest: плечо левой руки, как у прежнего аватара
 const CARRY_ANCHOR_ROT_X: float = 1.45       # такой же поворот, как у прежней руки: CarryController не меняется
 const BLINK_TIME: float = 0.14
@@ -43,6 +47,7 @@ var _pull_k: float = 0.0
 var _carry_w: float = 0.0
 var _t: float = 0.0
 var _body_y: float = 0.0
+var _body_z: float = 0.0
 var _blink_in: float = 2.5
 var _blink_t: float = -1.0
 var _look_in: float = 3.0
@@ -125,7 +130,9 @@ func reset_pose() -> void:
 	_pull_k = 0.0
 	_carry_w = 1.0 if _carrying else 0.0
 	_body_y = 0.0
+	_body_z = 0.0
 	position.y = 0.0
+	position.z = 0.0
 	if _built:
 		_rot.fill(Vector3.ZERO)
 		_apply_pose(1.0)
@@ -137,6 +144,7 @@ func _process(delta: float) -> void:
 	_update_state(delta)
 	_rot.fill(Vector3.ZERO)
 	_body_y = 0.0
+	_body_z = 0.0
 	_pose_idle()
 	_pose_walk()
 	_pose_throw()
@@ -287,12 +295,17 @@ func _pose_hang() -> void:
 	if w < 0.001:
 		return
 	var k: float = _pull_k
-	_blend("upper_arm_L", 3.05 - 0.15 * k, 0.0, -0.25, w)
-	_blend("upper_arm_R", 3.05 - 0.15 * k, 0.0, 0.25, w)
-	_blend("forearm_L", -1.25 * k, 0.0, 0.0, w)
-	_blend("forearm_R", -1.25 * k, 0.0, 0.0, w)
-	_blend("hand_L", -0.2 * k, 0.0, 0.0, w)
-	_blend("hand_R", -0.2 * k, 0.0, 0.0, w)
+	# Кисти на перекладине (BarView.CROSSBAR_Y), плечо опускается/поднимается; углы руки решаем как двузвенник в плоскости (вверх, вперёд).
+	# Локоть сгибается вперёд-вверх (положительный поворот предплечья), как у человека: назад он не выворачивается.
+	var fwd: float = GRIP_FORWARD + HANG_BACK
+	var up: float = sqrt(maxf(HANG_REACH * HANG_REACH - fwd * fwd, 0.0)) - PULLUP_RISE * k
+	var arm: Vector3 = _arm_angles(up, fwd)
+	_blend("upper_arm_L", arm.x, 0.0, -0.12, w)
+	_blend("upper_arm_R", arm.x, 0.0, 0.12, w)
+	_blend("forearm_L", arm.y, 0.0, 0.0, w)
+	_blend("forearm_R", arm.y, 0.0, 0.0, w)
+	_blend("hand_L", 0.15 * k, 0.0, 0.0, w)
+	_blend("hand_R", 0.15 * k, 0.0, 0.0, w)
 	_blend("thigh_L", 0.2 + 0.1 * k, 0.0, 0.0, w)
 	_blend("thigh_R", 0.12 + 0.1 * k, 0.0, 0.0, w)
 	_blend("shin_L", -1.1, 0.0, 0.0, w)
@@ -302,7 +315,20 @@ func _pose_hang() -> void:
 	_blend("spine", -0.05, 0.0, 0.0, w)
 	_blend("chest", -0.05 * k, 0.0, 0.0, w)
 	_blend("head", -0.3 * k, 0.0, 0.0, w)
-	_body_y += (maxf(PULLUP_BAR_Y - HANG_REACH_Y, 0.0) + k * PULLUP_RISE) * w
+	_body_y += (BarView.CROSSBAR_Y - up - SHOULDER_Y) * w
+	_body_z += HANG_BACK * w
+
+
+# Углы руки (x: плечо, y: предплечо относительно плеча) так, чтобы кисть была на `up` выше плеча и на `fwd` впереди него.
+# Положительный угол ведёт вперёд-вверх; локоть всегда ниже линии плечо-кисть. Слишком далёкая цель даёт прямую руку.
+func _arm_angles(up: float, fwd: float) -> Vector3:
+	var reach: float = maxf(sqrt(up * up + fwd * fwd), 0.001)
+	var theta_hand: float = atan2(fwd, -up)
+	if reach >= ARM_UPPER + ARM_LOWER:
+		return Vector3(theta_hand, 0.0, 0.0)
+	var inner: float = acos(clampf((ARM_UPPER * ARM_UPPER + ARM_LOWER * ARM_LOWER - reach * reach) / (2.0 * ARM_UPPER * ARM_LOWER), -1.0, 1.0))
+	var beta: float = acos(clampf((ARM_UPPER * ARM_UPPER + reach * reach - ARM_LOWER * ARM_LOWER) / (2.0 * ARM_UPPER * reach), -1.0, 1.0))
+	return Vector3(theta_hand - beta, PI - inner, 0.0)
 
 
 # Вторичное движение: рюкзак и ткань отстают от корпуса и подпрыгивают с шагом.
@@ -338,6 +364,7 @@ func _blend(bone: String, x: float, y: float, z: float, w: float) -> void:
 
 func _apply_pose(eye_y: float) -> void:
 	position.y = _body_y
+	position.z = _body_z
 	var eye_scale := Vector3(1.0, eye_y, 1.0)
 	for i in _rot.size():
 		if _skeleton != null:
