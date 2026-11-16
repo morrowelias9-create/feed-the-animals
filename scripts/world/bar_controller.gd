@@ -117,10 +117,13 @@ func _tick_reps(delta: float) -> void:
 	_rep_t += delta
 	while _rep_t >= GameConfig.BAR_REP_S:
 		_rep_t -= GameConfig.BAR_REP_S
-		Game.train_reps(Game.best_bar(), 1)
+		var gained: float = Game.train_reps(Game.best_bar(), 1)
 		_unsaved = true
 		if player.avatar != null:
 			player.avatar.play_pullup(GameConfig.BAR_REP_S * 0.9)
+		if hud != null and gained > 0.0:
+			var at: Vector2 = _bonus_screen_pos() + Vector2(randf_range(70.0, 120.0), 50.0)   # сбоку от подписи турника
+			hud.popup_at("+%s" % NumFmt.format(gained), at)
 
 
 func _tick_bonus(delta: float) -> void:

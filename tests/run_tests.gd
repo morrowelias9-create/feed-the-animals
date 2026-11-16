@@ -66,6 +66,8 @@ func _run_all() -> void:
 	_test_pets()
 	print("== Баланс: страховка и джекпот")
 	_test_luck_pity()
+	print("== Полировка: вид турников и загона, уведомления")
+	_test_polish_looks()
 	_test_game_limit()
 	print("== T11: загон игрока")
 	_test_slot_manager()
@@ -728,7 +730,8 @@ func _test_game_money() -> void:
 	_check("повторная покупка той же еды: false", not _game.buy_food(1) and _near(_game.money(), 770.0))
 	# Тьер 3 (пучок травы, зона 1) недоступен — зона закрыта
 	_game.select_food(3)
-	_check("select_food недоступной еды игнорируется", int(_save.data["food_selected"]) == 0)
+	_check("купленная еда сразу берётся в руки (выбрана последняя купленная)", int(_save.data["food_selected"]) == 1)
+	_check("select_food недоступной еды игнорируется", int(_save.data["food_selected"]) == 1)
 	_game.select_food(2)
 	_check("select_food купленной еды работает", int(_save.data["food_selected"]) == 2)
 	_game.select_food(1)
@@ -1798,3 +1801,25 @@ func _gaps_ok_after_first(gaps: Array[int]) -> bool:
 		if gaps[i] < RollData.JACKPOT_MIN or gaps[i] > RollData.JACKPOT_MAX:
 			return false
 	return true
+
+
+# Внешний вид турников и загона по ступеням; уведомление о доступном турнике.
+func _test_polish_looks() -> void:
+	var ok_bars: bool = true
+	for bar in UpgradeData.BARS:
+		if not LookData.BAR_LOOKS.has(String(bar["id"])):
+			ok_bars = false
+	_check("у каждого турника есть описание внешнего вида", ok_bars)
+	_check("ступеней загона столько же, сколько расширений + 1", LookData.PEN_LOOKS.size() == UpgradeData.SLOT_PRICES.size() + 1)
+	_check("pen_look зажимает уровень", LookData.pen_look(99) == LookData.PEN_LOOKS[LookData.PEN_LOOKS.size() - 1])
+	_fresh()
+	var seen: Array = []
+	_game.bar_affordable.connect(func(i: int) -> void: seen.append(i))
+	_game.add_money(1.0)
+	_game.buy_bar()
+	_game.add_money(10.0)
+	_check("турник 1 ещё не по карману: уведомления нет", seen.is_empty())
+	_game.add_money(100.0)
+	_check("денег хватает на турник 1: одно уведомление", seen == [1])
+	_game.add_money(10.0)
+	_check("повторного уведомления нет", seen == [1])

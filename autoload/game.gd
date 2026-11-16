@@ -6,6 +6,7 @@ extends Node
 
 signal money_changed(value: float)
 signal strength_changed(value: int)
+signal bar_affordable(index: int)   # денег хватает на следующий турник (уведомление)
 signal inventory_changed          # список зверей или их размещение изменились
 signal luck_state_changed         # обновились счётчики джекпота (шкала «до джекпота»)
 signal slots_changed
@@ -261,6 +262,7 @@ func tick(delta: float) -> void:
 ## Уведомляется только о еде из уже достигнутых зон.
 func _check_food_affordability() -> void:
 	var money: float = _f("money")
+	_check_bar_affordability(money)
 	var notified: Array = _arr("food_notified")
 	for tier in FoodData.count():
 		if is_food_owned(tier):
@@ -275,6 +277,18 @@ func _check_food_affordability() -> void:
 
 
 # ---------- Сила ----------
+
+## Уведомление «можно купить следующий турник»: один раз на каждый турник (первый, за $1, не в счёт).
+func _check_bar_affordability(money: float) -> void:
+	var next: int = bars_owned()
+	if next < 1 or next >= UpgradeData.BARS.size():
+		return
+	if next <= _i("bar_notified"):
+		return
+	if money >= float(UpgradeData.BARS[next]["price"]):
+		Save.data["bar_notified"] = next
+		bar_affordable.emit(next)
+
 
 ## Добавляет опыт, повышает силу по Economy.xp_needed, лишнее переносится.
 func add_xp(x: float) -> void:
@@ -719,6 +733,7 @@ func buy_food(tier: int) -> bool:
 	if not owned.has(tier):
 		owned.append(tier)
 		owned.sort()
+	Save.data["food_selected"] = tier   # купленная еда сразу берётся в руки
 	var current_max: int = _i("food_unlocked")
 	if tier > current_max:
 		Save.data["food_unlocked"] = tier

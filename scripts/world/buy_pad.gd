@@ -144,8 +144,8 @@ func _add_cylinder(node_name: String, radius: float, height: float, lift: float,
 
 
 func _build_labels() -> void:
-	_price = _make_label("PriceLabel", 130, 22, 2.0)
-	_caption = _make_label("CaptionLabel", 52, 10, 1.3)
+	_price = _make_label("PriceLabel", 74, 12, 1.0)
+	_caption = _make_label("CaptionLabel", 32, 7, 0.42)
 
 
 func _make_label(node_name: String, font_size: int, outline: int, height: float) -> Label3D:

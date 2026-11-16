@@ -8,6 +8,9 @@ signal shop_pressed
 signal animals_pressed
 signal bonus_pressed               # T14: тап по пузырю-бонусу на турнике
 
+const NOTICE_SECONDS: float = 5.0
+const NOTICE_FONT: int = 60
+const NOTICE_TOP: float = 150.0
 const BONUS_SIZE: float = 96.0
 const SOUND_BTN_SIZE: float = 64.0         # не меньше 64 пикселей (правило мобильности)
 const SIDE_BTN_SIZE: Vector2 = Vector2(128.0, 128.0)   # крупные кнопки «Индекс», «Магазин», «Животные» с подписью под иконкой
@@ -26,6 +29,8 @@ var _throw_meter_enabled: bool = true
 var _hint_visible: bool = true           # T37: подсказку внизу можно скрыть (пока зверь в руках)
 
 var _goal: Label
+var _notice: Label
+var _notice_tween: Tween
 var _hint: Label
 var _strength: Label
 var _money: Label
@@ -72,6 +77,10 @@ func _ready() -> void:
 		Game.money_changed.connect(_on_money_changed)
 	if not Game.strength_changed.is_connected(_on_strength_changed):
 		Game.strength_changed.connect(_on_strength_changed)
+	if not Game.food_affordable.is_connected(_on_food_affordable):
+		Game.food_affordable.connect(_on_food_affordable)
+	if not Game.bar_affordable.is_connected(_on_bar_affordable):
+		Game.bar_affordable.connect(_on_bar_affordable)
 	if not Game.boost_changed.is_connected(_on_boost_changed):
 		Game.boost_changed.connect(_on_boost_changed)
 	# Доход в HUD должен обновляться при изменении инвентаря (звери размещены/убраны),
@@ -167,6 +176,38 @@ func _on_money_changed(value: float) -> void:
 
 func _on_strength_changed(value: int) -> void:
 	_strength.text = str(value)
+	show_notice(Loc.t("notice_level_fmt") % value, UiStyle.COLOR_STRENGTH, 2.5)
+
+
+func _on_food_affordable(tier: int) -> void:
+	show_notice(Loc.t("notice_food_fmt") % Loc.t(String(FoodData.FOODS[tier]["name_key"])), UiStyle.COLOR_MONEY, NOTICE_SECONDS)
+
+
+func _on_bar_affordable(index: int) -> void:
+	show_notice(Loc.t("notice_bar_fmt") % Loc.t(String(UpgradeData.BARS[index]["name_key"])), UiStyle.COLOR_MONEY, NOTICE_SECONDS)
+
+
+## Крупное уведомление сверху экрана: появляется, висит seconds секунд и гаснет. Новое заменяет старое.
+func show_notice(text: String, color: Color, seconds: float = NOTICE_SECONDS) -> void:
+	if _notice == null:
+		_notice = UiStyle.outline_label("", NOTICE_FONT, 12, color)
+		_notice.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		_notice.offset_top = NOTICE_TOP
+		_notice.offset_bottom = NOTICE_TOP + 80.0
+		_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_notice.z_index = 20
+		add_child(_notice)
+	if _notice_tween != null and _notice_tween.is_valid():
+		_notice_tween.kill()
+	_notice.text = text
+	_notice.add_theme_color_override("font_color", color)
+	_notice.visible = true
+	_notice.modulate.a = 0.0
+	_notice_tween = _notice.create_tween()
+	_notice_tween.tween_property(_notice, "modulate:a", 1.0, 0.2)
+	_notice_tween.tween_interval(maxf(seconds - 0.7, 0.1))
+	_notice_tween.tween_property(_notice, "modulate:a", 0.0, 0.5)
+	_notice_tween.tween_callback(_notice.hide)
 
 
 func _on_language_changed() -> void:

@@ -84,8 +84,6 @@ func _in_zone() -> bool:
 func _can_buy() -> bool:
 	if throw_controller != null and throw_controller.is_busy():
 		return false
-	if carry_controller != null and carry_controller.is_carrying():
-		return false
 	return player == null or player.enabled
 
 

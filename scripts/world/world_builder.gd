@@ -321,7 +321,7 @@ func _build_scenery(parent: Node3D) -> void:
 func refresh_pen_geometry() -> void:
 	if _geo == null:
 		return
-	for node_name in ["PenRails", "PenPosts"]:
+	for node_name in ["PenRails", "PenPosts", "PenRailsMine", "PenPostsMine", "PenCapsMine"]:
 		var old := _geo.get_node_or_null(node_name)
 		if old != null:
 			_geo.remove_child(old)
@@ -330,8 +330,11 @@ func refresh_pen_geometry() -> void:
 
 
 func _build_pens(parent: Node3D) -> void:
-	var rails: Array[Transform3D] = []
-	var posts: Array[Transform3D] = []
+	var other_rails: Array[Transform3D] = []
+	var other_posts: Array[Transform3D] = []
+	var my_rails: Array[Transform3D] = []   # загон игрока: вид зависит от числа расширений (LookData.PEN_LOOKS)
+	var my_posts: Array[Transform3D] = []
+	var my_caps: Array[Transform3D] = []
 	var heights: Array[float] = [0.55, 1.05]
 	var gate: float = WorldLayout.PEN_GATE_W
 	var slots_level: int = _slots_level()
@@ -343,6 +346,9 @@ func _build_pens(parent: Node3D) -> void:
 		var z1: float = r.end.y
 		var cx: float = (x0 + x1) / 2.0
 		var half_front: float = ((x1 - x0) - gate) / 2.0
+		var mine: bool = p == WorldLayout.PLAYER_PLOT
+		var rails: Array[Transform3D] = my_rails if mine else other_rails
+		var posts: Array[Transform3D] = my_posts if mine else other_posts
 		for h in heights:
 			rails.append(_xform(Vector3(0.15, 0.18, z1 - z0), Vector3(x0, h, (z0 + z1) / 2.0)))
 			rails.append(_xform(Vector3(0.15, 0.18, z1 - z0), Vector3(x1, h, (z0 + z1) / 2.0)))
@@ -359,8 +365,33 @@ func _build_pens(parent: Node3D) -> void:
 			posts.append(_xform(Vector3(0.4, 1.6, 0.4), Vector3(xx, 0.8, z1)))
 		for xx in [cx - gate / 2.0, cx + gate / 2.0, x0 + half_front / 2.0, x1 - half_front / 2.0]:
 			posts.append(_xform(Vector3(0.4, 1.6, 0.4), Vector3(float(xx), 0.8, z0)))
-	_multimesh(parent, "PenRails", rails, _flat_mat("#C58A4E"))
-	_multimesh(parent, "PenPosts", posts, _flat_mat("#8A5A30"))
+	for post in my_posts:
+		my_caps.append(Transform3D(Basis.from_euler(Vector3(0.0, PI / 4.0, 0.0)).scaled(Vector3(0.36, 0.36, 0.36)), post.origin + Vector3(0.0, 1.05, 0.0)))
+	var look: Dictionary = LookData.pen_look(slots_level)
+	var metal: float = float(look.get("metal", 0.0))
+	_multimesh(parent, "PenRails", other_rails, _flat_mat("#C58A4E"))
+	_multimesh(parent, "PenPosts", other_posts, _flat_mat("#8A5A30"))
+	_multimesh(parent, "PenRailsMine", my_rails, _look_mat(String(look["rail"]), metal, false))
+	_multimesh(parent, "PenPostsMine", my_posts, _look_mat(String(look["post"]), metal, false))
+	if look.has("cap"):
+		_multimesh(parent, "PenCapsMine", my_caps, _look_mat(String(look["cap"]), maxf(metal, 0.3), bool(look.get("glow", false))))
+
+
+# Материал ступени загона: металлический блеск и свечение; один материал на сочетание.
+func _look_mat(hex: String, metal: float, glow: bool) -> StandardMaterial3D:
+	var key: String = "look|%s|%.2f|%s" % [hex, metal, glow]
+	if _mats.has(key):
+		return _mats[key]
+	var m: StandardMaterial3D = StandardMaterial3D.new()
+	m.albedo_color = Color.html(hex)
+	m.roughness = 0.35 if metal > 0.0 else 1.0
+	m.metallic = metal
+	if glow:
+		m.emission_enabled = true
+		m.emission = Color.html(hex)
+		m.emission_energy_multiplier = 1.4
+	_mats[key] = m
+	return m
 
 
 func _build_light_and_env(parent: Node3D) -> void:
