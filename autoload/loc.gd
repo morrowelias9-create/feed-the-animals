@@ -109,6 +109,7 @@ const T := {
 	"mini_ocean_5": {"ru": "Глубина", "en": "The Deep"},
 	"mini_ocean_6": {"ru": "Бездна", "en": "The Abyss"},
 	"mini_zone_new": {"ru": "Новая местность: %s", "en": "New area: %s"},
+	"mini_zone_bonus": {"ru": "Бонус за открытие: +%s", "en": "Discovery bonus: +%s"},
 	"zone_progress_fmt": {"ru": "%s · %s %d/6", "en": "%s · %s %d/6"},
 
 	# Еда

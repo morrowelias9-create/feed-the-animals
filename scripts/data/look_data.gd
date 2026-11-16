@@ -4,20 +4,20 @@ extends RefCounted
 ## Чем дороже турник / больше расширений загона, тем богаче вид: металл, камни, свечение.
 ## Здесь только данные; строят их BarView и WorldBuilder.
 
-## Турники: по id из UpgradeData.BARS. metal/rough: материал стоек; gem: цвет камней ("" нет),
-## shape: sphere / cone / prism, count: камней на перекладине, caps: шары на верхушках стоек,
-## glow: камни светятся. Металл небольшой: без отражений окружения сильный металл выглядит чёрным.
+## Турники: по id из UpgradeData.BARS. rank 0-9 это «богатство» модели (BarModel: чем выше, тем больше деталей),
+## body: цвет стоек и основания, trim: оправа и кольца, bar: перекладина, gem: камень ("" нет), glow: камень и перекладина светятся.
+## metal/rough: материал металла. Металл небольшой: без отражений окружения сильный металл выглядит чёрным.
 const BAR_LOOKS: Dictionary = {
-	"wood": {"metal": 0.0, "rough": 0.8, "gem": ""},
-	"steel": {"metal": 0.2, "rough": 0.3, "gem": "#E8EEF5", "shape": "sphere", "count": 0, "caps": true},
-	"copper": {"metal": 0.25, "rough": 0.35, "gem": "#FFB070", "shape": "sphere", "count": 3, "caps": true},
-	"gold": {"metal": 0.15, "rough": 0.2, "gem": "#FFF2A8", "shape": "sphere", "count": 4, "caps": true},
-	"turquoise": {"metal": 0.1, "rough": 0.25, "gem": "#7FFFF0", "shape": "prism", "count": 5, "caps": true},
-	"purple": {"metal": 0.1, "rough": 0.25, "gem": "#E2B8FF", "shape": "cone", "count": 5, "caps": true},
-	"ruby": {"metal": 0.1, "rough": 0.15, "gem": "#FF3A6E", "shape": "prism", "count": 7, "caps": true, "glow": true},
-	"neon": {"metal": 0.0, "rough": 0.4, "gem": "#CCFFC0", "shape": "sphere", "count": 7, "caps": true, "glow": true},
-	"ice": {"metal": 0.1, "rough": 0.1, "gem": "#FFFFFF", "shape": "cone", "count": 9, "caps": true, "hang": true},
-	"star": {"metal": 0.2, "rough": 0.15, "gem": "#FFFFFF", "shape": "prism", "count": 9, "caps": true, "glow": true},
+	"wood": {"rank": 0, "metal": 0.0, "rough": 0.8, "body": "#8A5A30", "trim": "#5E3B1C", "bar": "#A8743E", "gem": ""},
+	"steel": {"rank": 1, "metal": 0.2, "rough": 0.3, "body": "#6F7B88", "trim": "#C9D3DE", "bar": "#C8D2DC", "gem": ""},
+	"copper": {"rank": 2, "metal": 0.25, "rough": 0.35, "body": "#8F4E24", "trim": "#E3A064", "bar": "#D0803F", "gem": "#FFB070"},
+	"gold": {"rank": 3, "metal": 0.15, "rough": 0.2, "body": "#A8780A", "trim": "#FFE27A", "bar": "#FFC83D", "gem": "#FFF2A8"},
+	"turquoise": {"rank": 4, "metal": 0.1, "rough": 0.25, "body": "#146B62", "trim": "#E7C34F", "bar": "#2EC4B6", "gem": "#7FFFF0"},
+	"purple": {"rank": 5, "metal": 0.1, "rough": 0.25, "body": "#4B1E80", "trim": "#F2C94C", "bar": "#A855F7", "gem": "#E2B8FF"},
+	"ruby": {"rank": 6, "metal": 0.1, "rough": 0.15, "body": "#6E0B30", "trim": "#F2C94C", "bar": "#E0115F", "gem": "#FF3A6E", "glow": true},
+	"neon": {"rank": 7, "metal": 0.0, "rough": 0.4, "body": "#1B1B24", "trim": "#39FF14", "bar": "#39FF14", "gem": "#CCFFC0", "glow": true},
+	"ice": {"rank": 8, "metal": 0.1, "rough": 0.1, "body": "#2D6E9E", "trim": "#E8FBFF", "bar": "#9BE8FF", "gem": "#FFFFFF"},
+	"star": {"rank": 9, "metal": 0.2, "rough": 0.15, "body": "#23235A", "trim": "#FFE066", "bar": "#FFE066", "gem": "#FFFFFF", "glow": true},
 }
 
 ## Загон игрока по числу расширений (0-8, ступени редкости): рейки, столбики, камни на столбиках.

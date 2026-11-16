@@ -14,7 +14,7 @@ const LUCK_COLOR: Color = Color(1.0, 0.82, 0.25)
 const BAR_BACK: Color = Color(0.0, 0.0, 0.0, 0.55)
 const ANNOUNCE_TOP: float = 124.0          # под подсказкой цели (она занимает 64…112)
 const ANNOUNCE_FONT: int = 46
-const REWARD_FONT: int = 38
+const REWARD_FONT: int = 34
 const FADE_IN_S: float = 0.25
 const HOLD_S: float = 2.5
 const FADE_OUT_S: float = 0.4
@@ -130,7 +130,7 @@ func _draw_bar() -> void:
 
 func _on_mini_zone_reached(zone: int, index: int, reward: float) -> void:
 	_announce_name.text = Loc.t("mini_zone_new") % Loc.t(MiniZoneData.name_key(zone, index))
-	_announce_reward.text = "+" + NumFmt.money(reward)
+	_announce_reward.text = Loc.t("mini_zone_bonus") % NumFmt.money(reward)
 	_announce.visible = true
 	if _tween != null and _tween.is_valid():
 		_tween.kill()

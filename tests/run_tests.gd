@@ -901,7 +901,7 @@ func _test_keeper() -> void:
 	_check("T54: долетел до Саванны, значит Хранитель ушёл", KeeperLogic.is_gone())
 	_fresh()
 	var keys_ok: bool = true
-	var keys: Array = ["keeper_name", "notice_keeper_farewell"]
+	var keys: Array = ["keeper_name", "keeper_farewell_line", "notice_keeper_farewell"]
 	keys.append_array(KeeperData.LINE_KEYS)
 	for k in keys:
 		keys_ok = keys_ok and Loc.T.has(k) and String(Loc.T[k].get("ru", "")) != "" and String(Loc.T[k].get("en", "")) != ""
@@ -920,6 +920,19 @@ func _test_keeper() -> void:
 	root.add_child(yard2)
 	_check("T54: при флаге ухода KeeperYard ничего не строит", yard2.get_node_or_null("Keeper") == null and yard2.is_queued_for_deletion())
 	yard2.free()
+	_fresh()
+	# Уход: около 5 секунд, звери и Хранитель гаснут по очереди, потом узел удаляется и флаг сохранён.
+	var yard3 := KeeperYard.new()
+	root.add_child(yard3)
+	yard3.call("_leave")
+	for _i in 26:
+		yard3._process(0.15)   # 3.9 с
+	_check("T54: через 3.9 с ухода Хранитель ещё не удалён", not yard3.is_queued_for_deletion())
+	for _i in 14:
+		yard3._process(0.15)   # 6.0 с
+	_check("T54: уход заканчивается за ~5 секунд, узел удалён, флаг keeper_gone сохранён",
+		yard3.is_queued_for_deletion() and bool(_save.data.get("keeper_gone", false)))
+	yard3.free()
 	_fresh()
 
 func _test_pets() -> void:

@@ -36,3 +36,17 @@ const WANDER_HOP_MAX: float = 5.0
 const WANDER_SPEED_MIN: float = 1.0
 const WANDER_SPEED_MAX: float = 1.6
 const WANDER_EDGE_MARGIN: float = 2.5             # крупные звери не заходят в ограду
+
+## Уход Хранителя: звери один за другим рассыпаются в пыль и уносятся ветром вбок и вверх, последним он сам.
+## Весь уход около 5 секунд (LEAVE_END_S), над головой Хранителя всё это время пузырь с прощальной фразой.
+const LEAVE_ANIMAL_SPAN_S: float = 2.2            # за это время начинают рассыпаться все звери (по очереди в случайном порядке)
+const LEAVE_ANIMAL_DUR_S: float = 1.2             # сколько рассыпается один зверь
+const LEAVE_KEEPER_START_S: float = 2.6           # когда начинает рассыпаться сам Хранитель
+const LEAVE_KEEPER_DUR_S: float = 1.6
+const LEAVE_DUST_LIFE_S: float = 1.1              # сколько живёт одна пылинка
+const LEAVE_BUBBLE_HIDE_S: float = 4.0            # когда гаснет пузырь «Удачной игры!»
+const LEAVE_END_S: float = 5.3                    # узел удаляется (последняя пылинка к этому времени улетела)
+const LEAVE_LIFT_M: float = 0.4                   # рассыпаясь, всплывает на столько метров
+const LEAVE_DRIFT := Vector3(1.0, 1.1, 0.25)      # направление выброса пыли: вбок и вверх
+const LEAVE_WIND := Vector3(1.2, 1.6, 0.0)        # «ветер»: пыль разгоняется вбок и вверх
+const LEAVE_DUST_RADIUS: float = 0.1              # размер одной пылинки, м

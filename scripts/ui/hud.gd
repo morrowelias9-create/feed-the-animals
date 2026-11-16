@@ -49,7 +49,10 @@ var _boost_button: Button               # T22: кнопка буста x2 за �
 var _boost_timer: Label                 # T22: таймер буста "x2 MM:SS"
 var _sound_button: Button               # T26: кнопка звука вкл/выкл
 var _training: bool = false
-var _zone_rewards: Array[Dictionary] = []   # награды за новые мини-зоны, ждут конца полёта
+const COIN_COUNT: int = 9
+const COIN_SIZE: int = 26
+const COIN_FLY_S: float = 0.7
+
 var _flight: bool = false              # бросок сделан: шкала и инвентарь скрыты до конца кинематики
 var hotbar: Control                    # инвентарь зверей (создаёт main.gd)
 var _bonus_shown: bool = false
@@ -165,26 +168,44 @@ func set_flight(active: bool) -> void:
 		return
 	_flight = active
 	_update_visibility()
-	if not active:
-		_flush_zone_rewards()
 
 
-# Награда за вход в новую мини-зону: во время полёта шкала мини-зон скрыта, поэтому показываем вылетающую надпись после посадки.
-func _on_mini_zone_reached(zone: int, index: int, reward: float) -> void:
-	_zone_rewards.append({"zone": zone, "index": index, "reward": reward})
-	if not _flight:
-		_flush_zone_rewards()
+# Бонус за вход в новую мини-зону: рядом с плашкой «Новая местность» (MiniZoneBar) от неё к счётчику денег летят монеты.
+func _on_mini_zone_reached(_zone: int, _index: int, _reward: float) -> void:
+	var from: Vector2 = Vector2(get_viewport_rect().size.x * 0.5, 190.0)
+	fly_coins(from, COIN_COUNT)
 
 
-func _flush_zone_rewards() -> void:
-	var center: Vector2 = get_viewport_rect().size * Vector2(0.5, 0.3)
-	var shift: float = 0.0
-	for item in _zone_rewards:
-		var name_text: String = Loc.t("mini_zone_new") % Loc.t(MiniZoneData.name_key(int(item["zone"]), int(item["index"])))
-		float_text(name_text, center + Vector2(0.0, shift), Color("#FFD23F"), 30, Vector2(0.0, -50.0), 2.2)
-		float_text("+" + NumFmt.money(float(item["reward"])), center + Vector2(0.0, shift + 36.0), UiStyle.COLOR_MONEY, 34, Vector2(0.0, -50.0), 2.2)
-		shift += 80.0
-	_zone_rewards.clear()
+## Монеты летят от точки на экране к счётчику денег; в конце счётчик «подпрыгивает».
+func fly_coins(from: Vector2, count: int) -> void:
+	var target: Vector2 = _money.global_position + Vector2(30.0, _money.size.y * 0.5)
+	for i in count:
+		var coin: Panel = Panel.new()
+		var style: StyleBoxFlat = StyleBoxFlat.new()
+		style.bg_color = Color("#FFC83D")
+		style.set_corner_radius_all(COIN_SIZE / 2)
+		style.set_border_width_all(3)
+		style.border_color = Color("#B8730A")
+		coin.add_theme_stylebox_override("panel", style)
+		coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		coin.size = Vector2(COIN_SIZE, COIN_SIZE)
+		add_child(coin)
+		var start: Vector2 = from + Vector2(randf_range(-90.0, 90.0), randf_range(-20.0, 20.0)) - coin.size * 0.5
+		coin.position = start
+		coin.modulate.a = 0.0
+		var delay: float = 0.45 + 0.07 * float(i)
+		var tween: Tween = coin.create_tween()
+		tween.tween_property(coin, "modulate:a", 1.0, 0.1).set_delay(delay)
+		tween.tween_property(coin, "position", target - coin.size * 0.5, COIN_FLY_S).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		tween.tween_callback(_bump_money)
+		tween.tween_callback(coin.queue_free)
+
+
+func _bump_money() -> void:
+	_money.pivot_offset = Vector2(0.0, _money.size.y * 0.5)
+	_money.scale = Vector2(1.18, 1.18)
+	var tween: Tween = _money.create_tween()
+	tween.tween_property(_money, "scale", Vector2.ONE, 0.18)
 
 
 func set_strength(value: int) -> void:
