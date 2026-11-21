@@ -12,6 +12,7 @@ const TRUNK_COLORS: Array = ["#7A5230", "#523420"]
 const BUSH_COLORS: Array = ["#5AAE4A", "#356F2E"]
 const ROCK_COLORS: Array = ["#9AA5AA", "#6D787E"]
 const EDGE_MIN_X: float = 22.0           # дальше к центру декор не ставится
+const FRONT_CLEAR_Z: float = 9.0         # T70: у края земли (z < 9) стоят палатки и постаменты, кусты и камни здесь не ставятся
 const WALL_GAP: float = 1.6              # деревья у стены: x = YARD_HALF_W - WALL_GAP, то есть за игровой границей
 
 static var _meshes: Dictionary = {}      # имя -> ArrayMesh, общие для всех экземпляров
@@ -55,6 +56,7 @@ static func placements() -> Array:
 			result.append(_item("tree%d" % (n % 3), Vector3(float(side) * tree_x + jx, 0.0, float(z) + jz), n, 0.8, 1.15))
 			n += 1
 	# Кусты и камни по краям лобби, вне центральной дорожки и вне зоны броска (|x| >= EDGE_MIN_X).
+	# T70: в полосе у края земли (z < FRONT_CLEAR_Z) их нет: там палатки слева и постаменты справа.
 	var bush_spots: Array = [[23.0, 5.0], [28.0, 8.0], [32.5, 4.5], [27.0, 13.0], [33.5, 11.5], [35.5, 15.5]]
 	var rock_spots: Array = [[25.0, 3.0], [31.0, 9.0], [29.5, 15.0], [36.3, 26.0], [36.3, 33.0]]
 	for side in [-1.0, 1.0]:
@@ -63,7 +65,7 @@ static func placements() -> Array:
 			var flip: float = float(side)
 			var x: float = flip * (float(sp[0]) + (_h(n * 5 + 3) - 0.5) * 1.6)
 			var z: float = float(sp[1]) + (_h(n * 5 + 4) - 0.5) * 1.6
-			if absf(x) >= EDGE_MIN_X and absf(x) <= WorldLayout.YARD_HALF_W - 1.0:
+			if absf(x) >= EDGE_MIN_X and absf(x) <= WorldLayout.YARD_HALF_W - 1.0 and z >= FRONT_CLEAR_Z:
 				result.append(_item("bush", Vector3(x, 0.0, z), n, 0.8, 1.2))
 			n += 1
 		for s in rock_spots:
@@ -71,7 +73,7 @@ static func placements() -> Array:
 			var flip: float = float(side)
 			var x: float = flip * (float(sp[0]) + (_h(n * 5 + 3) - 0.5) * 1.2)
 			var z: float = float(sp[1]) + (_h(n * 5 + 4) - 0.5) * 1.2
-			if absf(x) >= EDGE_MIN_X and absf(x) <= WorldLayout.YARD_HALF_W - 1.0:
+			if absf(x) >= EDGE_MIN_X and absf(x) <= WorldLayout.YARD_HALF_W - 1.0 and z >= FRONT_CLEAR_Z:
 				result.append(_item("rock", Vector3(x, 0.0, z), n, 0.7, 1.4))
 			n += 1
 	return result

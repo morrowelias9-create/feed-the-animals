@@ -1235,8 +1235,6 @@ func _test_bars() -> void:
 	_check("диск покупки у турника: вне его зоны, не в лавке и не в палатке",
 		not pad_rect.intersects(bar_zone) and not pad_rect.intersects(WorldLayout.sell_zone_rect())
 		and not pad_rect.intersects(WorldLayout.food_zone_rect()) and WorldLayout.player_bounds().encloses(pad_rect))
-	_check("палатка еды зеркальна лавке",
-		_near(WorldLayout.food_tent_position().x, -WorldLayout.sell_stand_position().x))
 	var colors_ok: bool = true
 	for b in UpgradeData.BARS:
 		if not b.has("color") or not b.has("name_key"):

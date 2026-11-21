@@ -63,15 +63,15 @@ const SIGN_ZONE_SIZE: float = 3.0
 const SIGN_PAD_RADIUS: float = 0.8
 const SIGN_PAD_DISTANCE: float = 2.2   # диск ближе к ограде: путь от входа к палатке проходит мимо него с запасом
 
-# Лавка продажи (T12a): слева от загона игрока, на дворе перед участком. Зона входа 3x3 м вокруг точки.
-# Стоит в ряд с игроком у входа, ближе к краю двора: путь от точки появления идёт мимо турника и диска расширения.
-const SELL_STAND_X: float = -15.0
-const SELL_STAND_Z: float = 7.0
+# Лавка продажи (T12a, T70): слева от зоны броска (x < -18), левее палатки еды, в одном ряду с ней. Зона входа 3x3 м вокруг точки.
+# Вход со стороны двора (+Z). Модель лавки не повёрнута: прилавок лицом к +Z.
+const SELL_STAND_X: float = -26.0
+const SELL_STAND_Z: float = 3.5
 const SELL_ZONE_SIZE: float = 3.0
 
-# Палатка еды (T15): зеркально лавке, справа от загона игрока. Зона входа 3x3 м вокруг точки.
-const FOOD_TENT_X: float = 15.0
-const FOOD_TENT_Z: float = 7.0
+# Палатка еды (T15, T70): слева от зоны броска (x < -18), ближайшая к ней, рядом с лавкой продажи. Зона входа 3x3 м вокруг точки.
+const FOOD_TENT_X: float = -21.0
+const FOOD_TENT_Z: float = 3.5
 const FOOD_ZONE_SIZE: float = 3.0
 
 # Арки с названиями зон и их подписи
@@ -84,15 +84,18 @@ const SPAWN_Z: float = 9.0
 const PLAYER_Z_MIN: float = 0.0
 const PLAYER_MARGIN: float = 2.0
 
-# T53: аллея наград — пять постаментов питомцев справа от двора, в ряд по Z.
-# Место не задевает зону броска (|x| <= 18, z = -3…3), палатку еды (x <= 16.5) и декор двора (|x| >= 22).
-const PET_PEDESTAL_X: float = 21.0
-const PET_PEDESTAL_Z: Array[float] = [5.0, 8.0, 11.0, 14.0, 17.0]
+# T53, T70: аллея наград — постаменты питомцев в один ряд справа от зоны броска (x > 18), вдоль оси X, от полосы к правой стене.
+# Пять питомцев: x = 21.0, 24.3, 27.6, 30.9, 34.2 при z = 3.5. Шестой и дальше уходят в следующий ряд (на PET_PEDESTAL_DZ дальше от края земли).
+const PET_PEDESTAL_COLS: int = 5
+const PET_PEDESTAL_X0: float = 21.0
+const PET_PEDESTAL_DX: float = 3.3
+const PET_PEDESTAL_Z0: float = 3.5
+const PET_PEDESTAL_DZ: float = 4.0
 const PET_INTERACT_RADIUS: float = 3.0
 
 
 # T54: Хранитель зверей стоит на левом соседнем участке, справа от проёма его ограды, лицом ко двору.
-# Место не задевает лавку продажи (x = -15, z = 7), турник (x = -7), диск покупки и декор двора (z до 17).
+# Место не задевает палатки (x = -21 и -26, z = 3.5), турник (x = -7), диск покупки и декор двора (z до 17).
 const KEEPER_PLOT: int = 0
 const KEEPER_OFFSET_X: float = 5.0       # от центра участка (проём шириной 6 м остаётся свободным)
 const KEEPER_OFFSET_Z: float = -1.8      # от передней ограды в сторону двора
@@ -244,10 +247,12 @@ static func keeper_position() -> Vector3:
 	return Vector3(plot_center_x(KEEPER_PLOT) + KEEPER_OFFSET_X, 0.0, PLOT_Z_FRONT + KEEPER_OFFSET_Z)
 
 
-## T53: место постамента питомца i (0-4) в аллее наград справа от двора.
+## T53, T70: место постамента питомца i в ряду справа от зоны броска (пять в ряд, дальше следующий ряд).
 static func pet_pedestal_position(i: int) -> Vector3:
-	var idx: int = clampi(i, 0, PET_PEDESTAL_Z.size() - 1)
-	return Vector3(PET_PEDESTAL_X, 0.0, PET_PEDESTAL_Z[idx])
+	var idx: int = maxi(i, 0)
+	var col: int = idx % PET_PEDESTAL_COLS
+	var row: int = floori(float(idx) / float(PET_PEDESTAL_COLS))
+	return Vector3(PET_PEDESTAL_X0 + float(col) * PET_PEDESTAL_DX, 0.0, PET_PEDESTAL_Z0 + float(row) * PET_PEDESTAL_DZ)
 
 
 ## Зона входа палатки 3x3 м: x и z мира.
