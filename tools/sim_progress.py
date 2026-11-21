@@ -1,43 +1,140 @@
 #!/usr/bin/env python3
-"""Симуляция прогрессии «Накорми зверей» (без Godot). Числа сверены с scripts/data/*.gd и scripts/logic/*.gd (ноябрь 2026).
-Длины биомов x1.5 (T45), luck_ref x1.5. Метки «мини-зона З.М» это момент, когда дальность 4*(сила+20) входит в мини-зону.
-Отличия от tools/sim_economy.py: SIZE_MAX = 20 (в игре 20, там 10), еда берётся лучшая из купленных,
-продажа лишних зверей, режим сессий с оффлайн-доходом, доля времени на тренировку задаётся параметром,
-учёт разрыва между открытием зоны (сила) и покупкой её еды (деньги).
+"""Симуляция прогрессии «Накорми зверей» (без Godot). Константы загружаются из tools/data_dump.json,
+который создаётся скриптом tools/dump_data.py (Godot headless).
+Если дампа нет — запускается tools/dump_data.py автоматически.
+
 Использование: python sim.py [активных_часов] [секунд_тренировки_в_минуту] [сессия_минут_в_день|0] [seeds]
 """
+import json
+import os
 import random
 import statistics
+import subprocess
 import sys
 
-ZONE_NAMES = ["Лес", "Саванна", "Пустыня", "Джунгли", "Океан"]
-ZONE_START = [0, 180, 480, 1050, 1650]
-ZONE_END = [180, 480, 1050, 1650, 2100]
-ZONE_BASE = [1, 40, 1600, 64000, 2_560_000]
-LUCK_REF = [105, 525, 1500, 3300, 5400]
-RANK_STEP = 1.5
-SIZE_STEP, SIZE_POW = 1.5, 1.8
-SIZE_P0, SIZE_MAX = 0.18, 20
-SELL_MULT = 30
-INV_LIMIT = 60
-START_SLOTS, SLOTS_PER_LEVEL = 4, 2
-SLOT_PRICES = [600, 8_000, 120_000, 2_000_000, 30_000_000, 500_000_000, 8_000_000_000, 120_000_000_000]
-XP_ZONE_MULT = [3.3, 3.4, 5.9, 13.7, 28.1]   # множитель опыта по зонам (как GameConfig.XP_ZONE_MULT)
-REP_S = 0.5            # повторение раз в 0.5 с
-OFFLINE_CAP, OFFLINE_RATE = 7200, 0.5
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DUMP_PATH = os.path.join(ROOT, "tools", "data_dump.json")
 
-FOODS = [(0, 2, 1.00, 0), (0, 5, 1.14, 30), (0, 8, 1.29, 200),
-         (1, 2, 1.43, 250_000), (1, 5, 1.57, 1_200_000), (1, 8, 1.71, 5_500_000),
-         (2, 2, 1.86, 25_000_000), (2, 5, 2.00, 110_000_000), (2, 8, 2.14, 500_000_000),
-         (3, 2, 2.29, 2_400_000_000), (3, 5, 2.43, 11_000_000_000), (3, 8, 2.57, 50_000_000_000),
-         (4, 2, 2.71, 230_000_000_000), (4, 5, 2.86, 1_000_000_000_000), (4, 8, 3.00, 5_000_000_000_000)]
-FOOD_NAMES = ["морковь", "яблоко", "соты", "трава", "арбуз", "баобаб", "кактус", "финики", "оазис",
-              "банан", "манго", "кокос", "РЫБА", "креветка", "жемчуг"]
-BARS = [(1, 1), (60, 2), (2_500, 4), (18_000, 8), (140_000, 16), (1_000_000, 32), (8_000_000, 64),
-        (60_000_000, 128), (480_000_000, 256), (4_000_000_000, 512)]
-MUTATIONS = [(0.09, 1.5), (0.035, 3.0), (0.015, 5.0), (0.007, 10.0), (0.003, 20.0)]
-MUT_CAP = 0.35
 
+def load_dump() -> dict:
+    """Загружает дамп, при необходимости создаёт его через tools/dump_data.py."""
+    if not os.path.exists(DUMP_PATH):
+        print(f"Дамп не найден: {DUMP_PATH}")
+        print("Запускаю tools/dump_data.py...")
+        result = subprocess.run([sys.executable, "tools/dump_data.py"], cwd=ROOT)
+        if result.returncode != 0:
+            print("ОШИБКА: не удалось создать дамп. Запустите python tools/dump_data.py вручную.")
+            sys.exit(2)
+    with open(DUMP_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def get_godot_constant(dump: dict, section: str, key: str, default=None):
+    """Безопасно получает константу из дампа."""
+    try:
+        return dump[section][key]
+    except KeyError:
+        if default is not None:
+            return default
+        raise KeyError(f"В дампе нет {section}.{key}")
+
+
+# Загружаем дамп один раз при импорте
+_DUMP = load_dump()
+
+# --- Константы из дампа ---
+
+# GameConfig
+GC = _DUMP["GameConfig"]
+DIST_K = GC["DIST_K"]
+BONUS_MAX = GC["BONUS_MAX"]
+SELL_MULT = GC["SELL_MULT"]
+INV_LIMIT = GC["INV_LIMIT"]
+INDEX_REWARD_BASE = GC["INDEX_REWARD_BASE"]
+RANK_STEP = GC["RANK_STEP"]
+SELL_EXTRAS_MAX_RANK = GC["SELL_EXTRAS_MAX_RANK"]
+RARE_RANK_MIN = GC["RARE_RANK_MIN"]
+RARE_SIZE_MIN = GC["RARE_SIZE_MIN"]
+SIZE_STEP = GC["SIZE_STEP"]
+SIZE_POW = GC["SIZE_POW"]
+SIZE_P0 = GC["SIZE_P0"]
+SIZE_MAX = GC["SIZE_MAX"]
+XP_ZONE_MULT = GC["XP_ZONE_MULT"]
+OFFLINE_CAP = GC["OFFLINE_CAP_S"]
+OFFLINE_RATE = GC["OFFLINE_RATE"]
+OFFLINE_MIN_S = GC["OFFLINE_MIN_S"]
+BOOST_S = GC["BOOST_S"]
+BOOST_MAX_S = GC["BOOST_MAX_S"]
+BOOST_MULT = GC["BOOST_MULT"]
+AUTOSAVE_S = GC["AUTOSAVE_S"]
+BAR_REP_S = GC["BAR_REP_S"]  # повторение раз в 0.5 с (GameConfig.BAR_REP_S)
+
+# ZoneData
+ZD = _DUMP["ZoneData"]
+ZONES = ZD["ZONES"]
+ZONE_NAMES = [z["id"] for z in ZONES]  # ["forest", "savanna", "desert", "jungle", "ocean"]
+ZONE_START = [z["start_m"] for z in ZONES]
+ZONE_END = [z["end_m"] for z in ZONES]
+ZONE_BASE = [z["base"] for z in ZONES]
+LUCK_REF = [z["luck_ref"] for z in ZONES]
+ZONE_MULT = [z["mult"] for z in ZONES]  # множитель награды за индекс
+CORRIDOR_LEN = ZD["CORRIDOR_LEN"]
+
+# Русские названия зон для вывода
+ZONE_RU_NAMES = ["Лес", "Саванна", "Пустыня", "Джунгли", "Океан"]
+
+# FoodData
+FD = _DUMP["FoodData"]
+FOODS = []
+FOOD_NAMES = []
+for f in FD["FOODS"]:
+    FOODS.append((f["zone"], f["aim_rank"], f["luck"], f["price"]))
+    # Используем name_key для названия, но для вывода берём русский вариант
+    FOOD_NAMES.append(f["name_key"])
+
+# UpgradeData
+UD = _DUMP["UpgradeData"]
+BARS = [(b["price"], b["xp"]) for b in UD["BARS"]]
+SLOT_PRICES = UD["SLOT_PRICES"]
+START_SLOTS = UD["START_SLOTS"]
+SLOTS_PER_LEVEL = UD["SLOTS_PER_LEVEL"]
+
+# AnimalData
+AD = _DUMP["AnimalData"]
+# ANIMALS не используется напрямую в симуляции, но base_income берётся из ZONE_BASE
+
+# RollData
+RD = _DUMP["RollData"]
+SIGMA = RD["SIGMA"]
+CENTER_START = RD["CENTER_START"]
+CENTER_START_SLOPE = RD["CENTER_START_SLOPE"]
+CENTER_END = RD["CENTER_END"]
+CENTER_END_SLOPE = RD["CENTER_END_SLOPE"]
+OLD_CENTER_START = RD["OLD_FOOD_CENTER_START"]
+OLD_CENTER_END = RD["OLD_FOOD_CENTER_END"]
+LM_RAW_MIN = RD["LM_RAW_MIN"]
+LM_RAW_MAX = RD["LM_RAW_MAX"]
+LM_MIN = RD["LM_MIN"]
+LM_MAX = RD["LM_MAX"]
+PITY_MID_RANK = RD["PITY_MID_RANK"]
+PITY_MID_K = RD["PITY_MID_K"]
+PITY_HIGH_RANK = RD["PITY_HIGH_RANK"]
+PITY_HIGH_K = RD["PITY_HIGH_K"]
+JACKPOT_MIN = RD["JACKPOT_MIN"]
+JACKPOT_MAX = RD["JACKPOT_MAX"]
+JACKPOT_RANK_START = RD["JACKPOT_RANK_START"]
+JACKPOT_RANK_END = RD["JACKPOT_RANK_END"]
+JACKPOT_UPPER_WEIGHT = RD["JACKPOT_UPPER_WEIGHT"]
+NEW_SPECIES_MULT = RD["NEW_SPECIES_MULT"]
+SHOW_JACKPOT_METER = RD["SHOW_JACKPOT_METER"]
+
+# VariantData
+VD = _DUMP["VariantData"]
+MUTATIONS = [(v["chance"], v["mult"]) for v in VD["VARIANTS"][1:]]  # пропускаем NONE
+MUT_CAP = VD["MAX_MUTATION_CHANCE_SUM"]
+
+
+# --- Функции ---
 
 def zone_at(d):
     z = 0
@@ -64,13 +161,6 @@ def mut_mult(rng, lm):
     return 1.0
 
 
-# Выбор зверя: те же числа, что scripts/data/roll_data.gd и scripts/logic/spawn_roller.gd
-SIGMA = 1.5
-CENTER_START, CENTER_START_SLOPE, CENTER_END, CENTER_END_SLOPE = 2.55, 0.10, 4.15, 0.10
-OLD_CENTER_START, OLD_CENTER_END = 1.4, 2.4
-LM_RAW_MIN, LM_RAW_MAX, LM_MIN, LM_MAX = 0.6, 2.0, 0.85, 1.35
-
-
 def rank_center(zone, fz, aim, f):
     if fz < zone:
         return OLD_CENTER_START + (OLD_CENTER_END - OLD_CENTER_START) * f
@@ -83,11 +173,6 @@ def rank_center(zone, fz, aim, f):
 def luck_mult(luck, zone):
     raw = min(max(luck / LUCK_REF[zone], LM_RAW_MIN), LM_RAW_MAX)
     return LM_MIN + (LM_MAX - LM_MIN) * (raw - LM_RAW_MIN) / (LM_RAW_MAX - LM_RAW_MIN)
-
-
-PITY_MID_RANK, PITY_MID_K, PITY_HIGH_RANK, PITY_HIGH_K = 4, 0.12, 6, 0.03
-JACKPOT_MIN, JACKPOT_MAX, JACKPOT_RANK_START, JACKPOT_RANK_END, JACKPOT_UPPER_WEIGHT = 25, 35, 4.0, 7.0, 0.5
-NEW_SPECIES_MULT = 2.5
 
 
 def roll(rng, dist, fi, hist, st=None, found=None):
@@ -195,7 +280,9 @@ class Sim:
                 self.money -= FOODS[self.food + 1][3]
                 self.food += 1
                 bought = True
-                self.mark(f"еда {self.food}: {FOOD_NAMES[self.food]}")
+                # Используем name_key из дампа
+                food_name = FD["FOODS"][self.food]["name_key"]
+                self.mark(f"еда {self.food}: {food_name}")
             if self.slot_level < len(SLOT_PRICES) and self.money >= SLOT_PRICES[self.slot_level]:
                 self.money -= SLOT_PRICES[self.slot_level]
                 self.slot_level += 1
@@ -213,20 +300,20 @@ class Sim:
                 self.t += 1.0
                 self.money += self.income()
                 if sec < self.train_s and self.bar >= 0:
-                    self.xp += (1.0 / REP_S) * BARS[self.bar][1]
+                    self.xp += (1.0 / BAR_REP_S) * BARS[self.bar][1]
                     while self.xp >= xp_needed(self.strength):
                         self.xp -= xp_needed(self.strength)
                         self.strength += 1
                         d = 4 * (self.strength + 20)
                         z = zone_at(d)
                         j = min(5, int(6 * (d - ZONE_START[z]) / (ZONE_END[z] - ZONE_START[z])))
-                        self.mark(f"мини-зона {z + 1}.{j + 1} {ZONE_NAMES[z]}")
+                        self.mark(f"мини-зона {z + 1}.{j + 1} {ZONE_RU_NAMES[z]}")
                 elif (sec - self.train_s) % self.cycle == 0:
                     dist = 4 * (self.strength + self.rng.randint(14, 18))
                     z = zone_at(dist)
                     if z > self.max_zone:
                         self.max_zone = z
-                        self.mark(f"зона {ZONE_NAMES[z]} открыта броском")
+                        self.mark(f"зона {ZONE_RU_NAMES[z]} открыта броском")
                     self.owned.append(roll(self.rng, dist, self.best_food(), self.hist, self.pst, self.found))
                     # лишние: игрок нажимает «продать лишних» (ранг 1-4 без мутаций и размера), остальное хранится;
                     # при переполнении 60 худший продаётся автоматически
@@ -256,7 +343,7 @@ def run(active_h, train_s, session_min, seed, sell=True, cycle=15):
     if session_min <= 0:
         s.active(active_h * 3600)
         return s
-    # сессии: каждый день session_min минут, остальное время игры нет (оффлайн до 2 ч x 0.5)
+    # сессии: каждый день session_min минут, остальное время игры нет (оффлайн до 1 ч x 0.1)
     sessions = int(active_h * 60 / session_min)
     for d in range(sessions):
         s.day = d + 1
