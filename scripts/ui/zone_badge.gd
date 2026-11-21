@@ -74,7 +74,9 @@ static func _draw_letter(canvas: CanvasItem, center: Vector2, diameter: float, z
 	var k: float = diameter / BASE_DIAMETER
 	var fs: int = maxi(int(BASE_FONT * k), 8)
 	var key: String = str(ZoneData.ZONES[clampi(zone, 0, ZoneData.count() - 1)]["name_key"])
-	var letter: String = Loc.t(key).substr(0, 1).to_upper()
+	var letter: String = key.substr(0, 1).to_upper()  # fallback: first letter of key
+	if Engine.has_singleton("Loc"):
+		letter = Loc.t(key).substr(0, 1).to_upper()
 	var ts: Vector2 = f.get_string_size(letter, HORIZONTAL_ALIGNMENT_LEFT, -1.0, fs)
 	var pos := Vector2(center.x - ts.x * 0.5, center.y + (f.get_ascent(fs) - f.get_descent(fs)) * 0.5)
 	canvas.draw_string_outline(f, pos, letter, HORIZONTAL_ALIGNMENT_LEFT, -1.0, fs, int(BASE_OUTLINE * k), Color.BLACK)

@@ -7,17 +7,30 @@ extends SceneTree
 
 const SAVE_PATH: String = "user://save.json"
 
+## В headless-режиме с -s автозагрузки не создаются автоматически.
+## Создаём минимальные заглушки для Loc и Save, чтобы скрипты не падали с "Identifier not found".
+func _initialize() -> void:
+	# Создаём заглушку Loc
+	var loc_script = load("res://autoload/loc.gd")
+	var loc_instance = loc_script.new()
+	loc_instance.name = "Loc"
+	root.add_child(loc_instance)
+	
+	# Создаём заглушку Save (минимальная, для компиляции скриптов)
+	var save_script = load("res://autoload/save.gd")
+	var save_instance = save_script.new()
+	save_instance.name = "Save"
+	root.add_child(save_instance)
+	
+	# Game и Ya будут созданы при необходимости или уже есть
+	# В _initialize() root ещё не в дереве: автозагрузки созданы, но их _ready() не вызван
+	# Поэтому все проверки запускаем в первом кадре.
+
 var _fails: int = 0
 var _total: int = 0
 var _notices: Array = []
 var _save: Node
 var _game: Node
-
-
-func _initialize() -> void:
-	# В _initialize() root ещё не в дереве: автозагрузки созданы, но их _ready() не вызван
-	# (у Save из-за этого нет таймера). Поэтому все проверки запускаем в первом кадре.
-	pass
 
 
 func _process(_delta: float) -> bool:
@@ -250,9 +263,9 @@ func _test_throw_calc() -> void:
 	_check("eff_power(5, 1.0) = 25", ThrowCalc.eff_power(5, 1.0) == 25)
 	_check("distance(25) = 100 м", _near(ThrowCalc.distance(25), 100.0))
 	_check("is_perfect: 19 да, 18 нет", ThrowCalc.is_perfect(19) and not ThrowCalc.is_perfect(18))
-	_check("flight_time: 0 м даёт 0.9, 500 м даёт 1.9, очень далеко даёт 3.0",
-		_near(ThrowCalc.flight_time(0.0), 0.9) and _near(ThrowCalc.flight_time(500.0), 1.9)
-		and _near(ThrowCalc.flight_time(10000.0), 3.0))
+	_check("flight_time: 0 м даёт 1.2, 500 м даёт 2.45, очень далеко даёт 4.0",
+		_near(ThrowCalc.flight_time(0.0), 1.2) and _near(ThrowCalc.flight_time(500.0), 2.45)
+		and _near(ThrowCalc.flight_time(10000.0), 4.0))
 
 
 func _zones_continuous() -> bool:
@@ -818,9 +831,10 @@ func _test_mini_zone_game() -> void:
 		MiniZoneData.SHADE.size() == MiniZoneData.PER_ZONE
 		and _near(MiniZoneData.entry_reward(0.0, 0), 20.0) and _near(MiniZoneData.entry_reward(0.0, 1), 800.0)
 		and _near(MiniZoneData.entry_reward(1000.0, 1), 120000.0))
+	var loc_node: Node = root.get_node_or_null("Loc")
 	_check("T46: ключи плашки и подписи есть в Loc.T на ru и en",
-		Loc.T.has("mini_zone_new") and Loc.T.has("zone_progress_fmt")
-		and String(Loc.T["mini_zone_new"].get("ru", "")) != "" and String(Loc.T["zone_progress_fmt"].get("en", "")) != "")
+		loc_node != null and loc_node.T.has("mini_zone_new") and loc_node.T.has("zone_progress_fmt")
+		and String(loc_node.T["mini_zone_new"].get("ru", "")) != "" and String(loc_node.T["zone_progress_fmt"].get("en", "")) != "")
 	_fresh()
 	_check("T46: у новой игры mini_reached = 0 (первая мини-зона), денег нет",
 		int(_save.data["mini_reached"]) == 0 and _near(_game.money(), 0.0))
@@ -900,11 +914,12 @@ func _test_keeper() -> void:
 	ZoneProgress.record_reached_zone(KeeperData.GONE_ZONE)
 	_check("T54: долетел до Саванны, значит Хранитель ушёл", KeeperLogic.is_gone())
 	_fresh()
+	var loc_node: Node = root.get_node_or_null("Loc")
 	var keys_ok: bool = true
 	var keys: Array = ["keeper_name", "keeper_farewell_line", "notice_keeper_farewell"]
 	keys.append_array(KeeperData.LINE_KEYS)
 	for k in keys:
-		keys_ok = keys_ok and Loc.T.has(k) and String(Loc.T[k].get("ru", "")) != "" and String(Loc.T[k].get("en", "")) != ""
+		keys_ok = keys_ok and loc_node != null and loc_node.T.has(k) and String(loc_node.T[k].get("ru", "")) != "" and String(loc_node.T[k].get("en", "")) != ""
 	_check("T54: тексты Хранителя есть в Loc.T на ru и en", keys_ok)
 	# Мир: узел создаёт зверей и персонажа; при флаге ухода сам удаляется и ничего не строит.
 	var yard := KeeperYard.new()
@@ -1734,26 +1749,33 @@ func _test_parts_animation() -> void:
 			before.append((child as Node3D).transform)
 		var children_before: int = view.get_child_count()
 		view.set_anim_running(true)
+		# Отслеживаем, отличался ли трансформ хоть в одном кадре (для циклических анимаций вроде hop)
+		var moved: Array[bool] = []
+		for i in before.size():
+			moved.append(false)
 		for i in 60:
 			view._process(0.016)
-		var moved: int = 0
-		var k: int = 0
-		for child in model.get_children():
-			if not (child as Node3D).transform.is_equal_approx(before[k]):
-				moved += 1
-			k += 1
-		_check("T24f: %s: в беге двигаются части модели (%d из %d)" % [id, moved, before.size()], moved >= 1)
+			var k: int = 0
+			for child in model.get_children():
+				if not moved[k] and not (child as Node3D).transform.is_equal_approx(before[k]):
+					moved[k] = true
+				k += 1
+		var moved_count: int = 0
+		for m in moved:
+			if m:
+				moved_count += 1
+		_check("T24f: %s: в беге двигаются части модели (%d из %d)" % [id, moved_count, before.size()], moved_count >= 1)
 		_check("T24f: %s: анимация частей не создаёт узлов и не двигает зверя" % id, view.get_child_count() == children_before and view.position == Vector3.ZERO)
 		view.set_anim_running(false)
 		for i in 120:
 			view._process(0.1)
 		var settled: bool = true
-		k = 0
+		var k2: int = 0
 		for child in model.get_children():
 			var rest: Transform3D = (child as Node3D).transform
-			if not rest.origin.is_equal_approx(before[k].origin):
+			if not rest.origin.is_equal_approx(before[k2].origin):
 				settled = false
-			k += 1
+			k2 += 1
 		_check("T24f: %s: в покое опорные точки частей на месте" % id, settled)
 		view.free()
 

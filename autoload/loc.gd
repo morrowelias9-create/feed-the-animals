@@ -45,6 +45,7 @@ const T := {
 	"reveal_size": {"ru": "Размер: %s x%s", "en": "Size: %s x%s", "tr": "Boyut: %s x%s"},
 	"reveal_new": {"ru": "Новинка", "en": "New"},
 	"carry_hint": {"ru": "Нажми на свободное место в загоне", "en": "Tap a free spot in the pen"},
+	"carry_place": {"ru": "Поставить", "en": "Place"},
 	"carry_back": {"ru": "В рюкзак", "en": "Backpack"},
 	"carry_enter_pen": {"ru": "Зайди в загон, чтобы поставить зверя", "en": "Enter the pen to place the animal"},
 	"pen_full": {"ru": "Загон полон", "en": "The pen is full"},
@@ -109,6 +110,7 @@ const T := {
 	"mini_ocean_5": {"ru": "Глубина", "en": "The Deep"},
 	"mini_ocean_6": {"ru": "Бездна", "en": "The Abyss"},
 	"mini_zone_new": {"ru": "Новая местность: %s", "en": "New area: %s"},
+	"mini_zone_bonus": {"ru": "Награда: %s", "en": "Reward: %s"},
 	"zone_progress_fmt": {"ru": "%s · %s %d/6", "en": "%s · %s %d/6"},
 
 	# Еда

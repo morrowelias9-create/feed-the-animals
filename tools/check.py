@@ -105,6 +105,27 @@ else:
 
 # 3. ссылки res:// на существующие файлы
 ref_re = re.compile(r"res://[^\s\"')\]%,;]+")
+
+# Динамические иконки: шаблоны вида "res://assets/ui/icons/animal_" + id
+# Собираем все такие шаблоны и проверяем, что для каждого ожидаемого id файл существует.
+DYNAMIC_ICON_PATTERNS = [
+    (re.compile(r'res://assets/ui/icons/animal_'), "animal", "scripts/data/animal_data.gd", r'"id":\s*"([^"]+)"'),
+    (re.compile(r'res://assets/ui/icons/food_'), "food", "scripts/data/food_data.gd", r'"id":\s*"([^"]+)"'),
+    (re.compile(r'res://assets/ui/icons/zone_'), "zone", "scripts/data/zone_data.gd", r'"id":\s*"([^"]+)"'),
+]
+
+dynamic_icon_refs: set[str] = set()  # шаблоны, которые встречаются в коде
+expected_icons: dict[str, set[str]] = {}  # тип -> множество ожидаемых id
+
+for pattern_re, icon_type, data_file, id_regex in DYNAMIC_ICON_PATTERNS:
+    data_path = ROOT / data_file
+    if data_path.exists():
+        data_text = read(data_path)
+        ids = set(re.findall(id_regex, data_text))
+        expected_icons[icon_type] = ids
+    else:
+        expected_icons[icon_type] = set()
+
 for p in files:
     if p.suffix not in TEXT_EXT or p.name == "check.py":
         continue
@@ -114,8 +135,27 @@ for p in files:
         for ref in ref_re.findall(line):
             if ref.endswith("/") or "*" in ref:
                 continue
+            # Проверяем, не является ли это динамической иконкой (шаблон без id в конце)
+            is_dynamic_template = False
+            for pattern_re, icon_type, _, _ in DYNAMIC_ICON_PATTERNS:
+                if pattern_re.search(ref) and not any(ref.endswith(f"{icon_type}_{id}.png") for id in expected_icons.get(icon_type, [])):
+                    is_dynamic_template = True
+                    dynamic_icon_refs.add(ref)
+                    break
+            if is_dynamic_template:
+                continue
             if not (ROOT / ref[len("res://"):]).exists():
                 errors.append(f"{rel(p)}:{n}: ссылка на несуществующий файл {ref}")
+
+# Проверяем, что для всех динамических шаблонов существуют файлы для каждого ожидаемого id
+for template_ref in dynamic_icon_refs:
+    for pattern_re, icon_type, _, _ in DYNAMIC_ICON_PATTERNS:
+        if pattern_re.search(template_ref):
+            for id_ in expected_icons.get(icon_type, []):
+                expected_file = f"{template_ref}{id_}.png"
+                if not (ROOT / expected_file[len("res://"):]).exists():
+                    errors.append(f"динамическая иконка {template_ref}: отсутствует файл для {icon_type} '{id_}' ({expected_file})")
+            break
 
 # 4. SDK только где положено
 for p in scripts:
