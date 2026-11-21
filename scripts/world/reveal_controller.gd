@@ -2,9 +2,10 @@ class_name RevealController
 extends Node3D
 ## Кинематика получения зверя (шаги T10c и T34; справочник R2 «Кинематика получения», R3, R6 «Экран награды»).
 ## Фазы: A «глаза зверя» -> B «отъезд и имя» -> C «итог» -> D «выход». Камерой управляет через CameraRig.set_pose.
-## В фазе B камера плавно отъезжает от еды и раскрывает стоящего рядом зверя: сначала лапы,
-## затем туловище и голова, затем весь зверь. Зверь стоит за едой головой к ней, камера обходит
-## его сбоку и держит крупно в кадре. Имя печатается по буквам во время отъезда.
+## T71: зверь стоит ПЕРЕД едой на той стороне, откуда идёт камера (камера в фазе A это его глаза, тело за камерой),
+## головой к еде. В фазе B камера уходит вбок из головы зверя, отъезжает и раскрывает его целиком,
+## в фазе C зверь поворачивается к камере. Имя печатается по буквам во время отъезда.
+## T72: у крупных и редких зверей шаги в фазе A медленнее и тяжелее (дольше идём к еде, реже и глубже покачивание).
 ## Зверь выбирается в start(), добавляется игроку в начале фазы C. Тап в A или B прыгает сразу к C.
 
 signal finished
@@ -12,7 +13,7 @@ signal result_dismissed  # T23: тап «продолжить» в фазе ит
 
 enum Phase { NONE, EYES, PULLBACK, RESULT, EXIT }
 
-const EYE_START_DIST: float = 12.0      # стартовая дистанция камеры фазы A
+const EYE_START_DIST: float = 12.0      # стартовая дистанция камеры фазы A (обычный зверь)
 const EYE_END_DIST: float = 1.2         # камера подходит к еде на столько
 const FOOD_MAX_SHARE: float = 0.4       # длина еды не больше этой доли длины зверя
 const EYE_PITCH_FROM: float = -6.0     # взгляд почти по горизонту, на еду, а не в пол
@@ -25,10 +26,27 @@ const STEP_HZ: float = 3.0
 const PULLBACK_FOV: float = 68.0
 const PULLBACK_PAWS_SHARE: float = 0.32 # доля фазы B на подвод камеры к лапам (остальное — общий отъезд)
 
+# T72: «тяжесть» зверя от 0 (обычный маленький) до 1 (редкий и огромный). От неё зависят шаги фазы A.
+const WEIGHT_RARITY_K: float = 0.55     # вклад редкости (ранг 0-4 из 4)
+const WEIGHT_SIZE_K: float = 0.35       # вклад размера вида (от 0.8 м до 5.8 м)
+const WEIGHT_SIZE_MIN_M: float = 0.8
+const WEIGHT_SIZE_SPAN_M: float = 5.0
+const WEIGHT_VARIANT_K: float = 0.2     # любая мутация цвета делает зверя «особенным»
+const WEIGHT_GROWTH_K: float = 0.25     # мутация роста (до 3 ступеней)
+const WEIGHT_GROWTH_STEPS: float = 3.0
+const EYES_SLOW_S: float = 4.2          # длительность фазы A у самого тяжёлого зверя (обычный: GameConfig.REVEAL_EYES_S)
+const STEP_HZ_SLOW: float = 1.1         # шагов в секунду у самого тяжёлого зверя
+const EYE_START_DIST_SLOW: float = 8.0  # старт ближе: медленно, но не бесконечно долго
+const BOB_HEAVY_K: float = 1.8          # во сколько раз глубже покачивание у самого тяжёлого
+const ROLL_HEAVY_DEG: float = 5.0
+const SLOW_LINEAR_K: float = 0.85       # у тяжёлого подход почти равномерный, без быстрого старта и торможения
+const THUD_K: float = 0.7               # доля «ударов» (резкий провал на каждом шаге) в покачивании у тяжёлого
+
 # Кадр «весь зверь»: дистанция и высоты считаются от фактической высоты модели (T35, RevealCamera).
 const RESULT_CAM_FOLLOW: float = 4.0     # скорость подстройки кадра итога под рост зверя (1/с)
 const MIN_PULLBACK_EXTRA: float = 0.08  # отъезд от еды всегда чуть больше конца фазы A
-# Зверь стоит за едой вдоль коридора: голова у еды, корпус уходит вглубь.
+const NOSE_MIN_DIST: float = 1.0        # T71: зверь в итоге смотрит на камеру: нос не ближе этого к камере
+# Зверь стоит перед едой, со стороны камеры фазы A: голова у еды, корпус уходит назад, за камеру.
 const ANIMAL_OFFSET_BASE: float = 0.15
 const ANIMAL_OFFSET_K: float = 0.45
 # Кадр «лапы»: камера сбоку и низко, смотрит на лапы у еды.
@@ -36,7 +54,7 @@ const PAWS_DIST_SHARE: float = 0.60     # доля полной дистанци
 const PAWS_HEIGHT_K: float = 0.16
 const PAWS_TARGET_HEIGHT_K: float = 0.06
 const CAM_GROUND_CLEARANCE: float = 0.25
-const TO_RESULT_S: float = 0.4          # плавный поворот зверя в 3/4 (камера стоит на месте)
+const TO_RESULT_S: float = 0.6          # плавный поворот зверя к камере (камера стоит на месте)
 const TAP_LOCK_S: float = 0.25          # после перехода тапы игнорируются
 const NAME_HOLD_S: float = 0.3          # пауза после конца печати имени
 const TELEPORT_FADE_IN_S: float = 0.3   # T36: белое затемнение перед переносом к загону
@@ -66,12 +84,16 @@ var _size: float = 1.2
 var _model_h: float = 1.0            # T35: фактическая высота модели после нормализации, метры
 var _half_depth_k: float = 0.1       # T35: полширины зверя на единицу высоты (для кадра итога с ростом)
 var _dist: float = 0.0
+var _weight: float = 0.0             # T72: «тяжесть» зверя 0…1 (редкость, размер, мутации)
+var _eyes_s: float = 1.6             # T72: длительность фазы A для этого зверя
+var _step_hz: float = STEP_HZ        # T72: частота шагов в фазе A
+var _eye_start: float = EYE_START_DIST   # T72: с какого расстояния от еды камера начинает идти
 
 var _land: Vector3 = Vector3.ZERO       # точка земли под едой
 var _floor_y: float = 0.0
 var _dir: Vector3 = Vector3(0.0, 0.0, 1.0)    # направление камеры фазы A (к еде)
 var _side: Vector3 = Vector3(-1.0, 0.0, 0.0)  # с какой стороны камера отъезжает в фазе B
-var _stop: Vector3 = Vector3.ZERO       # где стоит зверь рядом с едой
+var _stop: Vector3 = Vector3.ZERO       # где стоит зверь (центр модели): перед едой, на стороне камеры фазы A
 var _view: AnimalView
 var _food: Node3D
 var _jackpot: bool = false        # этот бросок джекпот (внутренняя страховка): игроку показывается как обычная «Удача!»
@@ -137,6 +159,8 @@ func start(zone: int, dist: float, land_pos: Vector3, food: Node3D, perfect: boo
 	_land = land_pos
 	_floor_y = land_pos.y
 	_food = food
+	_weight = _compute_weight()
+	_compute_eye_walk()
 	_fit_food_to_animal()
 	_compute_layout()
 	_finished = false
@@ -195,6 +219,23 @@ static func _luck_mult(perfect: bool) -> float:
 	return SpawnRoller.PERFECT_LUCK_MULT if perfect else 1.0
 
 
+## T72: «тяжесть» зверя от 0 до 1: чем он редкий, крупный и необычный, тем больше. Обычная лягушка 0, легендарный гигант 1.
+func _compute_weight() -> float:
+	var w: float = WEIGHT_RARITY_K * clampf(float(_rarity) / 4.0, 0.0, 1.0)
+	w += WEIGHT_SIZE_K * clampf((_size - WEIGHT_SIZE_MIN_M) / WEIGHT_SIZE_SPAN_M, 0.0, 1.0)
+	if _variant != VariantData.NONE:
+		w += WEIGHT_VARIANT_K
+	w += WEIGHT_GROWTH_K * clampf(float(_final_size) / WEIGHT_GROWTH_STEPS, 0.0, 1.0)
+	return clampf(w, 0.0, 1.0)
+
+
+## T72: параметры шагов фазы A от тяжести: тяжёлый зверь идёт дольше, реже ставит шаги и глубже качает камеру.
+func _compute_eye_walk() -> void:
+	_eyes_s = lerpf(GameConfig.REVEAL_EYES_S, EYES_SLOW_S, _weight)
+	_step_hz = lerpf(STEP_HZ, STEP_HZ_SLOW, _weight)
+	_eye_start = lerpf(EYE_START_DIST, EYE_START_DIST_SLOW, _weight)
+
+
 ## Еда не должна быть крупнее зверя: если длина еды больше доли длины зверя, уменьшаем её на время кинематики
 ## (в _cleanup масштаб возвращается). Доля FOOD_MAX_SHARE подобрана так, чтобы зверь выглядел крупнее еды.
 func _fit_food_to_animal() -> void:
@@ -233,8 +274,8 @@ func _compute_layout() -> void:
 	_dir = Vector3(0.0, 0.0, -1.0) if on_ledge else Vector3(0.0, 0.0, 1.0)
 	# Камера отъезжает вбок, к центру коридора, чтобы у неё было место до стены.
 	_side = Vector3(-1.0, 0.0, 0.0) if _land.x >= 0.0 else Vector3(1.0, 0.0, 0.0)
-	# Зверь стоит за едой вдоль коридора: голова у еды, корпус уходит вглубь.
-	_stop = _land + _dir * (ANIMAL_OFFSET_BASE + ANIMAL_OFFSET_K * _size)
+	# T71: зверь стоит ПЕРЕД едой, с той стороны, откуда идёт камера: голова у еды, корпус уходит назад, за камеру.
+	_stop = _land - _dir * (ANIMAL_OFFSET_BASE + ANIMAL_OFFSET_K * _size)
 	_stop.y = _floor_y
 
 
@@ -243,9 +284,9 @@ func _compute_layout() -> void:
 func _compute_pullback_frames() -> void:
 	var h: float = maxf(_view.model_height(), 0.35 * _size)
 	var bounds: AABB = _view.model_bounds()
-	var yaw: Basis = Basis(Vector3.UP, _view.rotation.y)
-	var extent_side: float = absf(yaw.x.dot(_side)) * bounds.size.x + absf(yaw.z.dot(_side)) * bounds.size.z
-	var half_depth: float = maxf(extent_side * 0.5, 0.15)
+	# T71: в итоге зверь поворачивается мордой к камере, поэтому глубину кадра задаёт большая сторона зверя.
+	var extent_depth: float = maxf(bounds.size.x, bounds.size.z)
+	var half_depth: float = maxf(extent_depth * 0.5, 0.15)
 	# T35: полширина на единицу высоты — чтобы кадр итога можно было пересчитать при росте зверя.
 	_half_depth_k = half_depth / maxf(h, 0.001)
 	var full: Dictionary = _full_frame(h)
@@ -267,6 +308,8 @@ func _compute_pullback_frames() -> void:
 ## T35: кадр «весь зверь» для заданной высоты модели. Зверь по центру, еда остаётся внизу по центру кадра.
 func _full_frame(h: float) -> Dictionary:
 	var d_cam: float = RevealCamera.full_distance(h, _half_depth_k)
+	# T71: зверь смотрит на камеру, его нос не должен оказаться вплотную к объективу.
+	d_cam = maxf(d_cam, _half_depth_k * h + NOSE_MIN_DIST)
 	d_cam = maxf(d_cam, EYE_END_DIST + MIN_PULLBACK_EXTRA)
 	d_cam = _side_distance(d_cam)
 	var pos: Vector3 = _land + _side * d_cam
@@ -299,20 +342,27 @@ func _enter_eyes() -> void:
 	_update_eyes()
 
 
+## T72: обычный зверь быстро подбегает и тормозит у еды; тяжёлый идёт почти равномерно, медленно,
+## с редкими глубокими шагами («ударами») и сильнее качает камеру.
 func _update_eyes() -> void:
-	var u: float = clampf(_t / GameConfig.REVEAL_EYES_S, 0.0, 1.0)
-	var k: float = 1.0 - (1.0 - u) * (1.0 - u)    # ease_out
-	var d: float = lerpf(EYE_START_DIST, EYE_END_DIST, k)
+	var u: float = clampf(_t / _eyes_s, 0.0, 1.0)
+	var ease_out: float = 1.0 - (1.0 - u) * (1.0 - u)
+	var k: float = lerpf(ease_out, u, _weight * SLOW_LINEAR_K)
+	var d: float = lerpf(_eye_start, EYE_END_DIST, k)
 	var h: float = maxf(_final_height(), 0.35 * _size)
 	var eye: float = RevealCamera.eye_height(h)
-	var amp: float = BOB_AMP_M * maxf(1.0, h / 1.2)
+	var amp: float = BOB_AMP_M * maxf(1.0, h / 1.2) * lerpf(1.0, BOB_HEAVY_K, _weight)
+	var phase: float = TAU * _step_hz * _t
+	var bob_soft: float = sin(phase)
+	var bob_thud: float = 2.0 * absf(sin(phase * 0.5)) - 1.0   # резкий провал камеры в момент постановки шага
+	var bob: float = lerpf(bob_soft, bob_thud, _weight * THUD_K)
 	var pos: Vector3 = _land - _dir * d
-	pos.y = _floor_y + eye + sin(TAU * STEP_HZ * _t) * amp
+	pos.y = _floor_y + eye + bob * amp
 	var pitch: float = deg_to_rad(lerpf(EYE_PITCH_FROM, EYE_PITCH_TO, u))
 	var forward: Vector3 = Vector3(_dir.x * cos(pitch), sin(pitch), _dir.z * cos(pitch))
-	var roll: float = sin(TAU * STEP_HZ * 0.5 * _t) * ROLL_DEG
+	var roll: float = sin(TAU * _step_hz * 0.5 * _t) * lerpf(ROLL_DEG, ROLL_HEAVY_DEG, _weight)
 	_set_pose(pos, pos + forward * 5.0, lerpf(EYE_FOV_FROM, EYE_FOV_TO, u), roll)
-	if _t >= GameConfig.REVEAL_EYES_S:
+	if _t >= _eyes_s:
 		_enter_pullback()
 
 
@@ -323,7 +373,7 @@ func _enter_pullback() -> void:
 	_t = 0.0
 	_hold_t = 0.0
 	_lock_t = TAP_LOCK_S
-	# Зверь уже стоит у еды, никуда не бежит: раскрываем его только камерой (T34).
+	# Зверь уже стоит перед едой, никуда не бежит: раскрываем его только камерой (T34).
 	_spawn_view(_stop)
 	_compute_pullback_frames()
 	_overlay.begin_typing(Loc.t("animal_" + _animal_id), GameConfig.REVEAL_LETTER_S)
@@ -333,6 +383,8 @@ func _enter_pullback() -> void:
 
 
 ## Плавный отъезд двумя отрезками: сначала к лапам, затем ко всему зверю.
+## T71: камера стартует внутри головы зверя (это его глаза), поэтому в первом отрезке сначала быстро уходит вбок,
+## а уже потом сближается с лапами: так она не застревает в теле зверя.
 ## Имя печатается всё это время; после раскрытия ждём конца печати и показываем итог.
 func _update_pullback(delta: float) -> void:
 	var u: float = clampf(_t / GameConfig.REVEAL_PULLBACK_S, 0.0, 1.0)
@@ -342,6 +394,9 @@ func _update_pullback(delta: float) -> void:
 		var k: float = smoothstep(0.0, 1.0, u / PULLBACK_PAWS_SHARE)
 		pos = _pb_from_pos.lerp(_pb_paws_pos, k)
 		target = _pb_from_target.lerp(_pb_paws_target, k)
+		var side_shift: float = (_pb_paws_pos - _pb_from_pos).dot(_side)
+		var k_side: float = 1.0 - (1.0 - k) * (1.0 - k)
+		pos += _side * side_shift * (k_side - k)
 	else:
 		var k: float = smoothstep(0.0, 1.0, (u - PULLBACK_PAWS_SHARE) / (1.0 - PULLBACK_PAWS_SHARE))
 		pos = _pb_paws_pos.lerp(_pb_full_pos, k)
@@ -400,13 +455,13 @@ func _enter_result() -> void:
 		"is_new": is_new,
 	})
 	# Камера остаётся там, куда отъехала в фазе B: второго отъезда нет.
-	# Зверь сам поворачивается в 3/4 — между прежним взглядом на еду и камерой.
+	# T71: зверь, который смотрел на еду, сам поворачивается мордой к камере.
 	var to_cam: Vector3 = _cam_pos - _stop
 	to_cam.y = 0.0
 	if to_cam.length_squared() < 0.0001:
 		to_cam = _side
 	_face_from = _view.rotation.y
-	_face_to = _yaw_of((-_dir + to_cam.normalized()).normalized())
+	_face_to = _yaw_of(to_cam.normalized())
 
 
 func _update_result(delta: float) -> void:
@@ -563,8 +618,8 @@ func _spawn_view(at: Vector3) -> void:
 	_view.set_part_mode(AnimalBuilder.PART_FULL)   # T24f: один зверь на экране получения, до 12 мешей
 	_view.set_signs_visible(false)
 	_view.position = at
-	# Зверь стоит за едой и смотрит на неё: голова у еды, корпус раскрывается сбоку.
-	_view.rotation.y = _yaw_of(-_dir)
+	# T71: зверь стоит перед едой и смотрит на неё (вперёд по ходу камеры фазы A): голова у еды, тело за камерой.
+	_view.rotation.y = _yaw_of(_dir)
 
 
 func _set_pose(pos: Vector3, target: Vector3, fov: float, roll: float) -> void:
