@@ -1,7 +1,0 @@
-Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
-OpenGL API 3.3.0 NVIDIA 616.92 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 5060 Ti
-
-ERROR: 10 RID allocations of type 'N5GLES34MeshE' were leaked at exit.
-ERROR: 5 RID allocations of type 'N5GLES38MaterialE' were leaked at exit.
-ERROR: 1 RID allocations of type 'N5GLES36ShaderE' were leaked at exit.
-ERROR: 10 RID allocations of type 'N17RendererSceneCull8InstanceE' were leaked at exit.

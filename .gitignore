@@ -2,3 +2,15 @@
 build/
 *.zip
 *.translation
+*.log
+test.txt
+test_*.txt
+game_output.txt
+game_error.txt
+python_env.txt
+*.patch
+.tmp/
+CLAUDE.local.md
+tools/ntfy_topic.local.txt
+tools/data_dump.json
+tools/rarity_report.txt

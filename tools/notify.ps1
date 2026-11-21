@@ -1,9 +1,9 @@
 param([string]$Message = "Done")
 # Plays a sound and sends a push to the phone via ntfy.sh.
-# The channel name is read from ntfy_topic.txt (next to this script, not committed to git).
-$topicFile = Join-Path $PSScriptRoot "ntfy_topic.txt"
+# The channel name is read from ntfy_topic.local.txt (next to this script, not committed to git).
+$topicFile = Join-Path $PSScriptRoot "ntfy_topic.local.txt"
 try { [System.Media.SystemSounds]::Exclamation.Play() } catch {}
-if (-not (Test-Path $topicFile)) { Write-Output "notify: ntfy_topic.txt not found"; exit 0 }
+if (-not (Test-Path $topicFile)) { Write-Output "notify: ntfy_topic.local.txt not found"; exit 0 }
 $topic = (Get-Content -Raw -Path $topicFile).Trim()
 if ((-not $topic) -or ($topic -like "PUT_YOUR*")) { Write-Output "notify: channel name not set"; exit 0 }
 try {
