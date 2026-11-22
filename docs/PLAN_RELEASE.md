@@ -43,8 +43,8 @@
 ### Этап 1. Порядок в репозитории и проверках
 
 - ✅ [T54 — Уборка репозитория и правил агента](docs/tasks/release/T54.md)
-- ⬜ [T55 — `docs/PROGRESS.md` по факту](docs/tasks/release/T55.md)
-- ⬜ [T56 — Зелёные проверки](docs/tasks/release/T56.md)
+- ✅ [T55 — `docs/PROGRESS.md` по факту](docs/tasks/release/T55.md)
+- ✅ [T56 — Зелёные проверки](docs/tasks/release/T56.md)
 - ⬜ [T56a — Отладочная панель (сброс сохранения, деньги, перенос в биом, время назад)](docs/tasks/release/T56a.md)
 - ⬜ [T57 — Документы и симуляторы сверены с кодом](docs/tasks/release/T57.md)
 

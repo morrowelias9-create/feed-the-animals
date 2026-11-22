@@ -1,15 +1,16 @@
 class_name AnimalsWindow
 extends WindowBase
 ## Окно «Животные» (T12, справочник R6 «Окна»): сверху «На участке N/M», список всех зверей строками
-## (иконка, название цветом редкости, мутация и размер, доход, «Взять», «Продать $N»),
-## внизу «Разместить лучших» и «Продать лишних».
+## (иконка на плитке редкости, название цветом редкости, мутация и размер, доход, «Взять», «Продать $N»),
+## внизу большие кнопки «Разместить лучших» (оранжевая) и «Продать лишних» (красная).
 ## «Взять» закрывает окно и отдаёт зверя в руки через сигнал `take_requested` (его ловит CarryController.take).
 ## T24: показывает «Рекорд: N м» под счётчиком зверей.
 
 signal take_requested(uid: int)
 
 const LIST_MIN_H: float = 120.0
-const BOTTOM_H: float = 64.0
+const BOTTOM_H: float = 68.0
+const BOTTOM_FONT_SIZE: int = 28
 
 var _count_label: Label
 var _record_label: Label          # T24: рекорд лучшего броска
@@ -22,14 +23,20 @@ var _extras_button: Button
 
 func _init() -> void:
 	title_key = "animals_title"
+	panel_w_k = 0.74
+	panel_w_max = 940.0
+	panel_h_k = 0.88
+	panel_h_max = 650.0
 
 
 func _build_body() -> void:
-	_count_label = UiStyle.outline_label("", 30, 5, UiStyle.COLOR_TEXT)
+	_count_label = UiStyle.outline_label("", 34, 7, UiStyle.COLOR_TEXT)
+	_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	body.add_child(_count_label)
 
 	# T24: рекорд лучшего броска
-	_record_label = UiStyle.outline_label("", 24, 4, AnimalRow.COLOR_SUB)
+	_record_label = UiStyle.outline_label("", 24, 5, AnimalRow.COLOR_SUB)
+	_record_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	body.add_child(_record_label)
 
 	_scroll = ScrollContainer.new()
@@ -42,22 +49,22 @@ func _build_body() -> void:
 	_list = VBoxContainer.new()
 	_list.name = "List"
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_list.add_theme_constant_override("separation", 8)
+	_list.add_theme_constant_override("separation", 10)
 	_scroll.add_child(_list)
 
-	_empty_label = UiStyle.outline_label("", 30, 5, AnimalRow.COLOR_SUB)
+	_empty_label = UiStyle.outline_label("", 30, 6, AnimalRow.COLOR_SUB)
 	_empty_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(_empty_label)
 
 	var bottom := HBoxContainer.new()
-	bottom.add_theme_constant_override("separation", 12)
+	bottom.add_theme_constant_override("separation", 14)
 	body.add_child(bottom)
-	_best_button = make_button("", Vector2(0.0, BOTTOM_H))
+	_best_button = make_button("", Vector2(0.0, BOTTOM_H), BOTTOM_FONT_SIZE, "orange")
 	_best_button.name = "EquipBestButton"
 	_best_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_best_button.pressed.connect(_on_equip_best)
 	bottom.add_child(_best_button)
-	_extras_button = make_button("", Vector2(0.0, BOTTOM_H))
+	_extras_button = make_button("", Vector2(0.0, BOTTOM_H), BOTTOM_FONT_SIZE, "red")
 	_extras_button.name = "SellExtrasButton"
 	_extras_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_extras_button.pressed.connect(_on_sell_extras)
@@ -145,6 +152,7 @@ func _on_sell_extras() -> void:
 
 # T24: обновляем текст рекорда при смене языка
 func _on_language_changed() -> void:
+	super()   # заголовок окна и перерисовка списка, если окно открыто
 	if _record_label != null and _record_label.visible:
 		var best_throw: int = int(Save.data.get("best_throw", 0))
 		if best_throw > 0:

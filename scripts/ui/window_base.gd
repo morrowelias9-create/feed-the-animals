@@ -1,24 +1,31 @@
 class_name WindowBase
 extends Control
 ## Основа окон интерфейса (справочник R6 «Окна»): затемнение 50%, панель по центру шириной 80% экрана
-## (не больше 1000) и высотой 80%, заголовок по центру, крестик 64x64 справа сверху, закрытие тапом по затемнению.
+## (не больше 1000) и высотой 80%, заголовок слева, крестик 64x64 справа сверху, закрытие тапом по затемнению.
 ## Наследники задают `title_key` до добавления в дерево и переопределяют `_build_body()` и `refresh()`.
 ## Окно живёт в CanvasLayer поверх HUD. Пока оно открыто, игра для Яндекса считается на паузе (Ya.gameplay_stop).
+## Оформление в стиле Roblox: глянцевая фиолетовая шапка с бликами, толстая чёрная рамка с тенью,
+## глянцевые кнопки (make_button), тёмные полосы прокрутки (тема UiStyle.window_theme).
 
 signal opened
 signal closed
 
 const CLOSE_SIZE: float = 64.0
+const HEADER_H: float = 84.0
 const HEADER_COLOR: Color = Color("#C21FD0")   # фиолетовая шапка в стиле Роблокса
+const HEADER_TOP: Color = Color("#E04BEA")
+const HEADER_BOTTOM: Color = Color("#A817B8")
 const BODY_COLOR: Color = Color("#17171E")
 const CLOSE_COLOR: Color = Color("#E0262B")
 const DIM_ALPHA: float = 0.5
-const TITLE_FONT_SIZE: int = 36
+const TITLE_FONT_SIZE: int = 40
 const TOAST_FONT_SIZE: int = 28
 const TOAST_HOLD_S: float = 1.0
 const TOAST_FADE_S: float = 0.4
-const BUTTON_FONT_SIZE: int = 24
-const PADDING: int = 12
+const BUTTON_FONT_SIZE: int = 26
+const PADDING: int = 14
+const FRAME_BORDER: int = 5
+const FRAME_RADIUS: int = 24
 
 var title_key: String = ""
 # Размер панели: доля экрана и предел в пикселях базового разрешения; наследники меняют в _init().
@@ -95,13 +102,15 @@ func show_toast(text: String) -> void:
 	_toast_tween.tween_property(_toast, "modulate:a", 0.0, TOAST_FADE_S)
 
 
-## Кнопка окна: минимальный размер задаётся, фокус клавиатуры не нужен.
-static func make_button(text: String, min_size: Vector2, font_size: int = BUTTON_FONT_SIZE) -> Button:
+## Кнопка окна в стиле Roblox. color_key: blue (по умолчанию), red, green, orange, purple, magenta, gray (см. UiStyle.BTN_PALETTE).
+## Минимальный размер задаётся, фокус клавиатуры не нужен.
+static func make_button(text: String, min_size: Vector2, font_size: int = BUTTON_FONT_SIZE, color_key: String = "blue") -> Button:
 	var button := Button.new()
 	button.text = text
 	button.custom_minimum_size = min_size
 	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_font_size_override("font_size", font_size)
+	UiStyle.apply_button(button, color_key)
 	return button
 
 
@@ -122,11 +131,15 @@ func _build_frame() -> void:
 
 	_panel = PanelContainer.new()
 	_panel.name = "Panel"
+	_panel.theme = UiStyle.window_theme()   # полосы прокрутки и общий стиль для всего содержимого окна
 	var frame := StyleBoxFlat.new()
 	frame.bg_color = BODY_COLOR
-	frame.set_corner_radius_all(22)
-	frame.set_border_width_all(4)
+	frame.set_corner_radius_all(FRAME_RADIUS)
+	frame.set_border_width_all(FRAME_BORDER)
 	frame.border_color = Color.BLACK
+	frame.shadow_color = Color(0.0, 0.0, 0.0, 0.55)
+	frame.shadow_size = 16
+	frame.shadow_offset = Vector2(0.0, 8.0)
 	_panel.add_theme_stylebox_override("panel", frame)
 	add_child(_panel)
 
@@ -134,35 +147,37 @@ func _build_frame() -> void:
 	column.add_theme_constant_override("separation", 0)
 	_panel.add_child(column)
 
-	# Шапка: цветная полоса, название слева, красный крестик справа.
-	var header_panel := PanelContainer.new()
-	var header_style := StyleBoxFlat.new()
-	header_style.bg_color = HEADER_COLOR
-	header_style.corner_radius_top_left = 18
-	header_style.corner_radius_top_right = 18
-	header_style.content_margin_left = 20.0
-	header_style.content_margin_right = 10.0
-	header_style.content_margin_top = 6.0
-	header_style.content_margin_bottom = 6.0
-	header_panel.add_theme_stylebox_override("panel", header_style)
-	column.add_child(header_panel)
+	# Шапка: глянцевая фиолетовая полоса с диагональными бликами, название слева, красный крестик справа.
+	var header_bg: ColorRect = UiStyle.gradient_rect(Vector2(0.0, HEADER_H), HEADER_TOP, HEADER_BOTTOM,
+		float(FRAME_RADIUS - FRAME_BORDER), 0.0, Color.BLACK, 1.0, true)
+	header_bg.name = "Header"
+	column.add_child(header_bg)
+	var header_margin := MarginContainer.new()
+	header_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	header_margin.add_theme_constant_override("margin_left", 22)
+	header_margin.add_theme_constant_override("margin_right", 10)
+	header_margin.add_theme_constant_override("margin_top", 8)
+	header_margin.add_theme_constant_override("margin_bottom", 8)
+	header_bg.add_child(header_margin)
 	var header := HBoxContainer.new()
-	header_panel.add_child(header)
-	_title = UiStyle.outline_label(Loc.t(title_key), TITLE_FONT_SIZE, 7, UiStyle.COLOR_TEXT)
+	header.add_theme_constant_override("separation", 12)
+	header_margin.add_child(header)
+	_title = UiStyle.outline_label(Loc.t(title_key), TITLE_FONT_SIZE, 9, UiStyle.COLOR_TEXT)
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(_title)
-	var close_button := make_button("×", Vector2(CLOSE_SIZE, CLOSE_SIZE), 40)
+	var close_button := make_button("×", Vector2(CLOSE_SIZE, CLOSE_SIZE), 46, "red")
 	close_button.name = "CloseButton"
-	var close_style := StyleBoxFlat.new()
-	close_style.bg_color = CLOSE_COLOR
-	close_style.set_corner_radius_all(10)
-	close_style.set_border_width_all(3)
-	close_style.border_color = Color.BLACK
-	for state in ["normal", "hover", "pressed", "focus"]:
-		close_button.add_theme_stylebox_override(state, close_style)
+	close_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	close_button.pressed.connect(close)
 	header.add_child(close_button)
+
+	# Чёрная линия под шапкой, как в Roblox.
+	var header_line := ColorRect.new()
+	header_line.color = Color.BLACK
+	header_line.custom_minimum_size = Vector2(0.0, 4.0)
+	header_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(header_line)
 
 	var margin := MarginContainer.new()
 	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -173,7 +188,7 @@ func _build_frame() -> void:
 	body = VBoxContainer.new()
 	body.name = "Body"
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 8)
+	body.add_theme_constant_override("separation", 10)
 	margin.add_child(body)
 
 	_toast = UiStyle.outline_label("", TOAST_FONT_SIZE, 5, UiStyle.COLOR_MONEY)
@@ -192,7 +207,7 @@ func _layout() -> void:
 	_panel.size = Vector2(w, h)
 	_panel.position = Vector2((size.x - w) * 0.5, (size.y - h) * 0.5)
 	_toast.size = Vector2(w, 40.0)
-	_toast.position = Vector2(_panel.position.x, _panel.position.y + h + 6.0)
+	_toast.position = Vector2(_panel.position.x, _panel.position.y + h + 14.0)
 
 
 # Закрытие по отпусканию на затемнении (мышь или касание).

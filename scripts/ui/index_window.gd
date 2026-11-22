@@ -1,17 +1,22 @@
 class_name IndexWindow
 extends WindowBase
-## Окно «Индекс» (T18): 5 вкладок по зонам, сетка из 8 карточек.
-## Открытые (`found`) с названием и редкостью, неоткрытые тёмным силуэтом и «???».
-## Сверху общий процент, на вкладках «x/8». Если все 8 открыты и награда не получена — кнопка «Забрать $N».
+## Окно «Индекс» (T18): 5 вкладок по зонам, сетка из 8 карточек в стиле Roblox.
+## Карточка это плитка цвета редкости (светлый верх, насыщенный низ): название сверху, иконка зверя, редкость снизу.
+## Открытые (`found`) яркие с белой рамкой, неоткрытые приглушённые, с чёрным силуэтом зверя и «???».
+## Сверху общий процент, на вкладках название зоны и «x/8». Если все 8 открыты и награда не получена — зелёная кнопка «Забрать $N».
 
 signal zone_reward_claimed
 
-const CARD_W: float = 190.0
-const CARD_H: float = 116.0
-const CARD_SPACING: float = 8.0
-const TABS_H: float = 56.0
-const BUTTON_H: float = 64.0
-const BUTTON_W: float = 200.0
+const CARD_W: float = 170.0
+const CARD_H: float = 124.0
+const CARD_SPACING: float = 10.0
+const TABS_H: float = 52.0
+const TAB_FONT_SIZE: int = 21
+const BUTTON_H: float = 68.0
+const BUTTON_W: float = 260.0
+const NAME_FONT_SIZE: int = 18
+const RARITY_FONT_SIZE: int = 15
+const SILHOUETTE_COLOR := Color(0.0, 0.0, 0.0, 0.88)   # неоткрытый зверь: иконка, закрашенная в чёрный
 
 var _tabs: HBoxContainer
 var _content: VBoxContainer
@@ -31,33 +36,33 @@ var _total_all: int = 40
 
 func _init() -> void:
 	title_key = "index_title"
-	panel_w_k = 0.74
-	panel_w_max = 940.0
-	panel_h_k = 0.84
-	panel_h_max = 600.0
+	panel_w_k = 0.78
+	panel_w_max = 980.0
+	panel_h_k = 0.93
+	panel_h_max = 690.0
 	super._init()
 
 func _build_body() -> void:
 	# Заголовок с общим процентом
-	_header_label = UiStyle.outline_label("", 22, 4, UiStyle.COLOR_TEXT)
+	_header_label = UiStyle.outline_label("", 26, 6, UiStyle.COLOR_TEXT)
 	_header_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_header_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.add_child(_header_label)
 
-	# Вкладки зон
+	# Вкладки зон: кнопки-пилюли, выбранная заливается цветом зоны
 	_tabs = HBoxContainer.new()
 	_tabs.name = "Tabs"
-	_tabs.add_theme_constant_override("separation", 8)
+	_tabs.add_theme_constant_override("separation", 10)
 	_tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_tabs.custom_minimum_size = Vector2(0.0, TABS_H)
+	_tabs.custom_minimum_size = Vector2(0.0, TABS_H + 6.0)
 	body.add_child(_tabs)
 
 	for zone_idx in ZoneData.count():
-		var zone_data: Dictionary = ZoneData.ZONES[zone_idx]
-		var tab_button: Button = WindowBase.make_button("", Vector2(0.0, TABS_H), 20)
+		var tab_button: Button = WindowBase.make_button("", Vector2(0.0, TABS_H), TAB_FONT_SIZE)
 		tab_button.name = "Tab_%d" % zone_idx
 		tab_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		tab_button.theme_type_variation = "Tab"
+		tab_button.clip_text = true
+		UiStyle.apply_tab(tab_button, _zone_accent(zone_idx))
 		tab_button.pressed.connect(_on_tab_pressed.bind(zone_idx))
 		_tabs.add_child(tab_button)
 		_tab_buttons.append(tab_button)
@@ -67,6 +72,7 @@ func _build_body() -> void:
 	_content.name = "Content"
 	_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_content.add_theme_constant_override("separation", 10)
 	body.add_child(_content)
 
 	# T53: строка «Питомец зоны» — значок, название и бонус, у закрытого прогресс Индекса.
@@ -86,7 +92,7 @@ func _build_body() -> void:
 		_grid_containers.append(grid)
 
 	# Кнопка «Забрать» (спрятана до условия)
-	_claim_button = WindowBase.make_button("", Vector2(BUTTON_W, BUTTON_H), 28)
+	_claim_button = WindowBase.make_button("", Vector2(BUTTON_W, BUTTON_H), 30, "green")
 	_claim_button.name = "ClaimButton"
 	_claim_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_claim_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -101,6 +107,13 @@ func _build_body() -> void:
 	if not Game.pet_unlocked.is_connected(_on_pet_unlocked):
 		Game.pet_unlocked.connect(_on_pet_unlocked)
 
+
+## Яркий цвет зоны для выбранной вкладки (из цвета земли зоны, подтянутый по насыщенности и яркости).
+func _zone_accent(zone_idx: int) -> Color:
+	var ground: Color = Color.html(String(ZoneData.ZONES[zone_idx]["ground"]))
+	return Color.from_hsv(ground.h, clampf(ground.s * 1.15 + 0.1, 0.0, 1.0), clampf(maxf(ground.v, 0.8), 0.0, 1.0))
+
+
 ## T53: строка питомца зоны. Значок берётся из существующих animal_*.png, новых картинок нет.
 func _build_pet_row() -> void:
 	_pet_panel = PanelContainer.new()
@@ -108,20 +121,20 @@ func _build_pet_row() -> void:
 	_pet_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_pet_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pet_panel_style = StyleBoxFlat.new()
-	_pet_panel_style.bg_color = Color(0.12, 0.12, 0.13)
-	_pet_panel_style.set_corner_radius_all(14)
-	_pet_panel_style.set_border_width_all(2)
-	_pet_panel_style.set_content_margin_all(6.0)
+	_pet_panel_style.bg_color = Color("#101018")
+	_pet_panel_style.set_corner_radius_all(16)
+	_pet_panel_style.set_border_width_all(3)
+	_pet_panel_style.set_content_margin_all(8.0)
 	_pet_panel.add_theme_stylebox_override("panel", _pet_panel_style)
 	_content.add_child(_pet_panel)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
+	row.add_theme_constant_override("separation", 14)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pet_panel.add_child(row)
 
 	var icon_box := Control.new()
-	icon_box.custom_minimum_size = Vector2(44.0, 44.0)
+	icon_box.custom_minimum_size = Vector2(52.0, 52.0)
 	icon_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(icon_box)
@@ -133,7 +146,7 @@ func _build_pet_row() -> void:
 	_pet_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon_box.add_child(_pet_icon)
 
-	_pet_letter = UiStyle.outline_label("?", 30, 5, Color(0.6, 0.6, 0.65))
+	_pet_letter = UiStyle.outline_label("?", 34, 6, Color(0.6, 0.6, 0.65))
 	_pet_letter.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_pet_letter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_pet_letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -146,15 +159,18 @@ func _build_pet_row() -> void:
 	texts.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(texts)
 
-	var title: Label = UiStyle.outline_label(Loc.t("pet_index_title"), 14, 3, Color(0.75, 0.75, 0.8))
+	var title: Label = UiStyle.outline_label(Loc.t("pet_index_title"), 16, 4, Color(0.75, 0.75, 0.8))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texts.add_child(title)
 
-	_pet_name = UiStyle.outline_label("", 19, 4, UiStyle.COLOR_TEXT)
+	_pet_name = UiStyle.outline_label("", 22, 5, UiStyle.COLOR_TEXT)
+	_pet_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_pet_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texts.add_child(_pet_name)
 
-	_pet_bonus = UiStyle.outline_label("", 15, 3, UiStyle.COLOR_MONEY)
+	_pet_bonus = UiStyle.outline_label("", 17, 4, UiStyle.COLOR_MONEY)
+	_pet_bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_pet_bonus.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texts.add_child(_pet_bonus)
 
@@ -185,8 +201,8 @@ func _update_tabs() -> void:
 			if found.has(String(a["id"])):
 				zone_found += 1
 		var btn: Button = _tab_buttons[zone_idx]
-		btn.text = Loc.t("index_tab") % zone_found
-		# Подсветка текущей вкладки
+		btn.text = "%s %s" % [Loc.t(String(ZoneData.ZONES[zone_idx]["name_key"])), Loc.t("index_tab") % zone_found]
+		# Выбранная вкладка: disabled-стиль (залит цветом зоны), клик по ней не нужен
 		btn.disabled = (zone_idx == _current_zone)
 
 func _update_current_grid() -> void:
@@ -208,55 +224,44 @@ func _build_zone_grid(zone_idx: int) -> void:
 			continue
 		var animal_id: String = String(animal["id"])
 		var is_found: bool = found.has(animal_id)
+		var rarity: int = AnimalData.rarity_of(animal_id)
+		var rarity_color: Color = AnimalData.rarity_color(rarity)
 
-		var card: PanelContainer = PanelContainer.new()
-		card.custom_minimum_size = Vector2(CARD_W, CARD_H)
-		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.12, 0.12, 0.13)
-		style.set_corner_radius_all(14)
-		style.set_border_width_all(2)
-		if is_found:
-			var rarity_color: Color = AnimalData.rarity_color(AnimalData.rarity_of(animal_id))
-			style.border_color = rarity_color.darkened(0.3)
-		else:
-			style.border_color = Color(0.3, 0.3, 0.35)
-		style.set_content_margin_all(6.0)
-		card.add_theme_stylebox_override("panel", style)
+		# Плитка цвета редкости: у открытых яркая с белой рамкой, у неоткрытых приглушённая с тёмной.
+		var border_color: Color = Color.WHITE if is_found else rarity_color.darkened(0.6)
+		var card: ColorRect = UiStyle.rarity_tile(Vector2(CARD_W, CARD_H), rarity_color, 16.0, 3.0, border_color, not is_found)
+		card.name = "Card_" + animal_id
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+		var margin := MarginContainer.new()
+		margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		margin.add_theme_constant_override("margin_left", 6)
+		margin.add_theme_constant_override("margin_right", 6)
+		margin.add_theme_constant_override("margin_top", 5)
+		margin.add_theme_constant_override("margin_bottom", 5)
+		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(margin)
 
 		var card_vbox: VBoxContainer = VBoxContainer.new()
-		card_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		card_vbox.add_theme_constant_override("separation", 2)
+		card_vbox.add_theme_constant_override("separation", 0)
 		card_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		card.add_child(card_vbox)
+		margin.add_child(card_vbox)
 
-		# Иконка / силуэт
-		var icon: Control = _make_card_icon(animal_id, is_found)
-		icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		card_vbox.add_child(icon)
-
-		# Название
-		var name_label: Label = UiStyle.outline_label("", 18, 4, UiStyle.COLOR_TEXT)
+		# Название сверху (у неоткрытых «???»)
+		var name_label: Label = UiStyle.outline_label("", NAME_FONT_SIZE, 6, UiStyle.COLOR_TEXT)
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name_label.text = Loc.t("animal_" + animal_id) if is_found else "???"
 		card_vbox.add_child(name_label)
 
-		if is_found:
-			name_label.text = Loc.t("animal_" + animal_id)
-			name_label.add_theme_color_override("font_color", AnimalData.rarity_color(AnimalData.rarity_of(animal_id)))
-		else:
-			name_label.text = "???"
-			name_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65))
+		# Иконка / силуэт по центру
+		card_vbox.add_child(_make_card_icon(animal_id, is_found, rarity_color))
 
-		# Редкость (только для найденных)
-		if is_found:
-			var rarity_label: Label = UiStyle.outline_label("", 14, 3, UiStyle.COLOR_TEXT)
-			rarity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			rarity_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			rarity_label.text = Loc.t("rarity_%d" % AnimalData.rarity_of(animal_id))
-			rarity_label.add_theme_color_override("font_color", AnimalData.rarity_color(AnimalData.rarity_of(animal_id)))
-			card_vbox.add_child(rarity_label)
+		# Редкость снизу (показываем и у неоткрытых, как в Roblox)
+		var rarity_label: Label = UiStyle.outline_label(Loc.t("rarity_%d" % rarity), RARITY_FONT_SIZE, 5, UiStyle.COLOR_TEXT)
+		rarity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		rarity_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card_vbox.add_child(rarity_label)
 
 		grid.add_child(card)
 
@@ -268,46 +273,30 @@ func _refresh_zone_grid(zone_idx: int) -> void:
 		child.queue_free()
 	_build_zone_grid(zone_idx)
 
-func _make_card_icon(animal_id: String, is_found: bool) -> Control:
-	var icon_size: float = 52.0
-	if is_found:
-		# Иконка зверя: PNG из assets/ui/icons/animal_<id>.png (T25), фоллбек — буква
-		var icon := ColorRect.new()
-		var rarity_color: Color = AnimalData.rarity_color(AnimalData.rarity_of(animal_id))
-		icon.color = rarity_color.darkened(0.55)
-		icon.custom_minimum_size = Vector2(icon_size, icon_size)
-		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		
-		var icon_path: String = "res://assets/ui/icons/animal_%s.png" % animal_id
-		if ResourceLoader.exists(icon_path):
-			var tex_rect: TextureRect = TextureRect.new()
-			tex_rect.texture = load(icon_path) as Texture2D
-			tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			tex_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-			tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			icon.add_child(tex_rect)
-		else:
-			# Фоллбек: буква
-			var animal_name: String = Loc.t("animal_" + animal_id)
-			var letter: Label = UiStyle.outline_label(animal_name.left(1).to_upper(), 36, 5, rarity_color)
-			letter.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-			letter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			icon.add_child(letter)
-		return icon
-	else:
-		# Тёмный силуэт (неоткрытый зверь)
-		var icon := ColorRect.new()
-		icon.color = Color(0.18, 0.18, 0.2)
-		icon.custom_minimum_size = Vector2(icon_size, icon_size)
-		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var qmark: Label = UiStyle.outline_label("???", 28, 4, Color(0.5, 0.5, 0.55))
-		qmark.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		qmark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		icon.add_child(qmark)
-		return icon
+## Иконка зверя в карточке: растягивается на всё свободное место между названием и редкостью.
+## Открытый: PNG с прозрачным фоном (assets/ui/icons/animal_<id>.png). Неоткрытый: тот же PNG, закрашенный в чёрный
+## (силуэт); если картинки нет, буква или «?».
+func _make_card_icon(animal_id: String, is_found: bool, rarity_color: Color) -> Control:
+	var icon_path: String = "res://assets/ui/icons/animal_%s.png" % animal_id
+	if ResourceLoader.exists(icon_path):
+		var tex_rect: TextureRect = TextureRect.new()
+		tex_rect.texture = load(icon_path) as Texture2D
+		tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tex_rect.custom_minimum_size = Vector2(0.0, 56.0)
+		tex_rect.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		tex_rect.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if not is_found:
+			tex_rect.modulate = SILHOUETTE_COLOR   # прозрачный фон остаётся прозрачным, зверь становится чёрным
+		return tex_rect
+	# Нет картинки: буква названия у открытого, «?» у неоткрытого
+	var text: String = Loc.t("animal_" + animal_id).left(1).to_upper() if is_found else "?"
+	var letter: Label = UiStyle.outline_label(text, 40, 7, rarity_color.lightened(0.5) if is_found else Color(0.55, 0.55, 0.6))
+	letter.custom_minimum_size = Vector2(0.0, 56.0)
+	letter.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	letter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return letter
 
 func _update_claim_button() -> void:
 	var found: Array = Game._arr("found")
@@ -346,7 +335,7 @@ func _update_pet_row() -> void:
 	_pet_letter.visible = icon_tex == null
 
 	if unlocked:
-		_pet_panel_style.border_color = Color(1.0, 0.82, 0.25).darkened(0.25)
+		_pet_panel_style.border_color = Color(1.0, 0.82, 0.25)
 		_pet_name.text = Loc.t(String(pet["name_key"]))
 		_pet_name.add_theme_color_override("font_color", Color("#FFD23F"))
 		var percent: int = int(roundf(float(pet["value"]) * 100.0))
