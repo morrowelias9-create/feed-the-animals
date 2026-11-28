@@ -40,6 +40,8 @@ var _stats_box: VBoxContainer           # левый нижний блок: си
 var _strength_row: Control
 var _money_row: Control
 var _income_row: Control
+var _lucky: Label                       # T58: «Счастливых: N», виден, пока есть счастливые броски
+var _lucky_row: Control
 var _buttons: Dictionary = {}
 var throw_meter: ThrowMeter
 var mini_zone_bar: MiniZoneBar          # T46: зона и мини-зона слева вверху, плашка «Новая местность»
@@ -76,6 +78,7 @@ func _ready() -> void:
 	_build_texts()
 	Game.mini_zone_reached.connect(_on_mini_zone_reached)
 	_build_stats()
+	Game.lucky_changed.connect(_update_lucky)
 	_build_buttons()
 	_build_mini_zone_bar()
 	_build_throw_meter()
@@ -313,6 +316,7 @@ func level_up_popup(power_gain: int, screen_pos: Vector2) -> void:
 func _on_language_changed() -> void:
 	# Цель обучения обновляет TutorialController: здесь её не трогаем, иначе после обучения она вернётся (T37).
 	_hint.text = Loc.t("hint_throw")
+	_update_lucky()
 	UiStyle.set_caption(_buttons["index"] as Button, Loc.t("index"))
 	UiStyle.set_caption(_buttons["shop"] as Button, Loc.t("shop"))
 	UiStyle.set_caption(_buttons["animals"] as Button, Loc.t("animals"))
@@ -454,6 +458,21 @@ func _build_stats() -> void:
 	income_row.add_child(_income)
 	_income_row = income_row
 	_stats_box.add_child(income_row)
+
+	# T58: счётчик «Счастливых бросков» под доходом (виден, только если они есть)
+	_lucky = UiStyle.outline_label("", 26, 6, Color("#FFD23F"))
+	_lucky.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_lucky.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lucky_row := HBoxContainer.new()
+	lucky_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lucky_indent := Control.new()
+	lucky_indent.custom_minimum_size = Vector2(STAT_ICON_SIZE + 8.0, 0.0)
+	lucky_indent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lucky_row.add_child(lucky_indent)
+	lucky_row.add_child(_lucky)
+	_lucky_row = lucky_row
+	_stats_box.add_child(lucky_row)
+	_update_lucky()
 
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(0.0, 8.0)
@@ -701,6 +720,7 @@ func _refresh() -> void:
 	_income.text = NumFmt.money(Game.income_per_sec()) + "/s"
 	_update_index_button_pulse()
 	_update_boost_display()
+	_update_lucky()
 	_update_visibility()
 
 
@@ -749,6 +769,8 @@ func _update_visibility() -> void:
 	_strength_row.visible = true
 	_money_row.visible = _full
 	_income_row.visible = _full
+	if _lucky_row != null:
+		_lucky_row.visible = _full and Game.lucky_throws() > 0
 	var meter_shown: bool = not _full and _throw_meter_enabled and not _flight
 	if throw_meter != null:
 		throw_meter.visible = meter_shown
@@ -771,6 +793,14 @@ func _update_visibility() -> void:
 	# T26: кнопка звука
 	if _sound_button != null:
 		_sound_button.visible = _full
+
+
+## T58: обновляет надпись «Счастливых: N»; строка видна, только если счастливые броски есть.
+func _update_lucky() -> void:
+	if _lucky == null:
+		return
+	_lucky.text = Loc.t("lucky_left") % Game.lucky_throws()
+	_update_visibility()
 
 
 func _on_index_pressed() -> void:

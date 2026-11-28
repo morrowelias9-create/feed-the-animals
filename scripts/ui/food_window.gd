@@ -25,14 +25,16 @@ const RARITY_BG: Array[Color] = [
 var _scroll: ScrollContainer
 var _row: HBoxContainer
 var _cards: Array[Dictionary] = []
+var _details_button: Button          # T58: «Подробности» (шансы выпадения)
+var _odds: OddsWindow
 
 
 func _init() -> void:
 	title_key = "food_title"
 	panel_w_k = 0.7
 	panel_w_max = 900.0
-	panel_h_k = 0.72
-	panel_h_max = 520.0
+	panel_h_k = 0.82
+	panel_h_max = 590.0
 
 
 func _build_body() -> void:
@@ -51,6 +53,16 @@ func _build_body() -> void:
 	for tier in FoodData.count():
 		_build_card(tier)
 
+	# T58: кнопка «Подробности» под рядом карточек открывает окно с шансами выбранной еды
+	_details_button = make_button("", Vector2(240.0, 52.0), 24, "blue")
+	_details_button.name = "DetailsButton"
+	_details_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_details_button.pressed.connect(_on_details)
+	body.add_child(_details_button)
+	_odds = OddsWindow.new()
+	_odds.name = "OddsWindow"
+	add_child(_odds)
+
 	if not Game.food_changed.is_connected(_on_game_changed):
 		Game.food_changed.connect(_on_game_changed)
 	if not Game.money_changed.is_connected(_on_money_changed):
@@ -61,6 +73,7 @@ func _build_body() -> void:
 func refresh() -> void:
 	if _cards.is_empty():
 		return
+	_details_button.text = Loc.t("odds_button")
 	_update_cards()
 	_focus_current()
 
@@ -312,6 +325,17 @@ func _on_button(tier: int) -> void:
 			show_toast(Loc.t("food_no_money"))
 	else:
 		show_toast(Loc.t("food_zone_locked"))
+
+
+## T58: открывает окно шансов для выбранной еды.
+func _on_details() -> void:
+	_odds.show_for(Game.food_selected())
+
+
+func close() -> void:
+	if _odds != null and _odds.is_open():
+		_odds.close()
+	super.close()
 
 
 func _on_game_changed() -> void:

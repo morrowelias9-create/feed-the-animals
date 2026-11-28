@@ -3,6 +3,7 @@ extends RefCounted
 ## Шкала броска с сегментами по биомам (T44, T48). Чистая логика без узлов и состояния.
 ## Каждый открытый биом занимает свой сегмент шкалы; последний (самый дальний) сегмент шире остальных
 ## и задаёт дальность от начала последнего биома до максимума игрока.
+## T62: открытых биомов не больше ZoneData.count() (флаг zones_open), дальше конца последнего открытого биома бросить нельзя.
 
 const OLD_MAX_WIDTH: float = 0.25   # старый сегмент не шире 25 % шкалы
 const LAST_WEIGHT: float = 2.0      # последний сегмент вдвое «тяжелее» старого
@@ -48,14 +49,15 @@ static func segment_at(v: float, n: int) -> int:
 	return result
 
 
-## Сколько биомов открыто при максимальной дальности dmax.
+## Сколько биомов открыто при максимальной дальности dmax (не больше открытых флагом zones_open).
 static func open_zones(dmax: float) -> int:
-	return ZoneData.zone_at(dmax) + 1
+	return mini(ZoneData.zone_at(dmax) + 1, ZoneData.count())
 
 
-## Максимальная дальность броска игрока: DIST_K * (сила + максимальный бонус).
+## Максимальная дальность броска игрока: DIST_K * (сила + максимальный бонус), но не дальше конца последнего открытого биома.
 static func max_distance(strength: int) -> float:
-	return GameConfig.DIST_K * float(strength + GameConfig.BONUS_MAX)
+	var raw: float = GameConfig.DIST_K * float(strength + GameConfig.BONUS_MAX)
+	return minf(raw, ZoneData.last_end_m() - END_EPS)
 
 
 ## Дальность броска в метрах по положению ползунка v при n открытых биомах и максимуме dmax.

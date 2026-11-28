@@ -261,6 +261,12 @@ static func food_zone_rect() -> Rect2:
 	return Rect2(Vector2(FOOD_TENT_X - half, FOOD_TENT_Z - half), Vector2(FOOD_ZONE_SIZE, FOOD_ZONE_SIZE))
 
 
+## T62: длина коридора = конец последнего ОТКРЫТОГО биома (при всех пяти это CORRIDOR_LEN = 2100 м).
+## Закрытые биомы (флаг zones_open) не строятся, поэтому коридор кончается раньше.
+static func corridor_len() -> float:
+	return ZoneData.last_end_m()
+
+
 ## Высота пола коридора (обрыв вниз от пола двора).
 static func corridor_floor_y() -> float:
 	return -DROP_H

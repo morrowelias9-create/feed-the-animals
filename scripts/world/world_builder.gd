@@ -109,6 +109,7 @@ func build(parent: Node3D) -> void:
 	_build_yard(geo)
 	_build_ledge(geo)
 	_build_corridor(geo)
+	_build_corridor_end(geo)
 	_build_walls(geo)
 	_build_scenery(geo)
 	_build_pens(geo)
@@ -179,7 +180,7 @@ func _build_corridor(parent: Node3D) -> void:
 	var w: float = 2.0 * WorldLayout.CORRIDOR_HALF_W
 	for i in ZoneData.count():
 		var z0: float = WorldLayout.floor_start_z(i)
-		var z1: float = -WorldLayout.CORRIDOR_LEN
+		var z1: float = -WorldLayout.corridor_len()
 		if i + 1 < ZoneData.count():
 			z1 = WorldLayout.floor_start_z(i + 1)
 		var data: Dictionary = ZoneData.ZONES[i]
@@ -229,6 +230,46 @@ func _floor_mesh(zone: int, width: float, z0: float, z1: float) -> ArrayMesh:
 	return st.commit()
 
 
+# T62: конец коридора: стена поперёк (дальше пройти нельзя) и табличка «Скоро новый биом».
+func _build_corridor_end(parent: Node3D) -> void:
+	var len_m: float = WorldLayout.corridor_len()
+	var half_w: float = WorldLayout.CORRIDOR_HALF_W + WorldLayout.CORRIDOR_WALL_T
+	var thick: float = 4.0
+	var y0: float = WorldLayout.WALL_BOTTOM_Y
+	var y1: float = WorldLayout.WALL_TOP_Y
+	_box(parent, Vector3(2.0 * half_w, y1 - y0, thick), Vector3(0.0, (y0 + y1) / 2.0, -len_m - thick / 2.0),
+		_tex_mat("earth", Color.html(EARTH_TINT)), "CorridorEnd")
+	if ZoneData.count() < GameConfig.PLANNED_ZONES:
+		_build_coming_soon_sign(parent, len_m)
+
+
+# Табличка на двух столбах у конца коридора, лицом к игроку (+Z). Стоит, пока открыты не все запланированные биомы.
+func _build_coming_soon_sign(parent: Node3D, len_m: float) -> void:
+	var sign_root := Node3D.new()
+	sign_root.name = "ComingSoonSign"
+	sign_root.position = Vector3(0.0, WorldLayout.corridor_floor_y(), -len_m + 1.2)
+	parent.add_child(sign_root)
+	for side in [-1.0, 1.0]:
+		var post_mesh := BoxMesh.new()
+		post_mesh.size = Vector3(0.5, 4.6, 0.5)
+		var post: MeshInstance3D = _instance(sign_root, post_mesh, Vector3(float(side) * 5.2, 2.3, 0.0), _flat_mat("#6B4423"), "Post")
+		post.name = "Post%d" % int(side)
+	var board_mesh := BoxMesh.new()
+	board_mesh.size = Vector3(12.4, 3.4, 0.4)
+	_instance(sign_root, board_mesh, Vector3(0.0, 4.2, 0.0), _flat_mat("#8A5A30"), "Board")
+	var label := Label3D.new()
+	label.name = "Text"
+	label.text = _t("coming_soon_biome")
+	label.font_size = 96
+	label.pixel_size = 0.012
+	label.outline_size = 24
+	label.modulate = Color.WHITE
+	label.outline_modulate = Color.BLACK
+	label.position = Vector3(0.0, 4.2, 0.25)
+	UiStyle.apply_font_3d(label)
+	sign_root.add_child(label)
+
+
 func _build_walls(parent: Node3D) -> void:
 	var cw: float = WorldLayout.CORRIDOR_HALF_W
 	var cwo: float = cw + WorldLayout.CORRIDOR_WALL_T
@@ -236,7 +277,7 @@ func _build_walls(parent: Node3D) -> void:
 	var ywo: float = yw + WorldLayout.YARD_WALL_T
 	var depth: float = WorldLayout.YARD_DEPTH
 	var ledge: float = WorldLayout.LEDGE_D
-	var clen: float = WorldLayout.CORRIDOR_LEN
+	var clen: float = WorldLayout.corridor_len()
 	var grass: StandardMaterial3D = _tex_mat("grass", Color.WHITE)
 	# Передние блоки по бокам края земли: грань смотрит во двор (+z).
 	_rock_wall(parent, -ywo, -cw, -ledge, 0.0, Vector3(0, 0, 1), EARTH_TINT, grass, "BlockLeft")

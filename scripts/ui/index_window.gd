@@ -22,6 +22,7 @@ var _tabs: HBoxContainer
 var _content: VBoxContainer
 var _header_label: Label
 var _tab_buttons: Array[Button] = []
+var _soon_tab: Button                    # T62: недоступная вкладка «Скоро» после последнего открытого биома
 var _claim_button: Button
 var _pet_panel: PanelContainer
 var _pet_panel_style: StyleBoxFlat
@@ -66,6 +67,15 @@ func _build_body() -> void:
 		tab_button.pressed.connect(_on_tab_pressed.bind(zone_idx))
 		_tabs.add_child(tab_button)
 		_tab_buttons.append(tab_button)
+
+	# T62: пока открыты не все запланированные биомы, после вкладок стоит серая недоступная вкладка «Скоро».
+	if ZoneData.count() < GameConfig.PLANNED_ZONES:
+		_soon_tab = WindowBase.make_button(Loc.t("index_soon"), Vector2(0.0, TABS_H), TAB_FONT_SIZE, "gray")
+		_soon_tab.name = "Tab_Soon"
+		_soon_tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_soon_tab.size_flags_stretch_ratio = 0.6
+		_soon_tab.disabled = true
+		_tabs.add_child(_soon_tab)
 
 	# Контейнер для контента вкладки
 	_content = VBoxContainer.new()
@@ -204,6 +214,12 @@ func _update_tabs() -> void:
 		btn.text = "%s %s" % [Loc.t(String(ZoneData.ZONES[zone_idx]["name_key"])), Loc.t("index_tab") % zone_found]
 		# Выбранная вкладка: disabled-стиль (залит цветом зоны), клик по ней не нужен
 		btn.disabled = (zone_idx == _current_zone)
+	if _soon_tab != null:
+		_soon_tab.text = Loc.t("index_soon")
+
+## T62: сколько вкладок в окне (открытые биомы и заглушка «Скоро», если она есть). Для тестов.
+func tab_count() -> int:
+	return _tab_buttons.size() + (1 if _soon_tab != null else 0)
 
 func _update_current_grid() -> void:
 	for zone_idx in ZoneData.count():

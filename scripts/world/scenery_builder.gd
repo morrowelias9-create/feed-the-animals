@@ -130,7 +130,7 @@ func _build_zone(zone: int) -> void:
 	var set_data: Dictionary = SETS[zone]
 	_rng.seed = SEED_BASE + zone
 	var z_start: float = WorldLayout.floor_start_z(zone)
-	var z_end: float = -WorldLayout.CORRIDOR_LEN
+	var z_end: float = -WorldLayout.corridor_len()
 	if zone + 1 < ZoneData.count():
 		z_end = WorldLayout.floor_start_z(zone + 1)
 	var length: float = absf(z_end - z_start)

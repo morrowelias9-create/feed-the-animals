@@ -8,6 +8,7 @@ signal money_changed(value: float)
 signal strength_changed(value: int)
 signal bar_affordable(index: int)   # денег хватает на следующий турник (уведомление)
 signal inventory_changed          # список зверей или их размещение изменились
+signal lucky_changed              # T58: изменилось число «Счастливых бросков» (куплены или потрачены)
 signal luck_state_changed         # обновились счётчики джекпота (шкала «до джекпота»)
 signal slots_changed
 signal food_changed               # куплена или выбрана еда
@@ -42,6 +43,7 @@ var offline_pending: float = 0.0   # T21: сумма накопленного о
 var remote_ad_interval_s: float = GameConfig.AD_INTERVAL_S
 var remote_ad_first_s: float = GameConfig.AD_FIRST_S
 var remote_boost_s: int = GameConfig.BOOST_S
+var _zones_open: int = GameConfig.ZONES_OPEN_DEFAULT   # T62: сколько биомов открыто (флаг zones_open)
 
 
 func _process(delta: float) -> void:
@@ -92,11 +94,20 @@ func _load_remote_config() -> void:
 		"ad_interval_s": GameConfig.AD_INTERVAL_S,
 		"ad_first_s": GameConfig.AD_FIRST_S,
 		"boost_s": GameConfig.BOOST_S,
+		"zones_open": GameConfig.ZONES_OPEN_DEFAULT,
 	}
 	var flags: Dictionary = await Ya.get_flags(defaults)
 	remote_ad_interval_s = float(flags.get("ad_interval_s", GameConfig.AD_INTERVAL_S))
 	remote_ad_first_s = float(flags.get("ad_first_s", GameConfig.AD_FIRST_S))
 	remote_boost_s = int(flags.get("boost_s", GameConfig.BOOST_S))
+	# T62: число открытых биомов; мусор и пустое значение дают 5, диапазон 1…ZoneData.total().
+	_zones_open = ZoneData.sanitize_open(flags.get("zones_open", GameConfig.ZONES_OPEN_DEFAULT))
+	ZoneData.open_limit = _zones_open
+
+
+## T62: сколько биомов открыто (1…ZoneData.total()). Берётся из удалённого флага zones_open, по умолчанию 5.
+func zones_open() -> int:
+	return _zones_open
 
 
 # T21: считает оффлайн-доход и кладёт в offline_pending, если он больше нуля.
@@ -373,13 +384,19 @@ func roll_catch(dist: float, food_tier: int, rng: RandomNumberGenerator, luck_mu
 	LuckPity.ensure(st, rng)
 	var mini: int = MiniZoneData.global_index(dist)
 	var jackpot: bool = LuckPity.is_jackpot(st, mini)
+	# T58: «Счастливый бросок» тратится на этом броске, если они есть (шансы мутаций x2). Находка зверя здесь всегда есть.
+	var lucky: bool = ShopLogic.has_lucky(Save.data)
 	var res: Dictionary = SpawnRoller.roll(dist, food_tier, _arr("catch_history"), rng, luck_mult,
-		{"state": st, "jackpot": jackpot, "found": _arr("found")})
+		{"state": st, "jackpot": jackpot, "found": _arr("found")}, lucky)
 	LuckPity.after_roll(st, int(res.get("rank", 1)), jackpot, mini, rng)
+	if lucky:
+		ShopLogic.consume_lucky(Save.data)
 	for key in st:
 		Save.data[key] = st[key]
 	Save.save_data()
 	luck_state_changed.emit()
+	if lucky:
+		lucky_changed.emit()
 	return res
 
 
@@ -702,6 +719,8 @@ func is_food_available(tier: int) -> bool:
 	if tier < 0 or tier >= FoodData.count():
 		return false
 	var zone: int = FoodData.zone_of(tier)
+	if zone >= ZoneData.count():
+		return false   # T62: еда закрытого биома не продаётся
 	return ZoneProgress.has_reached_zone(zone)
 
 ## T38: проверяет, куплена ли еда.
@@ -889,6 +908,8 @@ func grant_purchase(product_id: String, token: String = "") -> Dictionary:
 			food_changed.emit()
 		if bool(result["bar"]):
 			bar_changed.emit()
+		if int(result.get("lucky", 0)) > 0:
+			lucky_changed.emit()
 		_income_dirty = true
 		Save.save_data()
 	elif token != "":
@@ -896,7 +917,7 @@ func grant_purchase(product_id: String, token: String = "") -> Dictionary:
 	return result
 
 
-## T24a: сколько «Счастливых бросков» куплено (сама механика броска появится позже).
+## T24a, T58: сколько «Счастливых бросков» осталось. Каждый бросок с находкой тратит один (roll_catch), шансы мутаций на нём x2.
 func lucky_throws() -> int:
 	return _i("lucky_throws")
 

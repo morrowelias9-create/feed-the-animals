@@ -69,6 +69,20 @@ static func grant(data: Dictionary, product_id: String, income_per_sec: float) -
 	return result
 
 
+## T58: есть ли у игрока «Счастливые броски» (поле lucky_throws в сохранении).
+static func has_lucky(data: Dictionary) -> bool:
+	return int(data.get("lucky_throws", 0)) > 0
+
+
+## T58: тратит один «Счастливый бросок». false, если их не было (счётчик не уходит ниже нуля).
+static func consume_lucky(data: Dictionary) -> bool:
+	var n: int = int(data.get("lucky_throws", 0))
+	if n <= 0:
+		return false
+	data["lucky_throws"] = n - 1
+	return true
+
+
 ## Уже ли начислена покупка с этим токеном (защита от двойной выдачи, если закрыть её не успели).
 static func is_token_processed(data: Dictionary, token: String) -> bool:
 	if token == "":

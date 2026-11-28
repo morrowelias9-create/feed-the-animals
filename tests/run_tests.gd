@@ -110,6 +110,14 @@ func _run_all() -> void:
 	_test_parts_animation()
 	print("== T35: высота камеры по размеру зверя")
 	_test_reveal_camera()
+	print("== T58: счастливый бросок")
+	_test_lucky_throw()
+	print("== T59: оффлайн-доход")
+	_test_offline()
+	print("== T61: обучение с чистого сохранения")
+	_test_tutorial_chain()
+	print("== T62: ограничитель биомов")
+	_test_zones_open()
 
 	_restore_save(backup)
 	print("")
@@ -911,7 +919,9 @@ func _test_keeper() -> void:
 	_save.data["keeper_gone"] = true
 	_check("T54: флаг keeper_gone убирает Хранителя", KeeperLogic.is_gone())
 	_fresh()
-	ZoneProgress.record_reached_zone(KeeperData.GONE_ZONE)
+	# Скрипт берём через load(): при -s ссылка на ZoneProgress на этапе компиляции
+	# компилирует его без автозагрузок, и класс остаётся сломанным на весь прогон.
+	load("res://scripts/logic/zone_progress.gd").record_reached_zone(KeeperData.GONE_ZONE)
 	_check("T54: долетел до Саванны, значит Хранитель ушёл", KeeperLogic.is_gone())
 	_fresh()
 	var loc_node: Node = root.get_node_or_null("Loc")
@@ -1929,7 +1939,7 @@ func _test_polish_looks() -> void:
 
 # Карточка-уведомление: собирается, кнопка шлёт сигнал, закрытие шлёт finished один раз.
 func _test_notice_card() -> void:
-	var card: NoticeCard = NoticeCard.new()
+	var card: Node = load("res://scripts/ui/notice_card.gd").new()
 	card.setup("Заголовок", "Подсказка", "Турник", "$60", "Купить")
 	var counts: Dictionary = {"action": 0, "finished": 0}
 	card.action_pressed.connect(func() -> void: counts["action"] += 1)
@@ -1952,3 +1962,267 @@ func _test_food_rarity() -> void:
 	_check("редкость еды в пределах 0–4, уровень = номер покупки", ok)
 	_check("лес: морковь обычная, соты редкие", FoodData.rarity(0) == 0 and FoodData.rarity(2) == 2)
 	_check("океан: вся еда легендарная", FoodData.rarity(12) == 4 and FoodData.rarity(14) == 4)
+
+
+# ---------- T58: счастливый бросок ----------
+
+func _test_lucky_throw() -> void:
+	var dist: float = 330.0   # середина Саванны
+	var tier: int = 3
+	for t in FoodData.count():
+		if FoodData.zone_of(t) == 1:
+			tier = t
+			break
+	_check("T58: множитель шансов мутаций счастливого броска равен 2", _near(RollData.LUCKY_MUT_MULT, 2.0))
+	var plain: Dictionary = SpawnRoller.get_odds(dist, tier, false)
+	var lucky: Dictionary = SpawnRoller.get_odds(dist, tier, true)
+	var pv: Array = plain["variants"]
+	var lv: Array = lucky["variants"]
+	var psum: float = 0.0
+	var lsum: float = 0.0
+	for i in pv.size():
+		psum += float(pv[i])
+		lsum += float(lv[i])
+	_check("T58: get_odds: шансы вариантов в сумме дают 1", _near(psum, 1.0, 0.0001) and _near(lsum, 1.0, 0.0001))
+	var p_mut: float = 1.0 - float(pv[0])
+	var l_mut: float = 1.0 - float(lv[0])
+	var capped: bool = p_mut * 2.0 > VariantData.MAX_MUTATION_CHANCE_SUM
+	var ratio_ok: bool = true
+	if capped:
+		ratio_ok = _near(l_mut, VariantData.MAX_MUTATION_CHANCE_SUM, 0.0001)
+	else:
+		for i in range(1, pv.size()):
+			if not _near(float(lv[i]), 2.0 * float(pv[i]), 0.0001):
+				ratio_ok = false
+	_check("T58: счастливый бросок удваивает каждый шанс мутации (или сумма упирается в потолок 35 %)",
+		ratio_ok and l_mut > p_mut and l_mut <= VariantData.MAX_MUTATION_CHANCE_SUM + 0.0001)
+	_check("T58: ранги и размеры при счастливом броске не меняются",
+		plain["ranks"] == lucky["ranks"] and plain["sizes"] == lucky["sizes"])
+	var rank_sum: float = 0.0
+	for r in plain["ranks"]:
+		rank_sum += float(r)
+	var size_sum: float = 0.0
+	for s in plain["sizes"]:
+		size_sum += float(s)
+	_check("T58: get_odds: ранги и размеры в сумме дают 1", _near(rank_sum, 1.0, 0.0001) and _near(size_sum, 1.0, 0.0001))
+
+	# 10000 бросков без и со «счастливым»: доли совпадают с get_odds (допуск 1.5 процентного пункта).
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 58058
+	var n: int = 10000
+	var plain_mut: int = 0
+	var lucky_mut: int = 0
+	var plain_gold: int = 0
+	var lucky_gold: int = 0
+	var plain_big: int = 0
+	var lucky_big: int = 0
+	for i in n:
+		var a: Dictionary = SpawnRoller.roll(dist, tier, [], rng, 1.0, {}, false)
+		if int(a["variant"]) != VariantData.NONE:
+			plain_mut += 1
+		if int(a["variant"]) == VariantData.GOLD:
+			plain_gold += 1
+		if int(a["size"]) > 0:
+			plain_big += 1
+		var b: Dictionary = SpawnRoller.roll(dist, tier, [], rng, 1.0, {}, true)
+		if int(b["variant"]) != VariantData.NONE:
+			lucky_mut += 1
+		if int(b["variant"]) == VariantData.GOLD:
+			lucky_gold += 1
+		if int(b["size"]) > 0:
+			lucky_big += 1
+	var fn: float = float(n)
+	print("      мутации: обычный %.2f%% (ожидание %.2f%%), счастливый %.2f%% (ожидание %.2f%%)" % [
+		float(plain_mut) / fn * 100.0, p_mut * 100.0, float(lucky_mut) / fn * 100.0, l_mut * 100.0])
+	_check("T58: доля мутаций обычного броска совпадает с get_odds", absf(float(plain_mut) / fn - p_mut) < 0.015)
+	_check("T58: доля мутаций счастливого броска совпадает с get_odds", absf(float(lucky_mut) / fn - l_mut) < 0.015)
+	_check("T58: доля золота (обычный и счастливый) совпадает с get_odds",
+		absf(float(plain_gold) / fn - float(pv[1])) < 0.015 and absf(float(lucky_gold) / fn - float(lv[1])) < 0.015)
+	_check("T58: счастливый бросок даёт заметно больше мутаций", lucky_mut > int(float(plain_mut) * 1.5) or capped)
+	if not capped and plain_gold >= 300:
+		var ratio: float = float(lucky_gold) / float(plain_gold)
+		_check("T58: золота при счастливом броске примерно вдвое больше (допуск 25 %%): %.2f" % ratio, ratio > 1.5 and ratio < 2.5)
+	_check("T58: размеры при счастливом броске те же (разница долей до 2 п.п.)",
+		absf(float(plain_big) / fn - float(lucky_big) / fn) < 0.02)
+
+	# Счётчик: покупка, трата, нижняя граница.
+	var d: Dictionary = _save.DEFAULTS.duplicate(true)
+	ShopLogic.grant(d, "lucky_5", 0.0)
+	_check("T58: lucky_5 даёт 5 бросков", int(d["lucky_throws"]) == 5 and ShopLogic.has_lucky(d))
+	for i in 5:
+		ShopLogic.consume_lucky(d)
+	_check("T58: пять трат обнуляют счётчик, в минус он не уходит",
+		int(d["lucky_throws"]) == 0 and not ShopLogic.has_lucky(d) and not ShopLogic.consume_lucky(d) and int(d["lucky_throws"]) == 0)
+
+	# Game.roll_catch: тратит по одному броску и шлёт lucky_changed.
+	_fresh()
+	_save.data["lucky_throws"] = 2
+	var seen: Array = []
+	var on_lucky: Callable = func() -> void: seen.append(1)
+	_game.lucky_changed.connect(on_lucky)
+	var r1: Dictionary = _game.roll_catch(dist, tier, rng)
+	var left1: int = int(_save.data["lucky_throws"])
+	var r2: Dictionary = _game.roll_catch(dist, tier, rng)
+	var r3: Dictionary = _game.roll_catch(dist, tier, rng)
+	_check("T58: roll_catch тратит по одному счастливому броску: 2 -> 1 -> 0 -> 0",
+		bool(r1["lucky"]) and left1 == 1 and bool(r2["lucky"]) and not bool(r3["lucky"]) and int(_save.data["lucky_throws"]) == 0)
+	_check("T58: сигнал lucky_changed ушёл дважды (по числу потраченных)", seen.size() == 2)
+	_game.grant_purchase("lucky_5")
+	_check("T58: покупка lucky_5 шлёт lucky_changed и добавляет 5", seen.size() == 3 and _game.lucky_throws() == 5)
+	_game.lucky_changed.disconnect(on_lucky)
+	var loc_node: Node = root.get_node_or_null("Loc")
+	_check("T58: ключ lucky_left есть в Loc на ru и en",
+		loc_node != null and loc_node.T.has("lucky_left") and String(loc_node.T["lucky_left"].get("ru", "")) != ""
+		and String(loc_node.T["lucky_left"].get("en", "")) != "")
+	_fresh()
+
+
+# ---------- T59: оффлайн-доход ----------
+
+func _test_offline() -> void:
+	_check("T59: константы оффлайна: потолок 1 час, 10 % дохода, окно от 60 с",
+		GameConfig.OFFLINE_CAP_S == 3600 and _near(GameConfig.OFFLINE_RATE, 0.1) and GameConfig.OFFLINE_MIN_S == 60)
+	_check("T59: offline_gain: 10 минут при доходе 5 это 300", _near(Economy.offline_gain(600.0, 5.0), 300.0))
+	_check("T59: offline_gain: 2 часа ограничены 1 часом (1800)", _near(Economy.offline_gain(7200.0, 5.0), 1800.0))
+	_check("T59: offline_gain: потолок один и тот же для 1, 3 и 24 часов",
+		_near(Economy.offline_gain(3600.0, 5.0), Economy.offline_gain(10800.0, 5.0))
+		and _near(Economy.offline_gain(3600.0, 5.0), Economy.offline_gain(86400.0, 5.0)))
+	_check("T59: offline_gain: нулевое и отрицательное время, нулевой доход и NaN дают 0",
+		_near(Economy.offline_gain(0.0, 5.0), 0.0) and _near(Economy.offline_gain(-100.0, 5.0), 0.0)
+		and _near(Economy.offline_gain(600.0, 0.0), 0.0) and _near(Economy.offline_gain(NAN, 5.0), 0.0))
+	_fresh()
+	_game.add_animal("frog", 0)   # размещён, доход 1 в секунду
+	var now: int = int(Time.get_unix_time_from_system())
+	_game.offline_pending = 0.0
+	_save.data["last_seen"] = now - 30
+	_game._calc_offline_income()
+	_check("T59: отсутствие меньше минуты: окна нет, накопления нет", _near(_game.offline_pending, 0.0))
+	_save.data["last_seen"] = now - 600
+	_game._calc_offline_income()
+	_check("T59: отсутствие 10 минут при доходе 1: накоплено около 60", _near(_game.offline_pending, 60.0, 0.5))
+	var money_before: float = _game.money()
+	var got: float = _game.claim_offline(1.0)
+	_check("T59: claim_offline(1) начисляет накопленное и обнуляет его",
+		_near(got, _game.money() - money_before) and got > 59.0 and _near(_game.offline_pending, 0.0))
+	_check("T59: повторное нажатие «Получить» ничего не даёт", _near(_game.claim_offline(1.0), 0.0))
+	_game.offline_pending = 60.0
+	_check("T59: claim_offline(2) удваивает награду", _near(_game.claim_offline(2.0), 120.0))
+	_fresh()
+
+
+# ---------- T61: обучение с чистого сохранения ----------
+
+func _test_tutorial_chain() -> void:
+	_fresh()
+	# В режиме -s имена автозагрузок не видны на этапе компиляции, поэтому скрипты
+	# с обращением к Game/Save/Loc берём через load() уже во время теста.
+	var tut: Script = load("res://scripts/world/tutorial_controller.gd")
+	var reps_goal: int = int(tut.get_script_constant_map()["REPS_GOAL"])
+	var throws_goal: int = int(tut.get_script_constant_map()["THROWS_GOAL"])
+	var step_done: int = int(tut.get_script_constant_map()["STEP_DONE"])
+	var hud: Node = (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate()
+	root.add_child(hud)
+	var player: Node = load("res://scripts/world/player.gd").new()
+	var tc: Node = tut.new()
+	tc.player = player
+	tc.hud = hud
+	root.add_child(tc)
+	_check("T61: чистое сохранение: обучение начинается с шага 0", tc._step == 0 and int(_save.data["tutorial_step"]) == 0)
+	player.position = Vector3(0.0, 0.0, WorldLayout.SPAWN_Z)
+	tc._process(0.3)
+	_check("T61: пока игрок не дошёл до линии броска, шаг 0 не закрывается", tc._step == 0)
+	player.position = Vector3(0.0, 0.0, 0.0)
+	tc._process(0.3)
+	_check("T61: игрок на линии броска: переход к шагу 1 (бросок)", tc._step == 1)
+	_save.data["throws"] = 1
+	tc._process(0.3)
+	_check("T61: первый бросок сделан: шаг 2 (яблоко)", tc._step == 2)
+	# Шаг 2 выполним: после броска зверь встаёт в загон и даёт доход, яблоко доступно и стоит недорого.
+	_game.add_animal("frog", 0)
+	var apple_price: float = FoodData.price(tc._apple_tier)
+	_check("T61: шаг 2 достижим: есть доход, яблоко доступно, цена достижима за разумное время",
+		_game.income_per_sec() > 0.0 and _game.is_food_available(tc._apple_tier) and apple_price / _game.income_per_sec() <= 120.0)
+	_game.add_money(apple_price)
+	_game.buy_food(tc._apple_tier)
+	tc._process(0.3)
+	_check("T61: яблоко куплено: шаг 3 (турник)", tc._step == 3)
+	# Шаг 3 выполним: первый турник стоит $1, десять повторений набираются на нём.
+	_check("T61: шаг 3 достижим: первый турник стоит $1", _near(_game.next_bar_price(), 1.0))
+	_game.add_money(1.0)
+	_game.buy_bar()
+	_game.train_reps(0, reps_goal)
+	tc._process(0.3)
+	_check("T61: десять повторений: шаг 4 (пять бросков)", tc._step == 4)
+	_save.data["throws"] = int(_save.data["throws"]) + throws_goal
+	tc._process(0.3)
+	_check("T61: пять бросков сделано: обучение закончено и шаг записан в сохранение",
+		tc._step == step_done and int(_save.data["tutorial_step"]) == step_done)
+	tc.free()
+	# Повторный запуск с законченным обучением: ничего не показывает и не считает.
+	var tc2: Node = tut.new()
+	tc2.player = player
+	tc2.hud = hud
+	root.add_child(tc2)
+	_check("T61: после конца обучения узел не работает (подсказок нет)", not tc2.is_processing())
+	tc2.free()
+	# Сохранение с прогрессом само пролистывает пройденные шаги.
+	_fresh()
+	_save.data["tutorial_step"] = 0
+	_save.data["throws"] = 1
+	_save.data["reps"] = reps_goal
+	var tc3: Node = tut.new()
+	tc3.player = player
+	tc3.hud = hud
+	root.add_child(tc3)
+	player.position = Vector3(0.0, 0.0, 0.0)
+	_save.data["food_owned"] = [tc3._apple_tier]
+	tc3._process(0.3)
+	_check("T61: сохранение с прогрессом само пролистывает шаги 0-3 и останавливается на шаге 4",
+		tc3._step == 4 and int(_save.data["tutorial_step"]) == 4)
+	tc3.free()
+	player.free()
+	hud.free()
+	_fresh()
+
+
+# ---------- T62: ограничитель биомов ----------
+
+func _test_zones_open() -> void:
+	var cases: Array = [[5, 5], [3, 3], [1, 1], [99, 5], ["abc", 5], [0, 1], [-4, 1], [2.5, 5], ["", 5], ["4", 4], [3.0, 3], [null, 5]]
+	var clamp_ok: bool = true
+	for c in cases:
+		if ZoneData.sanitize_open(c[0]) != int(c[1]):
+			clamp_ok = false
+			print("      sanitize_open(%s) = %d, ожидалось %d" % [str(c[0]), ZoneData.sanitize_open(c[0]), int(c[1])])
+	_check("T62: sanitize_open: 5, 3, 1, 99 (-> 5 зон максимум), \"abc\" (-> 5), 0, дробное, пустое, \"4\"", clamp_ok)
+	ZoneData.open_limit = 0   # Game.start() ставит лимит из флага; для проверки «без ограничения» снимаем его
+	_check("T62: без ограничения count() = total() = 5", ZoneData.open_limit == 0 and ZoneData.count() == ZoneData.total())
+	for n in [5, 3, 1]:
+		ZoneData.open_limit = n
+		var world: Node3D = Node3D.new()
+		var wb: WorldBuilder = WorldBuilder.new()
+		wb.build(world)
+		var built: int = 0
+		var extra: int = 0
+		for i in ZoneData.total():
+			var has_floor: bool = world.get_node_or_null("WorldGeometry/Corridor%d" % i) != null
+			if i < n and has_floor:
+				built += 1
+			if i >= n and has_floor:
+				extra += 1
+		_check("T62: zones_open = %d: построено %d зон, закрытые не строятся" % [n, n], built == n and extra == 0)
+		_check("T62: zones_open = %d: коридор кончается в конце последнего открытого биома" % n,
+			_near(WorldLayout.corridor_len(), float(ZoneData.ZONES[n - 1]["end_m"])))
+		_check("T62: zones_open = %d: есть стена в конце коридора" % n, world.get_node_or_null("WorldGeometry/CorridorEnd") != null)
+		var sign_exists: bool = world.get_node_or_null("WorldGeometry/ComingSoonSign") != null
+		_check("T62: zones_open = %d: табличка «Скоро новый биом» стоит, пока открыто меньше запланированных" % n,
+			sign_exists == (n < GameConfig.PLANNED_ZONES))
+		_check("T62: zones_open = %d: дальше конца коридора бросить нельзя, открыто не больше %d зон" % [n, n],
+			ThrowScale.max_distance(1000000) <= WorldLayout.corridor_len() and ThrowScale.open_zones(1.0e9) == n)
+		var win: Node = load("res://scripts/ui/index_window.gd").new()
+		root.add_child(win)
+		_check("T62: zones_open = %d: вкладок Индекса %d плюс заглушка «Скоро»" % [n, n], win.tab_count() == n + 1)
+		win.free()
+		world.free()
+	ZoneData.open_limit = 0
+	_check("T62: после теста ограничение снято", ZoneData.count() == ZoneData.total())

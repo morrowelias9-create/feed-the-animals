@@ -3,6 +3,7 @@ extends RefCounted
 ## Выбор зверя после броска (справочник R3, редакция 3). Весь случай приходит через rng.
 ## Сначала зона и доля пути по ней, потом ранг по колоколу с плавно растущим центром (RollData, зависит от еды),
 ## анти-повтор по двум последним пойманным, затем мутация и цепочка размера.
+## T58: «Счастливый бросок» удваивает шансы мутаций (RollData.LUCKY_MUT_MULT), ранги и размеры не трогает.
 
 const LAST_WEIGHT_DIV: float = 50.0      # последний пойманный зверь реже примерно в 50 раз
 const PREV_WEIGHT_DIV: float = 2.5       # предпоследний реже в 2.5 раза
@@ -75,10 +76,64 @@ static func anti_repeat_mult(zone: int, rank: int, history: Array) -> float:
 	return mult
 
 
-## Бросок кубика: {animal_id, variant, size, luck, zone, rank}.
+## T58: множитель удачи для мутаций. «Счастливый бросок» умножает его на LUCKY_MUT_MULT, на размер это не влияет.
+static func mutation_lm(lm: float, lucky: bool) -> float:
+	return lm * RollData.LUCKY_MUT_MULT if lucky else lm
+
+
+## T58: шансы вариантов [обычный, золото, бриллиант, изумруд, рубин, радуга] при множителе удачи lm.
+## Сумма мутаций не выше VariantData.MAX_MUTATION_CHANCE_SUM (35 %); это те же числа, что использует бросок.
+static func variant_chances(lm: float, lucky: bool = false) -> Array[float]:
+	return VariantData.chances_with_luck(mutation_lm(lm, lucky))
+
+
+## T58: распределение ступеней размера [P(0), P(1), ..., P(SIZE_MAX)] при множителе удачи lm (цепочка из roll).
+static func size_odds(lm: float) -> Array[float]:
+	var result: Array[float] = []
+	var reach: float = 1.0
+	var p: float = GameConfig.SIZE_P0 * lm
+	for k in GameConfig.SIZE_MAX:
+		result.append(reach * (1.0 - p))
+		reach *= p
+		p = minf(p + 0.05, 0.4)
+	result.append(reach)
+	return result
+
+
+## T58: шансы броска без страховки, джекпота и анти-повтора (для окна «Подробности» и тестов).
+## Возвращает {zone, luck, lm, lucky, ranks, variants, sizes}: ranks это вероятность каждого ранга 1…8 (индекс 0 = ранг 1),
+## variants это variant_chances, sizes это size_odds. Бросок и окно берут числа из одних и тех же функций.
+static func get_odds(dist: float, food_tier: int, lucky: bool = false, luck_mult: float = 1.0) -> Dictionary:
+	var zone: int = ZoneData.zone_at(dist)
+	var center: float = rank_center(zone, food_tier, zone_fraction(dist, zone))
+	var rank_max: int = AnimalData.zone_animals(zone).size()
+	var ranks: Array[float] = []
+	var total: float = 0.0
+	for rank in range(1, rank_max + 1):
+		var w: float = rank_weight(rank, center)
+		ranks.append(w)
+		total += w
+	if total > 0.0:
+		for i in ranks.size():
+			ranks[i] /= total
+	var luck: int = luck_of(dist, FoodData.luck(food_tier), luck_mult)
+	var lm: float = luck_mult_of(float(luck), zone)
+	return {
+		"zone": zone,
+		"luck": luck,
+		"lm": lm,
+		"lucky": lucky,
+		"ranks": ranks,
+		"variants": variant_chances(lm, lucky),
+		"sizes": size_odds(lm),
+	}
+
+
+## Бросок кубика: {animal_id, variant, size, luck, zone, rank, jackpot, lucky}.
 ## luck_mult это множитель «Идеально!» (1.25) или 1.0; lm считается внутри по luck / zone.luck_ref.
 ## ctx необязателен: {state: словарь LuckPity, jackpot: bool, found: Array id найденных видов}. Без него бросок чистый (как раньше).
-static func roll(dist: float, food_tier: int, history: Array, rng: RandomNumberGenerator, luck_mult: float = 1.0, ctx: Dictionary = {}) -> Dictionary:
+## lucky (T58) это «Счастливый бросок»: шансы мутаций умножаются на RollData.LUCKY_MUT_MULT (потолок суммы 35 %).
+static func roll(dist: float, food_tier: int, history: Array, rng: RandomNumberGenerator, luck_mult: float = 1.0, ctx: Dictionary = {}, lucky: bool = false) -> Dictionary:
 	var zone: int = ZoneData.zone_at(dist)
 	var center: float = rank_center(zone, food_tier, zone_fraction(dist, zone))
 	var rank_max: int = AnimalData.zone_animals(zone).size()
@@ -122,7 +177,8 @@ static func roll(dist: float, food_tier: int, history: Array, rng: RandomNumberG
 
 	var luck: int = luck_of(dist, FoodData.luck(food_tier), luck_mult)
 	var lm: float = luck_mult_of(float(luck), zone)
-	var variant: int = VariantData.roll(rng.randf(), lm)
+	# T58: счастливый бросок меняет только шансы мутаций (число обращений к rng то же, что без него).
+	var variant: int = VariantData.roll(rng.randf(), mutation_lm(lm, lucky))
 
 	var size: int = 0
 	var p: float = GameConfig.SIZE_P0 * lm
@@ -138,4 +194,5 @@ static func roll(dist: float, food_tier: int, history: Array, rng: RandomNumberG
 		"zone": zone,
 		"rank": chosen,
 		"jackpot": jackpot,
+		"lucky": lucky,
 	}

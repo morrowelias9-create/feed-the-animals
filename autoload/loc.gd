@@ -4,7 +4,7 @@ extends Node
 
 signal language_changed
 
-const SUPPORTED := ["ru", "en", "tr"]
+const SUPPORTED := ["ru", "en"]   # T60: tr не заявлен (переведено частично); вернуть "tr" можно, когда будут все ключи
 const CIS := ["ru", "be", "kk", "uk", "uz"]  # показываем русский
 
 const T := {
@@ -259,7 +259,7 @@ const T := {
 	"pet_forest": {"ru": "Дух леса", "en": "Forest Spirit"},
 	"pet_savanna": {"ru": "Золотой лев", "en": "Golden Lion"},
 	"pet_desert": {"ru": "Песчаный страж", "en": "Sand Guardian"},
-	"pet_jungle": {"ru": "Призрачный ягуар", "en": "Ghost Jaguar"},
+	"pet_jungle": {"ru": "Древняя горилла", "en": "Ancient Gorilla"},
 	"pet_ocean": {"ru": "Светящийся кит", "en": "Glowing Whale"},
 	"pet_bonus_income": {"ru": "+%d %% к доходу", "en": "+%d%% income"},
 	"pet_bonus_luck": {"ru": "+%d %% к удаче", "en": "+%d%% luck"},
@@ -344,9 +344,29 @@ const T := {
 	"shop_lucky_5": {"ru": "5 счастливых бросков", "en": "5 Lucky throws"},
 	"shop_lucky_25": {"ru": "25 счастливых бросков", "en": "25 Lucky throws"},
 	"shop_lucky_desc": {
-		"ru": "Размер и мутация зверя бросаются 10 раз, берётся лучший результат.",
-		"en": "Size and mutation are rolled 10 times and the best result is kept.",
+		"ru": "Шансы мутаций (золото, бриллиант и другие) вдвое выше на каждом из этих бросков. Бросок тратится, когда вы получаете зверя.",
+		"en": "Mutation chances (gold, diamond and more) are doubled on each of these throws. A throw is used up when you get an animal.",
 	},
+
+	# Счётчик счастливых бросков (T58)
+	"lucky_left": {"ru": "Счастливых: %d", "en": "Lucky throws: %d"},
+
+	# Ограничитель биомов (T62)
+	"index_soon": {"ru": "Скоро", "en": "Soon"},
+	"coming_soon_biome": {"ru": "Скоро новый биом", "en": "New biome coming soon"},
+
+	# Окно шансов «Подробности» (T58)
+	"odds_button": {"ru": "Подробности", "en": "Details"},
+	"odds_title": {"ru": "Шансы", "en": "Odds"},
+	"odds_note": {"ru": "Еда «%s», зона «%s» (середина зоны). Страховка от невезения и повторы зверей не учтены.", "en": "Food: %s, zone: %s (middle of the zone). Bad-luck protection and repeat protection are not included."},
+	"odds_animals": {"ru": "Звери", "en": "Animals"},
+	"odds_mutations": {"ru": "Мутации", "en": "Mutations"},
+	"odds_normal": {"ru": "Обычный", "en": "Normal"},
+	"odds_lucky": {"ru": "Счастливый", "en": "Lucky"},
+	"odds_any_mutation": {"ru": "Любая мутация", "en": "Any mutation"},
+	"odds_size": {"ru": "Размер", "en": "Size"},
+	"odds_size_bigger": {"ru": "Крупнее обычного", "en": "Bigger than normal"},
+	"odds_lucky_note": {"ru": "Счастливый бросок меняет только шансы мутаций, на размер и на выпадение зверей он не влияет.", "en": "A lucky throw changes only the mutation chances, not the size or which animal drops."},
 }
 
 var lang := "en"
